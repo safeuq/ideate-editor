@@ -18,7 +18,8 @@ One Gradle build with three modules (`settings.gradle.kts`):
 | `:desktop` | Kotlin JVM + Compose Desktop (`application`, `run`) | `:compose`, the protocol jars as they are, `compose.desktop.currentOs` |
 | `:android` | Android application | `:compose`, the protocol jars patched for ART ([`android-app.md`](android-app.md)) |
 
-How the shared code builds (checked 2026-11-16 with Kotlin 2.3.21, AGP 9.5.1):
+How the shared code builds (checked 2026-11-16 with Kotlin 2.3.21, AGP 9.5.1 and 9.3.0):
+- AGP is held at **9.3.0**, the newest version IntelliJ 2026.3's Android support imports. With 9.5.1 the IDE refused the project: "The project is using an incompatible version (AGP 9.5.1) of the Android Gradle plugin. Latest supported version is AGP 9.3.0". AGP 9.3.0 builds `compileSdk = 37` without a warning, and the APK runs as before (emulator, Mac backend, 2026-11-16 18:02 IST). Raise it when the IDE supports a newer one.
 - Kotlin's docs say a source set can't be shared between a JVM and an Android target. With only those two targets, though, Gradle prints `compileCommonMainKotlinMetadata SKIPPED` and compiles `commonMain` once per target, each with its full platform API. `java.io.File`, rd and BouncyCastle work in `commonMain`. The IDE may still mark JDK calls there as unresolved.
 - The protocol jars are `compileOnly` in `:compose` because each app needs its own copy at run time: the desktop the original Java 25 jars, Android the jars lowered to Java 17 with the `Unsafe` shim.
 - On Android, `org.jetbrains.compose.foundation:foundation:1.12.2` resolves to `androidx.compose.foundation:foundation:1.12.1`, so the app still runs on androidx Compose.
