@@ -4,13 +4,13 @@ A native client for IntelliJ's split mode (remote development), written with Com
 
 | Folder | What | Platform |
 |---|---|---|
-| `client/compose/src/commonMain/kotlin/…/connection/` | join link, client certificate (BouncyCastle), TLS 1.3, DEFLATE frames, handshake, the rd wire | JVM and Android |
-| `client/compose/src/commonMain/kotlin/…/session/` | rd protocol and the models the editor needs; exposes a `StateFlow<SessionState>` | JVM and Android, with the rd jars |
-| `client/compose/src/commonMain/kotlin/…/ui/` | Project tree, editor, window layout; common Compose APIs only. Fonts, icons and the editor's text input come in through `LocalClientFonts`, `LocalIcons`, `LocalEditorTextInput` | JVM and Android |
-| `client/desktop/` | the JVM launcher: `Main.kt` and `desktop/`: window, fonts and icons read from the JetBrains Client install, off-screen snapshots | desktop only |
-| `client/android/` | the Android app: activity, connect screen, Termux, fonts and icons from assets, soft keyboard | Android only |
+| `compose/src/commonMain/kotlin/…/connection/` | join link, client certificate (BouncyCastle), TLS 1.3, DEFLATE frames, handshake, the rd wire | JVM and Android |
+| `compose/src/commonMain/kotlin/…/session/` | rd protocol and the models the editor needs; exposes a `StateFlow<SessionState>` | JVM and Android, with the rd jars |
+| `compose/src/commonMain/kotlin/…/ui/` | Project tree, editor, window layout; common Compose APIs only. Fonts, icons and the editor's text input come in through `LocalClientFonts`, `LocalIcons`, `LocalEditorTextInput` | JVM and Android |
+| `desktop/` | the JVM launcher: `Main.kt` and `desktop/`: window, fonts and icons read from the JetBrains Client install, off-screen snapshots | desktop only |
+| `android/` | the Android app: activity, connect screen, Termux, fonts and icons from assets, soft keyboard | Android only |
 
-One Gradle build in `client/` with three modules (`client/settings.gradle.kts`):
+One Gradle build with three modules (`settings.gradle.kts`):
 
 | Module | Plugin | Depends on |
 |---|---|---|
@@ -30,7 +30,6 @@ Needs:
 - JetBrains Client **263.7307.200**, the same build as the backend. Gateway downloads it.
 
 ```sh
-cd client
 export JAVA_HOME="$HOME/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home"
 export JETBRAINS_CLIENT_LIB="$HOME/Library/Caches/JetBrains/JetBrainsClientDist/JetBrainsClient-263.7307.200-aarch64.sit-…/IntelliJ IDEA.app/Contents/lib"
 ./gradlew :desktop:run --args="'tcp://127.0.0.1:5990#jt=…&fp=…' [/absolute/path/on/the/backend/src/demo/Main.java]"

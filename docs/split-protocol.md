@@ -1,6 +1,6 @@
 # Split-mode protocol: how JetBrains Client talks to the IntelliJ backend
 
-Research for the native Android frontend (`client/`). Started 2026-11-15.
+Research for the native Android frontend (this repo). Started 2026-11-15.
 
 Everything here was read out of **JetBrains Client 263.7307.200** (the build JetBrains Gateway downloads for IntelliJ IDEA 2026.3, `IU-263.7307.200`) and checked, where it says so, on the phone (Samsung SM-S926B, Android 17, API 37, arm64). Nothing here comes from JetBrains documentation unless a link says so.
 
@@ -265,14 +265,14 @@ For the Android client: plugins that aren't split work fully except for their cu
 
 ## Running rd and the models on Android
 
-Code and a script to reproduce all of this: [`client/spikes/rd-on-art/`](../client/spikes/rd-on-art/). Run it with:
+Code and a script to reproduce all of this: [`spikes/rd-on-art/`](../spikes/rd-on-art/). Run it with:
 
 ```sh
 CLIENT_LIB="$HOME/Library/Caches/JetBrains/JetBrainsClientDist/JetBrainsClient-263.7307.200-aarch64.sit-89c5c2813f.ide.d/IntelliJ IDEA.app/Contents/lib" \
 KOTLIN_STDLIB=<path to kotlin-stdlib-2.3.21.jar> \
 JAVA_HOME=<JDK 17+> \
 ADB_SERIAL=192.168.0.105:5555 \
-client/spikes/rd-on-art/run-on-phone.sh
+spikes/rd-on-art/run-on-phone.sh
 ```
 
 It runs the programs with `app_process` as the ADB shell user, in `/data/local/tmp`. It does not touch Termux or the backend.
@@ -387,7 +387,7 @@ IJ_JAVA_OPTIONS='-Didea.log.trace.categories=protocol.SEND,protocol.RECV,protoco
   thinClient 'tcp://127.0.0.1:5990#jt=…&p=IU&fp=…&cb=263.7307.200&newUi=true&jb=25.0.4.1b635.79'
 ```
 
-The trace is large: in about 3 minutes the client wrote 75 MB of log in six rotated files (`idea.5.log` is the oldest, `idea.log` the newest), 9,456 trace records. IntelliJ keeps only a few rotated files, so stop the client within a few minutes, or the start of the session is lost. Join the parts oldest first and run `client/spikes/session-capture/analyze-capture.py capture.log`. The log contains the join token, so it is not committed.
+The trace is large: in about 3 minutes the client wrote 75 MB of log in six rotated files (`idea.5.log` is the oldest, `idea.log` the newest), 9,456 trace records. IntelliJ keeps only a few rotated files, so stop the client within a few minutes, or the start of the session is lost. Join the parts oldest first and run `spikes/session-capture/analyze-capture.py capture.log`. The log contains the join token, so it is not committed.
 
 The recorded session: the client connects, the backend opens `smoke` with `Main.java` already open from the last session, the client shows the editor with highlighting. No dialog was opened.
 
@@ -529,7 +529,7 @@ Everything else the real client creates (diagnostics, test bridges, SSH agent, s
 
 ## Our own client (step 2)
 
-`client/` now holds a Compose Multiplatform desktop (JVM) client that connects to a backend, opens one file and shows it with the backend's syntax highlighting. It reuses JetBrains Client's rd and model jars and writes everything else itself. Tested 2026-11-15 against the phone backend (17:12–17:20 IST) and, after the phone went offline, against the same IntelliJ build on the Mac (17:24–17:31 IST). Everything in this section is **Seen** unless it says otherwise.
+The client now holds a Compose Multiplatform desktop (JVM) client that connects to a backend, opens one file and shows it with the backend's syntax highlighting. It reuses JetBrains Client's rd and model jars and writes everything else itself. Tested 2026-11-15 against the phone backend (17:12–17:20 IST) and, after the phone went offline, against the same IntelliJ build on the Mac (17:24–17:31 IST). Everything in this section is **Seen** unless it says otherwise.
 
 What the client does, in order. On the Mac this whole sequence took about 1 second:
 
@@ -557,7 +557,7 @@ The models it creates: `SolutionModel`, `HighlighterRegistrationHostModel` (sets
 | 2 | (connected; then our side failed) | rd's `UnsafeBuffer(256)` is native memory and `getArray()` throws; use `UnsafeBuffer(ByteArray(256))`. `Protocol` calls `startDeliveringMessages()` itself; calling it again throws. |
 | 3 | `Declining invalid token from safeuq` → we get `USER_DECLINED` | The join token `jt` works once. After a client has connected with it, a new client id with the same `jt` is refused. Restart the backend, or keep the client id ([step 7](#connect-screen-and-reconnecting-step-7)), for a new attempt. |
 | 4 | `Expected to get frame of type: <SystemFrame>, but received: <Message Frame>` | After `ACCEPTED`, both sides send `CURRENT_CONFIRMED_FRAME_ACK` (status 11, int32 = last frame number received from the other side, `0` for a new wire) and read the other's, before any message frame (`ServiceMessageProcessor.resendUnconfirmedFrames`). |
-| 5 | `null cannot be cast to non-null type T of …ProtocolMarkupExtensionsKt.getExtension`, `lineMarkerActionModel is null`; no highlighters | Every markup model the client creates must carry the extensions JetBrains Client puts there, looked up by key (`TOOLTIP_PROVIDER_MODEL_KEY`, `LINE_MARKER_ACTIONS_KEY`, `MARKUP_REVALIDATION_KEY`, … 20 for an editor, 13 for a document). See `client/compose/src/commonMain/kotlin/intellijandroid/client/session/MarkupExtensions.kt`. |
+| 5 | `null cannot be cast to non-null type T of …ProtocolMarkupExtensionsKt.getExtension`, `lineMarkerActionModel is null`; no highlighters | Every markup model the client creates must carry the extensions JetBrains Client puts there, looked up by key (`TOOLTIP_PROVIDER_MODEL_KEY`, `LINE_MARKER_ACTIONS_KEY`, `MARKUP_REVALIDATION_KEY`, … 20 for an editor, 13 for a document). See `compose/src/commonMain/kotlin/intellijandroid/client/session/MarkupExtensions.kt`. |
 
 The client creates three markup models: one for the editor (`textControls[…].extensions[MarkupTextControlExtension].markup`) and two for the document (`markups[RdMarkupKey(null)]` and `markups[RdMarkupKey(projectId)]`). Syntax highlighting arrives in the editor's model. Errors and warnings from code analysis ("daemon" results) are expected in the per-project document model (**Inferred**; the client doesn't show them yet).
 
@@ -685,9 +685,9 @@ Gutter icons come in the per-project markup as `GutterMarkHighlighterModel` (the
 
 ## The Android app (step 5)
 
-`client/android/` builds the client as an Android app on the same `:compose` module as the desktop client (`client/compose/src/commonMain/kotlin`). Until 2026-11-16 the app was a separate Gradle build that added the desktop client's source folder to its own, because Kotlin's docs say JVM and Android targets can't share a source set; how one module serves both now: [`client.md`](client.md). Tested 2026-11-15 21:08–21:11 IST on the Android emulator (Pixel 3a image, API 34) against the Mac backend, through `adb reverse tcp:5990 tcp:5990`: the client connects, shows the Project tree and the editor with all highlighting, expands folders, and takes typing from the soft keyboard. **Seen** unless marked.
+`android/` builds the client as an Android app on the same `:compose` module as the desktop client (`compose/src/commonMain/kotlin`). Until 2026-11-16 the app was a separate Gradle build that added the desktop client's source folder to its own, because Kotlin's docs say JVM and Android targets can't share a source set; how one module serves both now: [`client.md`](client.md). Tested 2026-11-15 21:08–21:11 IST on the Android emulator (Pixel 3a image, API 34) against the Mac backend, through `adb reverse tcp:5990 tcp:5990`: the client connects, shows the Project tree and the editor with all highlighting, expands folders, and takes typing from the soft keyboard. **Seen** unless marked.
 
-What the build does with JetBrains Client's files (`client/android/build.gradle.kts`):
+What the build does with JetBrains Client's files (`android/build.gradle.kts`):
 
 | Input | Done at build time | Why |
 |---|---|---|
@@ -696,7 +696,7 @@ What the build does with JetBrains Client's files (`client/android/build.gradle.
 | `splitMarshallers.txt`, `marshallers.txt` | kept in the jars; AGP packages them as Java resources | [Problem 3](#problem-3-resource-files) |
 | JetBrains Mono, Inter, `intellij.platform.icons.jar` | packaged as assets | the desktop client reads them from the install |
 
-Platform pieces in the app, all in `client/android/src/main/kotlin/`:
+Platform pieces in the app, all in `android/src/main/kotlin/`:
 
 | Piece | How |
 |---|---|
@@ -747,7 +747,7 @@ Choosing an item is two messages, in this order: `ItemSelected` on `commandFlow`
 
 ## Connect screen and reconnecting (step 7)
 
-The Android app opens on a connect screen: the link prompt, backends running on this phone, and a history of connections. Tapping a history entry connects again with the same join link, also after the app was closed. What the screen does and the `intellij-backend` contract it calls: [`connections.md`](connections.md). Tested 2026-11-16 on the emulator and the desktop client against the Mac backend. **Seen** unless marked.
+The Android app opens on a connect screen: the link prompt, backends running on this phone, and a history of connections. Tapping a history entry connects again with the same join link, also after the app was closed. What the screen does and the `intellij-backend` contract it calls: [`connections.md`](https://github.com/safeuq/intellij-backend-android/blob/main/docs/connections.md). Tested 2026-11-16 on the emulator and the desktop client against the Mac backend. **Seen** unless marked.
 
 **Same join token, same client id.** The backend accepts a `jt` only from the client id that first used it ([attempt 3](#what-the-recording-didnt-show-found-by-failing)). So a history entry stores the client identity the backend accepted (CA key and certificate, leaf certificate, client id), and a reconnect presents it again. Two things are different from a first connection:
 
@@ -765,11 +765,11 @@ After that the session works as a new one: Project tree, editor, highlighting, t
 
 The desktop client stores its identity too when started with `CLIENT_IDENTITY=<file>` (see [`client.md`](client.md)).
 
-**A join token works once, and one client controls a backend.** Seen on the phone on 2026-11-16 (phone `idea.log`, UTC): 07:47:10 the app connected with `jt=4fd57122…`; 07:49:28 Gateway on the Mac connected with a fresh `jt`, the backend logged `Active controller connection has been detected. Terminate existing connection.` and sent the app `FORCE_TERMINATE_WIRE` (the client shows "Backend terminated the wire"); 07:49:40 the app came back with its stored `jt=4fd57122…` and got `Declining invalid token from root`. So a used token resumes only our own session, and only while no other client has taken over. The app's answer ([`connections.md`](connections.md), "What tapping an entry does"): a Termux entry first resumes with the stored link and identity; if refused, it asks `intellij-backend status --json` for the current link (it reads it from the backend, so it is unused) and `controllerConnected`, asks "Take over?" when another client is connected, and connects with a new identity. A session ended by `FORCE_TERMINATE_WIRE` shows "Another device took over this backend" with Take back.
+**A join token works once, and one client controls a backend.** Seen on the phone on 2026-11-16 (phone `idea.log`, UTC): 07:47:10 the app connected with `jt=4fd57122…`; 07:49:28 Gateway on the Mac connected with a fresh `jt`, the backend logged `Active controller connection has been detected. Terminate existing connection.` and sent the app `FORCE_TERMINATE_WIRE` (the client shows "Backend terminated the wire"); 07:49:40 the app came back with its stored `jt=4fd57122…` and got `Declining invalid token from root`. So a used token resumes only our own session, and only while no other client has taken over. The app's answer ([`connections.md`](https://github.com/safeuq/intellij-backend-android/blob/main/docs/connections.md), "What tapping an entry does"): a Termux entry first resumes with the stored link and identity; if refused, it asks `intellij-backend status --json` for the current link (it reads it from the backend, so it is unused) and `controllerConnected`, asks "Take over?" when another client is connected, and connects with a new identity. A session ended by `FORCE_TERMINATE_WIRE` shows "Another device took over this backend" with Take back.
 
 ### Not done yet
 
-- SSH history entries (the third kind in `connections.md`).
+- SSH history entries (the third kind in [`connections.md`](https://github.com/safeuq/intellij-backend-android/blob/main/docs/connections.md)).
 - The Termux entries' take-over path is built but not yet tried on the phone (it would drop the user's Gateway session).
 - No automatic reconnect: when the connection drops, the app goes back to the connect screen, and a tap on the history entry reconnects.
 - A history entry keeps the client's private key in the app's private storage. It is only useful with that backend's `jt`, until the backend restarts.

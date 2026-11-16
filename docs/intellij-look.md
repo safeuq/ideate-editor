@@ -1,6 +1,6 @@
 # IntelliJ's look: Islands Dark editor and Project tree
 
-Reference values for `client/` (used by `client/compose/src/commonMain/kotlin/intellijandroid/client/ui/IslandsDark.kt` and `EditorView.kt`). Researched 2026-11-15. The client takes editor text colors from the backend's color scheme at run time; the tables below are for the chrome around it and for checking.
+Reference values for `client/` (used by `compose/src/commonMain/kotlin/intellijandroid/client/ui/IslandsDark.kt` and `EditorView.kt`). Researched 2026-11-15. The client takes editor text colors from the backend's color scheme at run time; the tables below are for the chrome around it and for checking.
 
 
 Legend: **Seen** = read in an installed file or in source at tag `idea/263.7307.200`. **Inferred** = computed from Seen code/values, or not readable without running the IDE.
@@ -327,7 +327,7 @@ Open item 3 of section 6 is answered: rows are 22 and there are no git markers i
 
 ## 8. Completion popup, measured (2026-11-15)
 
-From a screenshot of the real client's popup at 2× (`client/compose/src/commonMain/kotlin/intellijandroid/client/ui/LookupPopup.kt` uses these):
+From a screenshot of the real client's popup at 2× (`compose/src/commonMain/kotlin/intellijandroid/client/ui/LookupPopup.kt` uses these):
 
 | Item | Value |
 |---|---|
@@ -343,7 +343,7 @@ From a screenshot of the real client's popup at 2× (`client/compose/src/commonM
 
 ## 9. Folder chooser, measured (2026-11-16)
 
-From a 2x screenshot of IntelliJ's "Open File or Project" dialog (`FileChooserDialogImpl`, Islands Dark, macOS), browsing Termux's home. Values in pt (= dp in the app). Used by the Android app's project folder picker (`client/android/.../FolderChooser.kt`).
+From a 2x screenshot of IntelliJ's "Open File or Project" dialog (`FileChooserDialogImpl`, Islands Dark, macOS), browsing Termux's home. Values in pt (= dp in the app). Used by the Android app's project folder picker (`android/.../FolderChooser.kt`).
 
 | Part | Value |
 |---|---|
@@ -360,7 +360,7 @@ Left out in the app: Desktop, New Folder, Delete, the path history drop-down, th
 ## 10. Connect screen: Gateway's welcome window
 
 The connect screen copies JetBrains Gateway 2026.3's "Welcome to JetBrains Gateway" window and its project ⋮ menu,
-measured on 2x screenshots (pt = dp). Code: `client/android/.../ConnectScreen.kt`, object `Gateway`.
+measured on 2x screenshots (pt = dp). Code: `android/.../ConnectScreen.kt`, object `Gateway`.
 
 | Part | Gateway | Ours |
 |---|---|---|

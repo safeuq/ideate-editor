@@ -1,4 +1,4 @@
-rootProject.name = "intellij-android-client"
+rootProject.name = "ideate-editor"
 
 pluginManagement {
     repositories {

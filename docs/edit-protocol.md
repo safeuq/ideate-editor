@@ -242,7 +242,7 @@ Plain caret move = one `RdApplyPatchRequest` (section 4). Enter/Backspace = `RdC
 
 ## 11. Checked with our client against the Mac backend (2026-11-15)
 
-`client/` implements sections 2 to 7 (`session/EditSession.kt`, `session/VersionHashes.kt`). Every row below was checked with `CLIENT_EDIT_DEBUG=1` on the 260-character `Main.java`; "same" means the backend's answer matched our local patch, so nothing was rolled back.
+The client implements sections 2 to 7 (`session/EditSession.kt`, `session/VersionHashes.kt`). Every row below was checked with `CLIENT_EDIT_DEBUG=1` on the 260-character `Main.java`; "same" means the backend's answer matched our local patch, so nothing was rolled back.
 
 | Action | What we sent | Backend's answer |
 |---|---|---|

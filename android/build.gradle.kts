@@ -168,8 +168,8 @@ val clientAssets by tasks.registering(ClientAssets::class) {
     outputDirectory = layout.buildDirectory.dir("generated/client-assets")
 }
 
-// The APK keeps its name from when this was a build of its own: intellij-android-app-debug.apk.
-base.archivesName = "intellij-android-app"
+// APK file name: ideate-debug.apk.
+base.archivesName = "ideate"
 
 android {
     namespace = "intellijandroid.client.android"
