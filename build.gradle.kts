@@ -15,7 +15,7 @@ plugins {
 // the same build as the backend (263.7307.200): both sides compare a schema hash per model.
 // Example:
 // ~/Library/Caches/JetBrains/JetBrainsClientDist/JetBrainsClient-263.7307.200-aarch64.sit-…/IntelliJ IDEA.app/Contents/lib
-// Looked up in this order: -PjetbrainsClientLib, local.properties (not committed, also holds
+// Looked up in this order: -Pjetbrains.client.lib, local.properties (not committed, also holds
 // sdk.dir; the IDE's
 // Gradle sync sees it, unlike shell variables), JETBRAINS_CLIENT_LIB.
 val localProperties =
@@ -25,11 +25,11 @@ val localProperties =
   }
 val jetbrainsClientLib by
   extra(
-    providers.gradleProperty("jetbrainsClientLib").orNull
-      ?: localProperties.getProperty("jetbrainsClientLib")
+    providers.gradleProperty("jetbrains.client.lib").orNull
+      ?: localProperties.getProperty("jetbrains.client.lib")
       ?: providers.environmentVariable("JETBRAINS_CLIENT_LIB").orNull
       ?: error(
-        "Set jetbrainsClientLib in local.properties (or JETBRAINS_CLIENT_LIB, or -PjetbrainsClientLib=…) to JetBrains Client 263.7307.200's Contents/lib folder",
+        "Set jetbrains.client.lib in local.properties (or JETBRAINS_CLIENT_LIB, or -Pjetbrains.client.lib=…) to JetBrains Client 263.7307.200's Contents/lib folder",
       ),
   )
 

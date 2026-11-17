@@ -25,7 +25,7 @@ val protocolJars: List<String> by rootProject.extra
 
 fun clientFile(path: String): File =
   file("$jetbrainsClientLib/$path").also {
-    check(it.exists()) { "Missing $it: is JETBRAINS_CLIENT_LIB the client's Contents/lib folder?" }
+    check(it.exists()) { "Missing $it: is jetbrains.client.lib (local.properties) the client's Contents/lib folder?" }
   }
 
 // ArtUnsafeShim uses sun.misc.Unsafe, which android.jar doesn't have, so it is compiled against the

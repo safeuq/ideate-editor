@@ -11,7 +11,7 @@ val protocolJars: List<String> by rootProject.extra
 
 val protocolJarFiles = protocolJars.map { name ->
   file("$jetbrainsClientLib/$name").also { jar ->
-    check(jar.isFile) { "Missing $jar: is JETBRAINS_CLIENT_LIB the client's Contents/lib folder?" }
+    check(jar.isFile) { "Missing $jar: is jetbrains.client.lib (local.properties) the client's Contents/lib folder?" }
   }
 }
 

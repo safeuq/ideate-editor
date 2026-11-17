@@ -11,7 +11,7 @@ Needs:
 - JetBrains Client **263.7307.200**, the same build as the backend. The build takes the protocol jars and the fonts from it, and every SVG from its `lib/` and `plugins/` jars into one `icons.jar` asset (about 6,100 icons, 4.5 MB compressed): the backend names icons by path, and plugin icons (Kotlin's file and class icons are in `intellij.kotlin.base.resources.jar`) aren't in `intellij.platform.icons.jar`. Before this, Kotlin files and other plugin icons showed no icon. The platform jar goes first, so its icons win when two jars have the same path.
 
 ```sh
-# sdk.dir and jetbrainsClientLib in local.properties, as in client.md
+# sdk.dir and jetbrains.client.lib in local.properties, as in client.md
 export JAVA_HOME="$HOME/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home"
 ./gradlew :android:assembleDebug        # android/build/outputs/apk/debug/ideate-debug.apk, about 47 MB
 adb install -r android/build/outputs/apk/debug/ideate-debug.apk

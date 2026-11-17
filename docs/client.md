@@ -36,10 +36,10 @@ Machine-specific paths go in `local.properties` at the repo root (not committed)
 
 ```properties
 sdk.dir=/Users/you/Library/Android/sdk
-jetbrainsClientLib=/Users/you/Library/Caches/JetBrains/JetBrainsClientDist/JetBrainsClient-263.7307.200-aarch64.sit-…/IntelliJ IDEA.app/Contents/lib
+jetbrains.client.lib=/Users/you/Library/Caches/JetBrains/JetBrainsClientDist/JetBrainsClient-263.7307.200-aarch64.sit-…/IntelliJ IDEA.app/Contents/lib
 ```
 
-`-PjetbrainsClientLib=…` and the `JETBRAINS_CLIENT_LIB` variable also work; the order is `-P`, then `local.properties`, then the variable. The variable alone is not enough for the IDE: an IDE started from the Dock doesn't see shell variables, and without `sdk.dir` it offers to install an Android SDK although one is there.
+`-Pjetbrains.client.lib=…` and the `JETBRAINS_CLIENT_LIB` variable also work; the order is `-P`, then `local.properties`, then the variable. The variable alone is not enough for the IDE: an IDE started from the Dock doesn't see shell variables, and without `sdk.dir` it offers to install an Android SDK although one is there.
 
 ```sh
 export JAVA_HOME="$HOME/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home"
