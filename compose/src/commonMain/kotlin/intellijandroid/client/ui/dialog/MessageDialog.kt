@@ -31,10 +31,12 @@ enum class MessageKind(val iconPath: String) {
  * no title bar, the 32 px [kind] icon at the left, the bold [title] (`JBFont.h4`) above the
  * [message], the buttons at the bottom right. [actions] go in IntelliJ's order, the first being the
  * default; [DialogWrapper]'s south panel orders them for the platform. Escape and a click outside
- * call [onCancel], like the dialog's close.
+ * call [onCancel], like the dialog's close. [focused] is `Messages`' `focusedOptionIndex`: that
+ * button starts with the focus ring.
  *
- * Example: the SSH host key question, `title = "SSH"`, `kind = QUESTION`, actions Continue and
- * Cancel; shown as `[Cancel] [Continue]` on a Mac, `[Continue] [Cancel]` elsewhere.
+ * Example: the SSH host key question, `title = "Connecting To Remote Host"`, `kind = QUESTION`,
+ * actions OK and Cancel, Cancel focused; shown as `[Cancel] [OK]` on a Mac, `[OK] [Cancel]`
+ * elsewhere, as Gateway shows it.
  */
 @Composable
 fun MessageDialog(
@@ -43,13 +45,14 @@ fun MessageDialog(
   kind: MessageKind,
   actions: List<DialogAction>,
   onCancel: () -> Unit,
+  focused: DialogAction? = null,
 ) {
   require(actions.isNotEmpty()) { "A message dialog needs at least one button" }
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
   // AlertDialog: 370 wide, 440 for a message over 130 characters.
   val width = if (message.length <= 130) 370.dp else 440.dp
-  DialogWindow(actions, onCancel, focusFrame = true) {
+  DialogWindow(actions, onCancel, focusFrame = focused == null) {
     Row(
       Modifier.width(width)
         // AlertDialog.background = popup-bg; its PopupBorder in popup-border.
@@ -62,7 +65,7 @@ fun MessageDialog(
         BasicText(title, style = fonts.h4())
         BasicText(message, style = fonts.label())
         // 22 between the message and the buttons: 8 from the column plus 14.
-        DialogButtons(actions, Modifier.padding(top = 14.dp))
+        DialogButtons(actions, Modifier.padding(top = 14.dp), focused)
       }
     }
   }

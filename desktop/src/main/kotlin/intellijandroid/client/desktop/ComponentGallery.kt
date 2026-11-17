@@ -154,13 +154,16 @@ private fun SampleDialog() {
 /** MessageDialog.kt: the SSH host key question. */
 @Composable
 private fun SampleMessage() {
+  val cancel = DialogAction("Cancel") {}
   MessageDialog(
-    "SSH",
-    "The authenticity of host '127.0.0.1' cannot be established. ED25519 key fingerprint is " +
-      "SHA256:1cqIIjvMAkHA74RCulfxLHBTSoesotqO3/xCQus8u4E.\n\nAre you sure you want to continue connecting?",
+    "Connecting To Remote Host",
+    "The authenticity of host '[100.66.92.44]:8022' cannot be established. ssh-ed25519 key " +
+      "fingerprint is c0:ec:02:38:0b:b6:50:91:f8:91:69:eb:54:91:1b:5a.\n\nAre you sure you want " +
+      "to continue connecting?",
     MessageKind.QUESTION,
-    listOf(DialogAction("Continue") {}, DialogAction("Cancel") {}),
+    listOf(DialogAction("OK") {}, cancel),
     onCancel = {},
+    focused = cancel,
   )
 }
 

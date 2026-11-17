@@ -322,9 +322,10 @@ class SshController(
 
   /**
    * IntelliJ's host key questions (SshBundle), answered in the page; the SSH thread waits for them.
+   * Worded as Gateway's, e.g. "… ssh-ed25519 key fingerprint is c0:ec:02:…:1b:5a." with OK.
    */
   private fun hostKeyCheck() = HostKeyCheck { host, port, key ->
-    val type = SshSession.keyType(key).removePrefix("ssh-").uppercase()
+    val type = SshSession.keyType(key)
     val fingerprint = SshSession.fingerprint(key)
     val shown = KnownHosts.pattern(host, port)
     when (knownHosts.check(host, port, key)) {
@@ -332,7 +333,7 @@ class SshController(
       KnownHosts.Verdict.UNKNOWN ->
         ask(
             "The authenticity of host '$shown' cannot be established. $type key fingerprint is $fingerprint.\n\nAre you sure you want to continue connecting?",
-            "Continue",
+            "OK",
           )
           .also { trusted -> if (trusted) knownHosts.trust(host, port, key) }
       KnownHosts.Verdict.CHANGED ->

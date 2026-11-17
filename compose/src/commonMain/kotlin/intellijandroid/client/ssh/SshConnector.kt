@@ -5,16 +5,14 @@ import com.hierynomus.sshj.userauth.agent.AuthAgent
 import java.io.Closeable
 import java.net.InetSocketAddress
 import java.net.ServerSocket
-import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.Security
-import java.util.Base64
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import net.schmizz.sshj.DefaultConfig
 import net.schmizz.sshj.SSHClient
-import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.IOUtils
+import net.schmizz.sshj.common.SecurityUtils
 import net.schmizz.sshj.connection.channel.direct.Parameters
 import net.schmizz.sshj.transport.verification.HostKeyVerifier
 import net.schmizz.sshj.userauth.method.AuthPassword
@@ -203,12 +201,11 @@ private constructor(private val client: SSHClient, val host: String, val port: I
       return SshSession(client, host, port)
     }
 
-    /** OpenSSH's `SHA256:<base64 without padding>` of the key blob. */
-    fun fingerprint(key: PublicKey): String {
-      val blob = Buffer.PlainBuffer().putPublicKey(key).compactData
-      val digest = MessageDigest.getInstance("SHA-256").digest(blob)
-      return "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(digest)
-    }
+    /**
+     * The MD5 of the key blob in colon-separated hex, as Gateway's host key question shows it, e.g.
+     * `c0:ec:02:38:0b:b6:50:91:f8:91:69:eb:54:91:1b:5a`.
+     */
+    fun fingerprint(key: PublicKey): String = SecurityUtils.getFingerprint(key)
 
     /** E.g. `ssh-ed25519`, `ecdsa-sha2-nistp256`, `ssh-rsa`. */
     fun keyType(key: PublicKey): String = net.schmizz.sshj.common.KeyType.fromKey(key).toString()

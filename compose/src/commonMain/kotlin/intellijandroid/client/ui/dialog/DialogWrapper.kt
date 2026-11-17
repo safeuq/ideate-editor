@@ -154,22 +154,32 @@ internal fun DialogWindow(
 
 /**
  * The south panel's buttons, right-aligned 12 apart (`DialogWrapper.BASE_BUTTON_GAP`), the default
- * one last on macOS and first elsewhere.
+ * one last on macOS and first elsewhere. [focused] starts with the focus ring, as IntelliJ's
+ * `focusedOptionIndex`; Enter then presses that button, Escape still cancels.
  */
 @Composable
-internal fun DialogButtons(actions: List<DialogAction>, modifier: Modifier = Modifier) {
+internal fun DialogButtons(
+  actions: List<DialogAction>,
+  modifier: Modifier = Modifier,
+  focused: DialogAction? = null,
+) {
   val default = actions.firstOrNull() ?: return
+  require(focused == null || focused in actions) { "The focused action must be one of the actions" }
   val shown = if (IS_MAC) actions.drop(1) + default else actions
+  val focusRequester = remember { FocusRequester() }
   Row(
     modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
   ) {
     for (action in shown) {
+      val buttonModifier =
+        if (action === focused) Modifier.focusRequester(focusRequester) else Modifier
       if (action === default)
-        DefaultButton(action.label, enabled = action.enabled, onClick = action.onClick)
-      else OutlinedButton(action.label, enabled = action.enabled, onClick = action.onClick)
+        DefaultButton(action.label, buttonModifier, action.enabled, action.onClick)
+      else OutlinedButton(action.label, buttonModifier, action.enabled, action.onClick)
     }
   }
+  if (focused != null) LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 }
 
 /** The dialog's own frame: background, rounded corners and outline. */

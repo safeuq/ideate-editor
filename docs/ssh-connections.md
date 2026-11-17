@@ -143,7 +143,7 @@ the APK size.
 | `SshHostEntry` + storage | saved hosts as JSON in `StoredText`: id, host, port, user, log-in method, key reference |
 | `SshConnector` | SSHJ session: log-in, host-key check, exec, SFTP, local port forward |
 | `KeyStore` (platform) | Android: the generated or imported key in app-private storage, encrypted with an Android Keystore key. Desktop: `~/.ideate/`, plus `~/.ssh` and the agent |
-| `KnownHosts` | the app's own known-hosts file. Unknown key: ask, showing the SHA-256 fingerprint as `ssh-keygen -l` does. Changed key: refuse with a warning. On the desktop, `~/.ssh/known_hosts` is also read |
+| `KnownHosts` | the app's own known-hosts file. Unknown key: ask, showing the MD5 fingerprint as Gateway does (see "Host key question as Gateway shows it"). Changed key: refuse with a warning. On the desktop, `~/.ssh/known_hosts` is also read |
 | `RemoteHost` | the host commands below, in two implementations |
 | `WorkerHost` | used when `<RemoteDev>/remote-dev-worker/remote-dev-worker_*` exists, is executable and passes `worker-check`. Calls `installed-ides`, `recent-projects-data`, `host-status`, `host-launch`, `list-files` in Gateway's way (login shell, marker line, JSON lines) |
 | `ShellHost` | POSIX `sh` over SSH, for the same answers (next table) |
@@ -356,7 +356,7 @@ Dialogs, drawn like IntelliJ's (the folder chooser's frame: 475 dp wide, 32 dp t
 | Dialog | Gateway | IDEate |
 |---|---|---|
 | Connect to SSH | Username, Host, Port (22), "Specify private key", **Check Connection and Continue** | the same fields, then the log-in method: IDEate key (its public line and **Copy Public Key**), Specify private key (paste the key and its passphrase), Password (with Save password), and on the desktop "OpenSSH config and authentication agent". The host is saved only once it logs in |
-| Host key, unknown | "The authenticity of host '{0}' cannot be established. {1} key fingerprint is {2}. Are you sure you want to continue connecting?" | the same text in the page, Continue / Cancel |
+| Host key, unknown | "The authenticity of host '{0}' cannot be established. {1} key fingerprint is {2}. Are you sure you want to continue connecting?" | Gateway's dialog: "Connecting To Remote Host", OK / Cancel, Cancel focused (see "Host key question as Gateway shows it") |
 | Host key, changed | "Warning: remote host identification has changed! …" | the same; accepting replaces IDEate's entry |
 | Choose IDE and Project | "IDE version:" (installed ones marked "installed"), "Project directory:" with a browse button, **Start IDE and Connect** | the installed IDEs only (no downloads), the path (`~` allowed), **…** opens the folder browser |
 | Choose Remote Project | the remote file browser from `/` | the shared FolderChooser with `root` `/` (or Termux's files folder when `$HOME` is in Termux) and Home = the host's `$HOME` |
@@ -508,3 +508,19 @@ The status file in `RemoteDev/active/` lagged: it still said `"controllerConnect
   `intellij-backend` wrapper also accepts.
 - ~~Whether `controllerConnected` should offer "Take over?" for SSH hosts too~~: yes, done 2026-11-17 (see
   "Taking over a running backend" below).
+
+## Host key question as Gateway shows it (2026-11-17)
+
+Compared with Gateway's dialog for the phone's Termux SSH (screenshot from the user):
+
+| Part | Gateway | IDEate before | IDEate now |
+| --- | --- | --- | --- |
+| Title | Connecting To Remote Host | SSH | Connecting To Remote Host |
+| Key type | `ssh-ed25519` | `ED25519` | `ssh-ed25519` (`SshSession.keyType`) |
+| Fingerprint | `c0:ec:02:38:0b:b6:50:91:f8:91:69:eb:54:91:1b:5a` (MD5, colon hex) | `SHA256:1cqIIjvM…` | MD5 colon hex (SSHJ `SecurityUtils.getFingerprint`) |
+| Buttons | Cancel, OK (default, blue) | Cancel, Continue | Cancel, OK |
+| Focus | Cancel has the focus ring | the dialog frame | Cancel (`MessageDialog(focused = …)`) |
+
+With Cancel focused, Enter presses Cancel and Escape cancels; OK needs a click or a tap. The
+changed-key warning keeps its own text and its "Update and Connect" button, with the same title
+and fingerprint format. Checked in the component gallery (`CLIENT_GALLERY`, `-message.png`).

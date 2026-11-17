@@ -175,18 +175,18 @@ internal fun SshOverlays(state: SshPageState, actions: SshActions, fonts: Client
  * couldn't be reached.
  */
 @Composable
-private fun QuestionDialog(question: Question, actions: SshActions) =
+private fun QuestionDialog(question: Question, actions: SshActions) {
+  val cancel = DialogAction("Cancel", onClick = actions.cancelQuestion)
+  // Gateway's title; Cancel starts focused, so a stray Enter doesn't trust a key.
   MessageDialog(
-    title = "SSH",
+    title = "Connecting To Remote Host",
     message = question.text,
     kind = question.kind,
-    actions =
-      listOf(
-        DialogAction(question.confirm, onClick = actions.answerQuestion),
-        DialogAction("Cancel", onClick = actions.cancelQuestion),
-      ),
+    actions = listOf(DialogAction(question.confirm, onClick = actions.answerQuestion), cancel),
     onCancel = actions.cancelQuestion,
+    focused = cancel,
   )
+}
 
 /**
  * Gateway's "Connect to SSH": Username, Host, Port, how to log in, Check Connection and Continue.
