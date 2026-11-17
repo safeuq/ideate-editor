@@ -281,6 +281,9 @@ fun ToolWindowPanel(
           ),
       )
     }
+    // On a phone held upright (back chevron shown) the tool window covers the editor; a line under
+    // the header, in ToolWindow.Header.borderColor, sets the title apart from the content.
+    if (onBack != null) Box(Modifier.fillMaxWidth().height(1.dp).background(Bars.headerBorder))
     Box(Modifier.fillMaxWidth().weight(1f)) { content() }
   }
 }
@@ -302,5 +305,6 @@ private object Bars {
   val selected = Color(0xFF393B40)
   val separator = Color(0xFF393B40)
   val separatorLength = 20.dp
+  val headerBorder = Color(0xFF26282C) // ToolWindow.Header.borderColor = tool-window-border
   val projectBadge = Color(0xFF3574F0)
 }

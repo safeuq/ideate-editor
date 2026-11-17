@@ -36,6 +36,8 @@ across a rotation.
   stripe (Structure, Notifications). Icons are IntelliJ's `expui/toolwindows/<name>.svg` at the same size as the main
   toolbar's, as in IntelliJ: 16 in compact mode (buttons 32 in a 40-thick bar), 20 in normal (buttons 40, bar 48).
   Selected background `#393B40`. Only Project and Structure open; the rest say they aren't supported.
+- **Header line:** when a tool window covers the editor (phone held upright, back chevron shown), a 1 dp line
+  in `ToolWindow.Header.borderColor` (`#26282C`) runs under its header ("‹ Structure").
 - **One tool window per side** at most. Tapping an open window's button closes it, as on IntelliJ's stripes.
 - **Structure is on the right.** IntelliJ puts it on the left by default; on the right it can be open together with
   Project, which the split layouts below need.
@@ -74,7 +76,9 @@ the bottom instead of Gateway's sidebar ([`intellij-look.md`](intellij-look.md) 
   Structure.
 - **Tool windows scroll sideways the same way** (since 2026-11-17, user report "A lengthy file name in the project
   window cannot be revealed by scrolling"). The Project and Structure trees scroll sideways when a row is wider than
-  the panel: the row's content moves, the selection band stays inset from the panel's sides. The scroll range is
+  the panel: the row's content moves. The selection band stays 12 dp from the right side; its left side follows the
+  content (12 dp minus the scroll, down to 0), so after a scroll it still covers the shifted icon and name (user
+  report with a screenshot, 2026-11-17: the band had stayed 12 dp in and left the icon outside it). The scroll range is
   the widest row seen so far plus the 12 dp side inset. Each tool window keeps its own `SidewaysScroll`, and the
   pager asks the one on the current page with the same rule as the editor:
   | Page | Finger moves left | Finger moves right |

@@ -114,7 +114,7 @@ private fun toProjectTree(
           TreeNode(
             id = node.id,
             parentId = parents[node.id],
-            fragments = listOf(TextFragment(node.name, 0, null)),
+            fragments = listOf(TextFragment(displayName(structure, index), 0, null)),
             iconPaths = node.iconPaths,
             hasChildren = node.children.isNotEmpty(),
             isDirectory = node.children.isNotEmpty(),
@@ -125,4 +125,15 @@ private fun toProjectTree(
       .toMap()
   val expanded = nodes.keys.filter { keys[it] !in collapsed }.toSet()
   return ProjectTree(nodes, expanded, nodes.keys.firstOrNull { keys[it] == selected })
+}
+
+/**
+ * A node's name as the backend sent it (`getPresentableText`). Some structure views leave that
+ * empty and draw their text another way, e.g. Spring's Logical view for a bean class; the backend
+ * then sends `""`. The root then shows the file's name, as IntelliJ's root does.
+ */
+private fun displayName(structure: StructureTree, index: Int): String {
+  val name = structure.nodes[index].name
+  if (name.isNotBlank() || index != 0) return name
+  return structure.path?.substringAfterLast('/').orEmpty()
 }

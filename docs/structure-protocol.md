@@ -282,3 +282,24 @@ Whether `nodes` contains the root too, and whether `nodes` always lists the whol
 2. ~~Root node for Java~~: answered above (the file node).
 3. Path B: real JSON of `VirtualFileId`, root `parentId`, whether `nodes` repeats the root, wire form of `deferredProviderNodes`.
 4. Record the real JetBrains Client doing Ctrl+F12 with the `protocol.*` trace, as was done for completion, to compare.
+
+## Files with several structure views (2026-11-17)
+
+Some files have more than one structure view in IntelliJ, shown as tabs: a Spring bean class (for example
+xtool's `ExecutionManagerImpl`) has **Physical** (the class's members) and **Logical** (Spring's beans, "Injects",
+"Injected In"). The backend sends only one of them:
+- `BackendFileStructureHost` (`intellij.platform.backend.split.jar`, decompiled) builds the tree from
+  `StructureViewBuilder.createStructureView(…).getTreeModel()`.
+- For a file with tabs that view is a `StructureViewComposite`, whose `getTreeModel()` is its first view's model
+  (`getSelectedStructureView()` = the first descriptor). For a Spring bean class that is Spring's Logical view.
+- `CodeStructureTreeModel` has no field to pick another view. `StructureType` is only `Local` or `Full`.
+- JetBrains Client has no tab handling either: its `rdclient/fileStructure` classes (`ProtocolStructureViewModel`,
+  …) show the one tree the backend sends.
+
+The node names come from `getPresentableText()` (and `ShortTextProvider.getShortText()`). Spring's Logical nodes
+leave it empty and draw their text another way, so they arrive as `""`. Seen on the phone (user's screenshot,
+2026-11-17): a nameless root, a nameless node with an icon, then "Injects" and "Injected In".
+
+In IDEate: a nameless root shows the file's name. The other nameless nodes stay nameless, and the Physical view
+isn't available until the backend offers a way to choose the view. Not checked against a Spring project here:
+the Mac test project has no Spring setup, and a Gradle sync for xtool would download its dependencies.

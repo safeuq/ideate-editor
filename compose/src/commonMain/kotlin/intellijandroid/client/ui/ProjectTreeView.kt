@@ -1,7 +1,6 @@
 package intellijandroid.client.ui
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,9 +33,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -226,14 +228,24 @@ private fun TreeRow(
     // Selection and hover: a rounded rectangle inset 12 px from both sides, not indented with the
     // node.
     if (highlight != null) {
+      // Inset 12 from both sides; when the row is scrolled sideways, its left side follows the
+      // content out of view, so the band still covers the shifted icon and name. Drawn, not laid
+      // out, so a sideways scroll only redraws it.
       Box(
-        Modifier.fillMaxSize()
-          .padding(horizontal = IslandsDark.treeSideInset)
-          .background(highlight, RoundedCornerShape(IslandsDark.treeSelectionRadius)),
+        Modifier.fillMaxSize().drawBehind {
+          val inset = IslandsDark.treeSideInset.toPx()
+          val left = maxOf(0f, inset - scroll.x)
+          val radius = IslandsDark.treeSelectionRadius.toPx()
+          drawRoundRect(
+            highlight,
+            topLeft = Offset(left, 0f),
+            size = Size(size.width - inset - left, size.height),
+            cornerRadius = CornerRadius(radius, radius),
+          )
+        },
       )
     }
-    // Everything but the selection band scrolls sideways (the band stays inset from the panel,
-    // like IntelliJ's tree in a scroll pane).
+    // Everything but the selection band scrolls sideways.
     Box(
       Modifier.matchParentSize().clipToBounds().offset {
         IntOffset(-scroll.x.roundToInt(), 0)
