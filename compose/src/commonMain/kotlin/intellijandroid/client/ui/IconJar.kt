@@ -4,32 +4,41 @@ import java.io.File
 import java.util.zip.ZipFile
 
 /**
- * IntelliJ's own icons from `intellij.platform.icons.jar`, picked like a dark theme does: `<name>_dark.svg` first,
- * then `<name>.svg`; then the Islands Dark palette swap `#CED0D6` → `#C3C5CB`. Each platform turns the SVG text into a
- * painter (desktop: Skia; Android: AndroidSVG).
+ * IntelliJ's own icons from `intellij.platform.icons.jar`, picked like a dark theme does:
+ * `<name>_dark.svg` first, then `<name>.svg`; then the Islands Dark palette swap `#CED0D6` →
+ * `#C3C5CB`. Each platform turns the SVG text into a painter (desktop: Skia; Android: AndroidSVG).
  */
 class IconJar(file: File) {
-    private val jar = ZipFile(file.also { check(it.isFile) { "Missing icons jar $it" } })
+  private val jar = ZipFile(file.also { check(it.isFile) { "Missing icons jar $it" } })
 
-    /** The SVG text for [path], e.g. `expui/nodes/folder.svg`, or null when the jar has no such icon. */
-    fun svg(path: String): String? {
-        val name = path.removePrefix("/")
-        val entry = jar.getEntry(name.removeSuffix(".svg") + "_dark.svg") ?: jar.getEntry(name) ?: return null
-        return jar.getInputStream(entry).use { it.readBytes().decodeToString() }.replace("#CED0D6", "#C3C5CB", ignoreCase = true)
-    }
+  /**
+   * The SVG text for [path], e.g. `expui/nodes/folder.svg`, or null when the jar has no such icon.
+   */
+  fun svg(path: String): String? {
+    val name = path.removePrefix("/")
+    val entry =
+      jar.getEntry(name.removeSuffix(".svg") + "_dark.svg") ?: jar.getEntry(name) ?: return null
+    return jar
+      .getInputStream(entry)
+      .use { it.readBytes().decodeToString() }
+      .replace("#CED0D6", "#C3C5CB", ignoreCase = true)
+  }
 
-    companion object {
-        /**
-         * Icons that aren't in JetBrains Client's jars under the path the UI asks for. `markdown/link.svg`: the Markdown
-         * plugin's chain link (`icons/expui/editorActions/link_dark.svg`, Apache 2.0, JetBrains), the icon Gateway shows
-         * for Link.
-         */
-        val EXTRA_ICONS = mapOf(
-            "markdown/link.svg" to """<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  companion object {
+    /**
+     * Icons that aren't in JetBrains Client's jars under the path the UI asks for.
+     * `markdown/link.svg`: the Markdown plugin's chain link
+     * (`icons/expui/editorActions/link_dark.svg`, Apache 2.0, JetBrains), the icon Gateway shows
+     * for Link.
+     */
+    val EXTRA_ICONS =
+      mapOf(
+        "markdown/link.svg" to
+          """<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M7.09656 3.19658C8.67248 1.62069 11.2275 1.62067 12.8035 3.19653C14.3795 4.77245 14.3795 7.3276 12.8036 8.90359L11.8529 9.85434C11.6576 10.0496 11.341 10.0496 11.1458 9.85435C10.9505 9.6591 10.9505 9.34251 11.1458 9.14725L12.0965 8.1965C13.2819 7.01104 13.2819 5.08906 12.0964 3.90366C10.911 2.7183 8.98906 2.71832 7.80366 3.9037L6.85287 4.85446C6.65761 5.04972 6.34103 5.04972 6.14577 4.85445C5.95051 4.65919 5.95051 4.34261 6.14577 4.14735L7.09656 3.19658Z" fill="#C3C5CB"/>
 <path d="M4.85288 6.14731C5.04814 6.34258 5.04814 6.65916 4.85287 6.85442L3.90376 7.80351C2.71827 8.98898 2.71828 10.911 3.90378 12.0965C5.08926 13.2819 7.01126 13.2819 8.19669 12.0964L9.14661 11.1465C9.34187 10.9512 9.65846 10.9512 9.85372 11.1465C10.049 11.3417 10.049 11.6583 9.85373 11.8536L8.90381 12.8035C7.32786 14.3795 4.77269 14.3796 3.19669 12.8036C1.62065 11.2276 1.62063 8.67239 3.19666 7.0964L4.14577 6.14731C4.34104 5.95205 4.65762 5.95205 4.85288 6.14731Z" fill="#C3C5CB"/>
 <path d="M10.3536 6.35355C10.5488 6.15829 10.5488 5.84171 10.3536 5.64645C10.1583 5.45118 9.84171 5.45118 9.64645 5.64645L5.64645 9.64645C5.45118 9.84171 5.45118 10.1583 5.64645 10.3536C5.84171 10.5488 6.15829 10.5488 6.35355 10.3536L10.3536 6.35355Z" fill="#C3C5CB"/>
 </svg>""",
-        )
-    }
+      )
+  }
 }

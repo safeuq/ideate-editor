@@ -20,44 +20,58 @@ import intellijandroid.client.ui.LocalEditorTextInput
 import intellijandroid.client.ui.LocalIcons
 
 /**
- * The connect screen (link prompt, backends on this phone, history; docs/connections.md), then the IDE screen; both
- * shared with the desktop ([IdeateApp]). For scripted runs: `adb shell am start -n
- * intellijandroid.client.android/.MainActivity --es joinLink '<link>' [--es openFile '<path>']` connects at once.
+ * The connect screen (link prompt, backends on this phone, history; docs/connections.md), then the
+ * IDE screen; both shared with the desktop ([IdeateApp]). For scripted runs: `adb shell am start -n
+ * intellijandroid.client.android/.MainActivity --es joinLink '<link>' [--es openFile '<path>']`
+ * connects at once.
  */
 class MainActivity : ComponentActivity() {
-    private lateinit var controller: ConnectController
-    private val termuxPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { controller.refresh() }
+  private lateinit var controller: ConnectController
+  private val termuxPermission =
+    registerForActivityResult(ActivityResultContracts.RequestPermission()) { controller.refresh() }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val fonts = AndroidResources.fonts(this)
-        val icons = AndroidResources.SvgIcons(AndroidResources.iconJar(this), resources.displayMetrics.density)
-        val termux = AndroidTermux(this) { termuxPermission.launch(AndroidTermux.PERMISSION) }
-        // The same preference files and keys as before the connect screen moved to shared code, so history survives updates.
-        controller = ConnectController(
-            history = ConnectionHistory(preferenceText("connection-history", "entries")),
-            lastLink = preferenceText("connection", "joinLink"),
-            lastFile = preferenceText("connection", "openFile"),
-            termux = termux,
-            device = "This phone",
-        )
-        intent.getStringExtra("joinLink")?.let { extra -> controller.connectLink(extra, intent.getStringExtra("openFile")) }
-
-        setContent {
-            CompositionLocalProvider(LocalClientFonts provides fonts, LocalIcons provides icons, LocalEditorTextInput provides editorTextInput) {
-                IdeateApp(controller, fonts, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
-            }
-        }
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    val fonts = AndroidResources.fonts(this)
+    val icons =
+      AndroidResources.SvgIcons(AndroidResources.iconJar(this), resources.displayMetrics.density)
+    val termux = AndroidTermux(this) { termuxPermission.launch(AndroidTermux.PERMISSION) }
+    // The same preference files and keys as before the connect screen moved to shared code, so
+    // history survives updates.
+    controller =
+      ConnectController(
+        history = ConnectionHistory(preferenceText("connection-history", "entries")),
+        lastLink = preferenceText("connection", "joinLink"),
+        lastFile = preferenceText("connection", "openFile"),
+        termux = termux,
+        device = "This phone",
+      )
+    intent.getStringExtra("joinLink")?.let { extra ->
+      controller.connectLink(extra, intent.getStringExtra("openFile"))
     }
 
-    override fun onDestroy() {
-        controller.close()
-        super.onDestroy()
+    setContent {
+      CompositionLocalProvider(
+        LocalClientFonts provides fonts,
+        LocalIcons provides icons,
+        LocalEditorTextInput provides editorTextInput,
+      ) {
+        IdeateApp(controller, fonts, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
+      }
     }
+  }
 
-    private fun preferenceText(file: String, key: String) = object : StoredText {
-        private val preferences = getSharedPreferences(file, Context.MODE_PRIVATE)
-        override fun read(): String? = preferences.getString(key, null)
-        override fun write(text: String) = preferences.edit { putString(key, text) }
+  override fun onDestroy() {
+    controller.close()
+    super.onDestroy()
+  }
+
+  private fun preferenceText(file: String, key: String) =
+    object : StoredText {
+      private val preferences = getSharedPreferences(file, Context.MODE_PRIVATE)
+
+      override fun read(): String? = preferences.getString(key, null)
+
+      override fun write(text: String) = preferences.edit { putString(key, text) }
     }
 }

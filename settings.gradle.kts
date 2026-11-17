@@ -1,19 +1,20 @@
 rootProject.name = "ideate-editor"
 
 pluginManagement {
-    repositories {
-        gradlePluginPortal()
-        mavenCentral()
-        google()
-    }
+  repositories {
+    gradlePluginPortal()
+    mavenCentral()
+    google()
+  }
 }
 
 dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-    }
+  repositories {
+    google()
+    mavenCentral()
+  }
 }
 
-// compose: connection, session and UI, shared by both apps. desktop: the JVM launcher. android: the Android app.
+// compose: connection, session and UI, shared by both apps. desktop: the JVM launcher. android: the
+// Android app.
 include("compose", "desktop", "android")

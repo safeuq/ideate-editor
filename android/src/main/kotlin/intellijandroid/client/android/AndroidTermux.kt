@@ -11,92 +11,125 @@ import intellijandroid.client.connect.Termux
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Runs `intellij-backend` in Termux through Termux's RUN_COMMAND service (docs/connections.md, "Termux setup"). Needs
- * `allow-external-apps = true` in `~/.termux/termux.properties` and the runtime permission [PERMISSION], which
- * [requestPermission] asks for (the activity owns the permission launcher).
+ * Runs `intellij-backend` in Termux through Termux's RUN_COMMAND service (docs/connections.md,
+ * "Termux setup"). Needs `allow-external-apps = true` in `~/.termux/termux.properties` and the
+ * runtime permission [PERMISSION], which [requestPermission] asks for (the activity owns the
+ * permission launcher).
  */
 class AndroidTermux(private val context: Context, private val askPermission: () -> Unit) : Termux {
-    override val isInstalled: Boolean
-        get() = runCatching { context.packageManager.getPackageInfo(PACKAGE, 0) }.isSuccess
+  override val isInstalled: Boolean
+    get() = runCatching { context.packageManager.getPackageInfo(PACKAGE, 0) }.isSuccess
 
-    override val hasPermission: Boolean
-        get() = context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
+  override val hasPermission: Boolean
+    get() = context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
 
-    override fun requestPermission() = askPermission()
+  override fun requestPermission() = askPermission()
 
-    override fun run(arguments: List<String>, onResult: (kotlin.Result<Termux.Result>) -> Unit) = run(arguments, COMMAND, onResult)
+  override fun run(arguments: List<String>, onResult: (kotlin.Result<Termux.Result>) -> Unit) =
+    run(arguments, COMMAND, onResult)
 
-    /**
-     * Runs `<executable> <arguments>` in the background; [onResult] gets its exit code and output on the main thread,
-     * or a failure when Termux couldn't run it (e.g. `allow-external-apps` is off).
-     */
-    private fun run(arguments: List<String>, executable: String, onResult: (kotlin.Result<Termux.Result>) -> Unit) {
-        check(hasPermission) { "The app doesn't have Termux's RUN_COMMAND permission yet" }
-        val action = "${context.packageName}.TERMUX_RESULT.${requestCodes.incrementAndGet()}"
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(receiverContext: Context, intent: Intent) {
-                context.unregisterReceiver(this)
-                val bundle = intent.getBundleExtra("result")
-                onResult(
-                    when {
-                        bundle == null -> kotlin.Result.failure(IllegalStateException("Termux answered without a result"))
-                        bundle.getInt("err", Activity.RESULT_OK) != Activity.RESULT_OK ->
-                            kotlin.Result.failure(IllegalStateException("Termux couldn't run intellij-backend: ${bundle.getString("errmsg")}"))
-                        else -> kotlin.Result.success(Termux.Result(bundle.getInt("exitCode"), bundle.getString("stdout").orEmpty(), bundle.getString("stderr").orEmpty()))
-                    },
+  /**
+   * Runs `<executable> <arguments>` in the background; [onResult] gets its exit code and output on
+   * the main thread, or a failure when Termux couldn't run it (e.g. `allow-external-apps` is off).
+   */
+  private fun run(
+    arguments: List<String>,
+    executable: String,
+    onResult: (kotlin.Result<Termux.Result>) -> Unit,
+  ) {
+    check(hasPermission) { "The app doesn't have Termux's RUN_COMMAND permission yet" }
+    val action = "${context.packageName}.TERMUX_RESULT.${requestCodes.incrementAndGet()}"
+    val receiver =
+      object : BroadcastReceiver() {
+        override fun onReceive(receiverContext: Context, intent: Intent) {
+          context.unregisterReceiver(this)
+          val bundle = intent.getBundleExtra("result")
+          onResult(
+            when {
+              bundle == null ->
+                kotlin.Result.failure(IllegalStateException("Termux answered without a result"))
+              bundle.getInt("err", Activity.RESULT_OK) != Activity.RESULT_OK ->
+                kotlin.Result.failure(
+                  IllegalStateException(
+                    "Termux couldn't run intellij-backend: ${bundle.getString("errmsg")}",
+                  ),
                 )
+              else ->
+                kotlin.Result.success(
+                  Termux.Result(
+                    bundle.getInt("exitCode"),
+                    bundle.getString("stdout").orEmpty(),
+                    bundle.getString("stderr").orEmpty(),
+                  ),
+                )
+            },
+          )
+        }
+      }
+    // Termux sends the PendingIntent as this app, so a receiver that isn't exported still gets it.
+    context.registerReceiver(receiver, IntentFilter(action), Context.RECEIVER_NOT_EXPORTED)
+    val resultIntent =
+      PendingIntent.getBroadcast(
+        context,
+        0,
+        Intent(action).setPackage(context.packageName),
+        PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_MUTABLE,
+      )
+    val command =
+      Intent("com.termux.RUN_COMMAND")
+        .setClassName(PACKAGE, "com.termux.app.RunCommandService")
+        .putExtra("com.termux.RUN_COMMAND_PATH", executable)
+        .putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arguments.toTypedArray())
+        .putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
+        .putExtra("com.termux.RUN_COMMAND_PENDING_INTENT", resultIntent)
+    runCatching { context.startService(command) }
+      .onFailure { failure ->
+        context.unregisterReceiver(receiver)
+        onResult(kotlin.Result.failure(failure))
+      }
+  }
+
+  /**
+   * The folders directly inside [path], hidden ones included, sorted like IntelliJ's file chooser
+   * (ignoring case). This app can't read Termux's private files itself, so Termux's shell lists
+   * them.
+   */
+  override fun listFolders(path: String, onResult: (kotlin.Result<List<Termux.Folder>>) -> Unit) =
+    run(listOf("-c", LIST_FOLDERS, "sh", path), SHELL) { result ->
+      onResult(
+        result.mapCatching { output ->
+          check(output.exitCode == 0) {
+            "Can't list $path: ${output.stderr.ifBlank { "exit ${output.exitCode}" }}"
+          }
+          output.stdout
+            .lines()
+            .filter { it.isNotEmpty() }
+            .map { line ->
+              Termux.Folder(line.substringAfter('/'), isProject = line.startsWith("project/"))
             }
-        }
-        // Termux sends the PendingIntent as this app, so a receiver that isn't exported still gets it.
-        context.registerReceiver(receiver, IntentFilter(action), Context.RECEIVER_NOT_EXPORTED)
-        val resultIntent = PendingIntent.getBroadcast(
-            context,
-            0,
-            Intent(action).setPackage(context.packageName),
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_MUTABLE,
-        )
-        val command = Intent("com.termux.RUN_COMMAND")
-            .setClassName(PACKAGE, "com.termux.app.RunCommandService")
-            .putExtra("com.termux.RUN_COMMAND_PATH", executable)
-            .putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arguments.toTypedArray())
-            .putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
-            .putExtra("com.termux.RUN_COMMAND_PENDING_INTENT", resultIntent)
-        runCatching { context.startService(command) }.onFailure { failure ->
-            context.unregisterReceiver(receiver)
-            onResult(kotlin.Result.failure(failure))
-        }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        },
+      )
     }
 
+  companion object {
+    const val PACKAGE = "com.termux"
+    const val PERMISSION = "com.termux.permission.RUN_COMMAND"
+    const val COMMAND = "/data/data/com.termux/files/usr/bin/intellij-backend"
+
+    private const val SHELL = "/data/data/com.termux/files/usr/bin/sh"
+
     /**
-     * The folders directly inside [path], hidden ones included, sorted like IntelliJ's file chooser (ignoring case).
-     * This app can't read Termux's private files itself, so Termux's shell lists them.
+     * Prints `folder/<name>` or `project/<name>` (has `.idea`) per sub-folder of `$1`. Names can't
+     * hold `/`.
      */
-    override fun listFolders(path: String, onResult: (kotlin.Result<List<Termux.Folder>>) -> Unit) =
-        run(listOf("-c", LIST_FOLDERS, "sh", path), SHELL) { result ->
-            onResult(
-                result.mapCatching { output ->
-                    check(output.exitCode == 0) { "Can't list $path: ${output.stderr.ifBlank { "exit ${output.exitCode}" }}" }
-                    output.stdout.lines().filter { it.isNotEmpty() }
-                        .map { line -> Termux.Folder(line.substringAfter('/'), isProject = line.startsWith("project/")) }
-                        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-                },
-            )
-        }
-
-    companion object {
-        const val PACKAGE = "com.termux"
-        const val PERMISSION = "com.termux.permission.RUN_COMMAND"
-        const val COMMAND = "/data/data/com.termux/files/usr/bin/intellij-backend"
-
-        private const val SHELL = "/data/data/com.termux/files/usr/bin/sh"
-
-        /** Prints `folder/<name>` or `project/<name>` (has `.idea`) per sub-folder of `$1`. Names can't hold `/`. */
-        private const val LIST_FOLDERS = """cd "${'$'}1" || exit 1
+    private const val LIST_FOLDERS =
+      """cd "${'$'}1" || exit 1
 for entry in * .[!.]* ..?*; do
   [ -d "${'$'}entry" ] || continue
   if [ -d "${'$'}entry/.idea" ]; then echo "project/${'$'}entry"; else echo "folder/${'$'}entry"; fi
 done"""
 
-        private val requestCodes = AtomicInteger()
-    }
+    private val requestCodes = AtomicInteger()
+  }
 }

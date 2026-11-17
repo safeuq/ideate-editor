@@ -67,3 +67,5 @@ Debug aids, all off by default:
 The join link is the one the backend prints, with `0.0.0.0` replaced by its address. The join token in it works for one client only: the history entry (same identity) can use it again, any other client needs a restarted backend. Starting a backend on the Mac without disturbing a running IntelliJ: `split-protocol.md`, "Running a backend on the Mac for client work".
 
 `./gradlew :compose:jvmTest` checks the frame encoding against the bytes in the protocol doc, and the version hashes against numbers recorded from the real client.
+
+Code is formatted with Spotless: ktfmt in Google style (2-space indent, 100 columns) for `src/**/*.kt` and the Gradle scripts, trailing whitespace for `*.md`. `./gradlew spotlessApply` formats, `./gradlew spotlessCheck` fails on unformatted code. Plugin versions are in `gradle/libs.versions.toml`.
