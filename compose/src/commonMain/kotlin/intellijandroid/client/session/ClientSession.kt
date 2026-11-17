@@ -142,6 +142,7 @@ class ClientSession(
   private var completion: Completion? = null
   private var requestResponse: RequestResponseModel? = null
   private var actionMenus: ActionMenus? = null
+  private var luxDialogs: LuxDialogs? = null
   private val menuSerials = AtomicInteger()
   private var selectedEditorId: RdFileEditorId? = null
 
@@ -308,6 +309,15 @@ class ClientSession(
 
   fun lookupKey(key: LookupKey) = onRd { completion?.key(key) }
 
+  /** The image cache backend dialogs share (docs/lux-protocol.md); null before connecting. */
+  val luxImages: intellijandroid.client.ui.lux.LuxImages?
+    get() = luxDialogs?.images
+
+  /** Input for backend dialog [dialogId]: mouse, keys, focus, closing. */
+  fun luxEvent(dialogId: Int, event: com.jetbrains.rd.ide.model.LxEvent) = onRd {
+    luxDialogs?.send(dialogId, event)
+  }
+
   /**
    * A right click on Project view node [nodeId]: the backend's `ProjectViewPopupMenu` for it, in
    * [SessionState.contextMenu]. The backend finds the node's file or folder from the node id.
@@ -413,6 +423,11 @@ class ClientSession(
   }
 
   private fun createModels(protocol: IProtocol) {
+    luxDialogs =
+      LuxDialogs(lifetime, protocol, ::log) { dialogs ->
+          mutableState.update { it.copy(luxDialogs = dialogs) }
+        }
+        .also { it.bind() }
     val registry = DefaultRegistryModel()
     protocol.highlighterRegistrationHostModel.registry.set(registry)
     // The backend sends every installed scheme (Default, Darcula, Islands Dark, …), each with only

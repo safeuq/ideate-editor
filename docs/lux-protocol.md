@@ -348,3 +348,51 @@ platform's `pngDecoder` (set at startup: Skia on the desktop, `BitmapFactory` on
 - `CLIENT_GALLERY=<out.png>` also writes `<out>-lux.png`: a Rename dialog from hand-made operations with the
   recorded texts, text boxes, keys and button geometry (`desktop/…/LuxGallerySample.kt`).
 
+
+## 8. IDEate shows backend dialogs (2026-11-17)
+
+`session/LuxDialogs.kt` and `ui/lux/LuxDialogView.kt`, on the painter from section 7.
+
+- **Attach:** once the backend creates `codeWithMeUnattendedHostControlModel.session`, IDEate sets
+  `graphicsDevices` to one 1920 × 1200 screen at scale 1, so a backend pixel is a dp.
+- **Which windows:** every `LxDialog`, and every `LxWindow` that isn't a frame (popups; none seen yet, see
+  New below).
+  - On the first `preferredSize`, IDEate writes `size` back, then a position and
+    `graphicsConfiguration`.
+  - On `visible = true` it sends `LxWindowEvent(Activated)` and `(GainedFocus)`. Without them there's
+    no caret and no typing.
+- **The window:** a Compose `Dialog` with IntelliJ's title row (left out for popups and for undecorated
+  dialogs such as IntelliJ's alerts, which paint their own title) over the backend's content.
+  - The content is a bitmap at screen density that the painter replays batches into, in order, on
+    the UI thread.
+  - A dialog wider than the screen is scaled down to fit, and the input is scaled back.
+- **Input:**
+  - Pointer: `LxMouseEvent` Moved / Pressed / Released / Clicked, button 1, with
+    `BUTTON1_DOWN_MASK` while pressed and the click count. A finger sends Moved before Pressed, so
+    the button under it is hovered first.
+  - Hardware keys: AWT key codes plus Typed for characters; a shortcut held with Ctrl or ⌘ types
+    nothing.
+  - The soft keyboard goes through `EditorTextTarget` (`LocalEditorTextInput`): each character as a
+    key stroke, Select all as Ctrl/⌘+A.
+  - Back, or a click outside a non-modal one, sends `LxWindowEvent(Closing)` and Escape. The backend
+    closes its own dialog, and the window goes when `components` drops it.
+- **Un-greyed:** the dialog actions in `ActionMenus` (Rename, Delete, Reformat Code, Optimize Imports,
+  Module Settings, …). Still greyed: what opens a popup, frame or tool window (Find Usages, Find/Replace
+  in Files, Show History, Compare, Go To, Analyze, Run), and New.
+
+**New ▸ File, Java Class, …** don't use Lux. Their name popup arrives as
+`uiAutomationInteractionModel.activePopups[1] = BeAbstractPopup`, the semantic BeControl popup route, and
+`NewFile` returns at once (the popup isn't modal). So New stays greyed until that route is supported.
+
+**Tested** against the isolated Mac backend:
+
+| Where | Dialog | Result |
+|---|---|---|
+| desktop | Rename on `smoke.iml` | drawn like IntelliJ's; typing `tested` gave `tested.iml`; a click on Cancel closed it, nothing renamed |
+| desktop | Delete on `.idea` (alert) | drawn; Escape cancelled, `.idea` kept |
+| emulator | Rename on `smoke.iml` | drawn at density; Gboard typing `xy` gave `xy.iml`; a tap on Cancel closed it |
+| emulator | Safe Delete on `smoke.iml` | drawn; Back closed it, the file kept |
+
+Not done yet: a dialog's own popups (the Scope combo's list, `LxWindow` popups in general, untested), the
+backend clipboard for paste into a dialog field (pasted text is typed key by key), and a soft keyboard that
+opens only when the dialog has a text field (today it opens for every dialog on Android).

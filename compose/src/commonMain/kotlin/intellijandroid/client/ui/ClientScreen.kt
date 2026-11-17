@@ -104,6 +104,8 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
   val unsupported = { what: String -> notice = "$what isn't supported in this client yet" }
 
   BoxWithConstraints(Modifier.fillMaxSize().background(IslandsDark.windowBackground)) {
+    // The backend's dialogs (Rename, New, Delete, …): windows of their own (docs/lux-protocol.md).
+    intellijandroid.client.ui.lux.LuxDialogs(state.luxDialogs, session)
     val layout = screenLayout(maxWidth.value, maxHeight.value)
     val windows = remember { ToolWindowState(left = ToolWindow.PROJECT, right = null) }
     var page by remember { mutableStateOf(Page.EDITOR) }

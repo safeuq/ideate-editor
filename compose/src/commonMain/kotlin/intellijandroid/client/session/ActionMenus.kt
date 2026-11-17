@@ -94,7 +94,7 @@ internal class ActionMenus(
           log("Menu $groupId: ${requested.size} requests, $milliseconds ms")
           // Debug aid: CLIENT_MENU_DUMP=1 logs each item's action id, text and flags.
           if (System.getenv("CLIENT_MENU_DUMP") != null) menu.dump()
-          publish(serial, tidy(menu.entries(groupId, inDialogGroup = false)))
+          publish(serial, tidy(menu.entries(groupId, inUnshownGroup = false)))
         }
       }
     }
@@ -152,23 +152,23 @@ internal class ActionMenus(
       }
     }
 
-    fun entries(groupId: String, inDialogGroup: Boolean): List<MenuEntry> =
-      children[groupId].orEmpty().flatMap { child -> entry(child, inDialogGroup) }
+    fun entries(groupId: String, inUnshownGroup: Boolean): List<MenuEntry> =
+      children[groupId].orEmpty().flatMap { child -> entry(child, inUnshownGroup) }
 
-    private fun entry(child: ActionRegistrationModel, inDialogGroup: Boolean): List<MenuEntry> =
+    private fun entry(child: ActionRegistrationModel, inUnshownGroup: Boolean): List<MenuEntry> =
       when (child) {
         is SeparatorModel -> listOf(MenuSeparator)
         // Blocked for clients, or an action IDEate has no part of.
         is ActionStubModel -> emptyList()
         is GroupModel -> {
           val presentation = presentationOf(child)
-          val dialogs = inDialogGroup || child.actionId in DIALOG_GROUPS
+          val unshown = inUnshownGroup || child.actionId in UNSHOWN_GROUPS
           when {
             !presentation.isVisible -> emptyList()
             // A group that isn't a submenu shows its items in place.
-            !presentation.isPopup -> entries(child.actionId, dialogs)
+            !presentation.isPopup -> entries(child.actionId, unshown)
             else -> {
-              val items = tidy(entries(child.actionId, dialogs))
+              val items = tidy(entries(child.actionId, unshown))
               listOf(
                 SubMenu(label(presentation), items, presentation.isEnabled && items.isNotEmpty()),
               )
@@ -180,18 +180,14 @@ internal class ActionMenus(
           if (!presentation.isVisible) emptyList()
           else {
             val text = label(presentation)
-            // A backend dialog would open where nobody sees it and block the backend's UI thread
-            // (IDEate doesn't show backend dialogs yet), so those items stay greyed out.
-            val opensDialog =
-              inDialogGroup ||
-                child.actionId in UNSHOWN_ACTIONS ||
-                text.endsWith("...") ||
-                text.endsWith("…")
+            // Backend dialogs show (LuxDialogs); popups, frames and tool windows don't yet, so
+            // the items that open those stay greyed out.
+            val unshown = inUnshownGroup || child.actionId in UNSHOWN_ACTIONS
             listOf(
               MenuItem(
                 label = text,
                 shortcut = shortcutOf(child),
-                enabled = presentation.isEnabled && !opensDialog,
+                enabled = presentation.isEnabled && !unshown,
                 iconPath = presentation.icon?.icon?.let(iconPath),
                 id = child.actionId,
                 onClick = { run(child.actionId, presentation, this) },
@@ -212,9 +208,11 @@ internal class ActionMenus(
     /** Bounds the submenu requests for one menu. */
     const val MAX_REQUESTS = 40
 
-    /** Groups whose every item opens a dialog: New ▸ Java Class, File, Directory, …. */
-    val DIALOG_GROUPS =
+    /** Groups whose items open what IDEate doesn't show yet. */
+    val UNSHOWN_GROUPS =
       setOf(
+        // New ▸ File, Java Class, …: the name popup comes as a BeControl popup
+        // (uiAutomationInteractionModel.activePopups), not over Lux (docs/lux-protocol.md).
         "WeighingNewGroup",
         "NewGroup",
         // The editor's menu: Go To and Diagrams open popups, Analyze fills tool windows, Run and
@@ -229,25 +227,25 @@ internal class ActionMenus(
       )
 
     /**
-     * Actions whose text has no "…" but that open a backend dialog, popup or tool window IDEate
-     * can't show (seen with CLIENT_MENU_DUMP on 263.7307.200): Reformat Code and Optimize Imports
-     * ask for options on a folder, `$Delete` ("Remove Module", "Delete") asks to confirm, Find
-     * Usages fills a tool window.
+     * Actions that open a popup window, a frame or a tool window, which IDEate doesn't show yet
+     * (dialogs it does). Seen with CLIENT_MENU_DUMP on 263.7307.200: Find Usages and Recent Changes
+     * fill a tool window or popup, Find/Replace in Files is a popup in the New UI, Show History and
+     * the Compare actions open frames, Show Context Actions is the Alt+Enter popup.
      */
     val UNSHOWN_ACTIONS =
       setOf(
-        "ReformatCode",
-        "OptimizeImports",
-        "\$Delete",
         "FindUsages",
+        "FindInPath",
+        "ReplaceInPath",
         "DownloadBackendFileToClient",
-        "OpenModuleSettings",
-        "MoveModuleToGroup",
         "RecentChanges",
-        // The editor's menu: Show Context Actions opens the Alt+Enter popup, Compare with
-        // Clipboard a diff window.
-        "ShowIntentionActions",
+        "LocalHistory.ShowHistory",
+        "LocalHistory.ShowSelectionHistory",
+        "LocalHistory.ShowProjectHistory",
+        "CompareTwoFiles",
+        "CompareFileWithEditor",
         "CompareClipboardWithSelection",
+        "ShowIntentionActions",
       )
 
     // PresentationModel.flags (ActionsKt in intellij.rd.platform.jar).

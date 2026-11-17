@@ -145,6 +145,8 @@ data class SessionState(
   val structure: StructureTree = StructureTree(),
   /** The open context menu built by the backend (ActionMenus). */
   val contextMenu: BackendMenu? = null,
+  /** The backend's open dialogs over Lux (LuxDialogs), oldest first. */
+  val luxDialogs: List<LuxDialog> = emptyList(),
 )
 
 /** Context menu number [serial]; [entries] null until the backend has answered ("Loading…"). */
