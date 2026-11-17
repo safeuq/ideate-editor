@@ -21,6 +21,7 @@ docs/           all documentation (below)
 | [`completion-protocol.md`](docs/completion-protocol.md) | code completion over Fleet RPC |
 | [`structure-protocol.md`](docs/structure-protocol.md) | the Structure tool window over rd (`CodeStructureTreeModel`), and the Fleet RPC `StructureTreeApi` the Ctrl+F12 popup uses |
 | [`action-protocol.md`](docs/action-protocol.md) | context menus from the backend (`AsyncActionsModel.expandGroup`) and running their actions (`RdCallActionRequest`); which items IDEate greys out |
+| [`lux-protocol.md`](docs/lux-protocol.md) | backend Swing dialogs over rd (Lux): a remote canvas of draw operations, how JetBrains Client shows them, why the semantic BeDialog route isn't used, and a plan for IDEate |
 | [`mobile-layout.md`](docs/mobile-layout.md) | the main window on phone and tablet, portrait and landscape: bars, swipes, which layout when |
 | [`intellij-look.md`](docs/intellij-look.md) | IntelliJ's Islands Dark look: colors, fonts, metrics, icons |
 | [`ui-components.md`](docs/ui-components.md) | plan: one shared component per IntelliJ widget, laid out like Jewel, styled from Islands Dark theme keys |
