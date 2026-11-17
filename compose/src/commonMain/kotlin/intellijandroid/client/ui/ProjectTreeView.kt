@@ -3,7 +3,9 @@ package intellijandroid.client.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -24,11 +27,14 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -38,17 +44,20 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import intellijandroid.client.session.ProjectTree
 import intellijandroid.client.session.TreeNode
+import kotlin.math.roundToInt
 
 /** The Project tool window: header plus the tree, laid out with IntelliJ's New UI tree metrics. */
 @Composable
@@ -88,8 +97,17 @@ fun ProjectTreeView(
   onSelect: (TreeNode) -> Unit,
   onOpen: (TreeNode) -> Unit,
   modifier: Modifier = Modifier,
+  /** Sideways scrolling for names wider than the panel; hoisted for the phone's swipe pager. */
+  scroll: SidewaysScroll = remember { SidewaysScroll() },
 ) {
   val rows = remember(tree) { tree.visibleRows() }
+  // Each laid-out row's right edge (text end plus the side inset), for the sideways scroll range.
+  // ponytail: only rows that have been on screen count, like a lazy list; a wider row further
+  // down widens the range when it scrolls into view.
+  val rowRights = remember(rows) { mutableStateMapOf<Int, Float>() }
+  var viewportWidth by remember { mutableFloatStateOf(0f) }
+  val contentWidth = rowRights.values.maxOrNull() ?: 0f
+  LaunchedEffect(contentWidth, viewportWidth) { scroll.fit(contentWidth, viewportWidth) }
   val focusRequester = remember { FocusRequester() }
   var focused by remember { mutableStateOf(false) }
   val listState = rememberLazyListState()
@@ -140,6 +158,8 @@ fun ProjectTreeView(
       PaddingValues(top = IslandsDark.treeTopInset, bottom = IslandsDark.treeTopInset),
     modifier =
       modifier
+        .onSizeChanged { viewportWidth = it.width.toFloat() }
+        .scrollable(scroll.scrollable, Orientation.Horizontal, reverseDirection = true)
         .focusRequester(focusRequester)
         .onFocusChanged { focused = it.hasFocus }
         .focusable()
@@ -158,6 +178,8 @@ fun ProjectTreeView(
         },
         onDoubleClick = { if (node.hasChildren) onToggle(node) else onOpen(node) },
         onChevron = { onToggle(node) },
+        scroll = scroll,
+        onRight = { right -> rowRights[node.id] = right },
       )
     }
   }
@@ -173,8 +195,12 @@ private fun TreeRow(
   onPress: () -> Unit,
   onDoubleClick: () -> Unit,
   onChevron: () -> Unit,
+  scroll: SidewaysScroll,
+  /** The row's content width in px, from its left edge to the text end plus the side inset. */
+  onRight: (Float) -> Unit,
 ) {
   val fonts = LocalClientFonts.current
+  val density = LocalDensity.current
   val icons = LocalIcons.current
   val interaction = remember { MutableInteractionSource() }
   val hovered by interaction.collectIsHoveredAsState()
@@ -206,65 +232,76 @@ private fun TreeRow(
           .background(highlight, RoundedCornerShape(IslandsDark.treeSelectionRadius)),
       )
     }
-    if (node.hasChildren) {
-      val chevron =
-        icons.painter(
-          if (expanded) "expui/general/chevronDown.svg" else "expui/general/chevronRight.svg",
-        )
-      if (chevron != null) {
+    // Everything but the selection band scrolls sideways (the band stays inset from the panel,
+    // like IntelliJ's tree in a scroll pane).
+    Box(
+      Modifier.matchParentSize().clipToBounds().offset {
+        IntOffset(-scroll.x.roundToInt(), 0)
+      },
+    ) {
+      if (node.hasChildren) {
+        val chevron =
+          icons.painter(
+            if (expanded) "expui/general/chevronDown.svg" else "expui/general/chevronRight.svg",
+          )
+        if (chevron != null) {
+          Image(
+            chevron,
+            contentDescription = if (expanded) "Collapse" else "Expand",
+            modifier =
+              Modifier.offset(x = chevronX).size(16.dp).align(Alignment.CenterStart).pointerInput(
+                node.id,
+              ) {
+                detectTapGestures(onPress = { onChevron() })
+              },
+          )
+        }
+      }
+      node.iconPaths.firstOrNull()?.let(icons::painter)?.let { icon ->
         Image(
-          chevron,
-          contentDescription = if (expanded) "Collapse" else "Expand",
-          modifier =
-            Modifier.offset(x = chevronX).size(16.dp).align(Alignment.CenterStart).pointerInput(
-              node.id,
-            ) {
-              detectTapGestures(onPress = { onChevron() })
-            },
+          icon,
+          contentDescription = null,
+          modifier = Modifier.offset(x = iconX).size(16.dp).align(Alignment.CenterStart),
         )
       }
-    }
-    node.iconPaths.firstOrNull()?.let(icons::painter)?.let { icon ->
-      Image(
-        icon,
-        contentDescription = null,
-        modifier = Modifier.offset(x = iconX).size(16.dp).align(Alignment.CenterStart),
-      )
-    }
-    val label =
-      remember(node.fragments) {
-        buildAnnotatedString {
-          for (fragment in node.fragments) {
-            withStyle(
-              SpanStyle(
-                color =
-                  fragment.foreground?.let { androidx.compose.ui.graphics.Color(it) }
-                    ?: IslandsDark.text,
-                // Inter has no Bold file; IntelliJ draws "bold" UI text with Inter SemiBold.
-                fontWeight =
-                  if (fragment.style and 1 != 0) FontWeight.SemiBold else FontWeight.Normal,
-                fontStyle = if (fragment.style and 2 != 0) FontStyle.Italic else FontStyle.Normal,
-              ),
-            ) {
-              append(fragment.text)
+      val label =
+        remember(node.fragments) {
+          buildAnnotatedString {
+            for (fragment in node.fragments) {
+              withStyle(
+                SpanStyle(
+                  color =
+                    fragment.foreground?.let { androidx.compose.ui.graphics.Color(it) }
+                      ?: IslandsDark.text,
+                  // Inter has no Bold file; IntelliJ draws "bold" UI text with Inter SemiBold.
+                  fontWeight =
+                    if (fragment.style and 1 != 0) FontWeight.SemiBold else FontWeight.Normal,
+                  fontStyle = if (fragment.style and 2 != 0) FontStyle.Italic else FontStyle.Normal,
+                ),
+              ) {
+                append(fragment.text)
+              }
             }
           }
         }
-      }
-    BasicText(
-      label,
-      style =
-        TextStyle(
-          fontFamily = fonts.ui,
-          fontSize = IslandsDark.UI_FONT_SIZE.sp,
-          color = IslandsDark.text,
-        ),
-      maxLines = 1,
-      overflow = TextOverflow.Clip,
-      modifier =
-        Modifier.offset(x = textX)
-          .align(Alignment.CenterStart)
-          .padding(end = IslandsDark.treeSideInset),
-    )
+      BasicText(
+        label,
+        style =
+          TextStyle(
+            fontFamily = fonts.ui,
+            fontSize = IslandsDark.UI_FONT_SIZE.sp,
+            color = IslandsDark.text,
+          ),
+        maxLines = 1,
+        softWrap = false,
+        modifier =
+          Modifier.offset(x = textX)
+            .align(Alignment.CenterStart)
+            .wrapContentWidth(Alignment.Start, unbounded = true)
+            .onSizeChanged {
+              onRight(it.width + with(density) { (textX + IslandsDark.treeSideInset).toPx() })
+            },
+      )
+    }
   }
 }

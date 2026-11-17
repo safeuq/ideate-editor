@@ -106,7 +106,9 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
     var page by remember { mutableStateOf(Page.EDITOR) }
     // One per screen, shared by the layouts: the pager asks it whether a sideways swipe scrolls the
     // editor or switches to a tool window.
-    val editorScroll = remember { EditorScroll() }
+    val editorScroll = remember { SidewaysScroll() }
+    // One per tool window, so each keeps its position; the pager asks the one on screen.
+    val windowScrolls = remember { ToolWindow.entries.associateWith { SidewaysScroll() } }
     // Phone portrait starts on the editor; the other layouts start with Project open, like
     // IntelliJ.
     LaunchedEffect(layout) { if (layout == ScreenLayout.PHONE_PORTRAIT) page = Page.EDITOR }
@@ -139,7 +141,13 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
     @Composable
     fun Window(window: ToolWindow, onBack: (() -> Unit)?, modifier: Modifier) =
       ToolWindowPanel(window, onBack, modifier.island()) {
-        ToolWindowContent(window, state, session, onNavigated = { onBack?.invoke() })
+        ToolWindowContent(
+          window,
+          state,
+          session,
+          windowScrolls.getValue(window),
+          onNavigated = { onBack?.invoke() },
+        )
       }
 
     Column(Modifier.fillMaxSize()) {
@@ -149,7 +157,13 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
           SwipePager(
             page = page,
             onPage = { page = it },
-            editorCanScroll = editorScroll::canScroll,
+            canScroll = { onPage, dragX ->
+              when (onPage) {
+                Page.LEFT -> windowScrolls.getValue(windows.lastLeft).canScroll(dragX)
+                Page.EDITOR -> editorScroll.canScroll(dragX)
+                Page.RIGHT -> windowScrolls.getValue(windows.lastRight).canScroll(dragX)
+              }
+            },
             left = {
               Window(windows.lastLeft, onBack = { page = Page.EDITOR }, Modifier.fillMaxSize())
             },
@@ -226,6 +240,7 @@ private fun ToolWindowContent(
   window: ToolWindow,
   state: SessionState,
   session: ClientSession,
+  scroll: SidewaysScroll,
   onNavigated: () -> Unit,
 ) =
   when (window) {
@@ -244,8 +259,10 @@ private fun ToolWindowContent(
             }
         },
         modifier = Modifier.fillMaxSize(),
+        scroll = scroll,
       )
-    ToolWindow.STRUCTURE -> StructureView(state, session, onNavigated, Modifier.fillMaxSize())
+    ToolWindow.STRUCTURE ->
+      StructureView(state, session, onNavigated, Modifier.fillMaxSize(), scroll)
     else -> Unit
   }
 
@@ -260,8 +277,11 @@ private fun ToolWindowContent(
 private fun SwipePager(
   page: Page,
   onPage: (Page) -> Unit,
-  /** Whether a sideways drag of this many px would scroll the editor (EditorScroll.canScroll). */
-  editorCanScroll: (Float) -> Boolean,
+  /**
+   * Whether a sideways drag of this many px would scroll the content of this page
+   * (SidewaysScroll.canScroll): the editor's text or a tool window's tree.
+   */
+  canScroll: (Page, Float) -> Boolean,
   left: @Composable () -> Unit,
   editor: @Composable () -> Unit,
   right: @Composable () -> Unit,
@@ -306,9 +326,10 @@ private fun SwipePager(
               if (travelled.getDistance() < viewConfiguration.touchSlop) continue
               // Mostly sideways: a swipe. Anything else belongs to the content (scrolling, taps).
               if (abs(travelled.x) < 2 * abs(travelled.y)) return@awaitEachGesture
-              // On the editor, a sideways swipe scrolls the editor unless it is already at that
-              // edge. Decided once here, so one swipe never turns from scrolling into switching.
-              if (page == Page.EDITOR && editorCanScroll(travelled.x)) return@awaitEachGesture
+              // A sideways swipe scrolls the page's content (editor text, tool window tree) unless
+              // it is already at that edge. Decided once here, so one swipe never turns from
+              // scrolling into switching.
+              if (canScroll(page, travelled.x)) return@awaitEachGesture
               swiping = true
             }
             change.consume()
@@ -347,7 +368,7 @@ private fun SwipePager(
 private fun EditorIsland(
   state: SessionState,
   session: ClientSession,
-  editorScroll: EditorScroll,
+  editorScroll: SidewaysScroll,
   modifier: Modifier,
 ) {
   val fonts = LocalClientFonts.current

@@ -67,11 +67,25 @@ the bottom instead of Gateway's sidebar ([`intellij-look.md`](intellij-look.md) 
   at that edge: at the left edge a drag to the right opens the left tool window, at the right edge a drag to the
   left opens the right one. The pager decides once, when the drag passes the touch slop, and keeps that decision
   for the whole gesture. So one swipe either scrolls or switches: a scroll that reaches the edge stops there, and
-  the next swipe switches (`EditorScroll.canScroll`, `SwipePager`).
+  the next swipe switches (`SidewaysScroll.canScroll`, `SwipePager`).
   Checked on the emulator (Pixel 3a, `Big.java` with a 360-character line), 2026-11-17 12:06 IST: a drag left
   scrolled the text with the gutter fixed. A long drag right that crossed back to the left edge mid-gesture stayed
   on the editor; the next drag right opened Project. Flinging to the right edge, then one more drag left, opened
   Structure.
+- **Tool windows scroll sideways the same way** (since 2026-11-17, user report "A lengthy file name in the project
+  window cannot be revealed by scrolling"). The Project and Structure trees scroll sideways when a row is wider than
+  the panel: the row's content moves, the selection band stays inset from the panel's sides. The scroll range is
+  the widest row seen so far plus the 12 dp side inset. Each tool window keeps its own `SidewaysScroll`, and the
+  pager asks the one on the current page with the same rule as the editor:
+  | Page | Finger moves left | Finger moves right |
+  |---|---|---|
+  | Project (left) | tree scrolls on; at its right edge, back to the editor | tree scrolls back; at its left edge, nothing |
+  | Structure (right) | tree scrolls on; at its right edge, nothing | tree scrolls back; at its left edge, back to the editor |
+
+  Landscape and tablet portrait have no pager; the trees scroll sideways there too (touch drag, trackpad or
+  Shift+wheel). Checked on the emulator (Pixel 3a) and the desktop, 2026-11-17 against the Mac backend:
+  `AVeryLongClassNameThatDoesNotFitInTheProjectToolWindowAtAllEvenOnTablets` in `src/demo`; a drag left on Project
+  scrolled to the name's end and stayed on Project, the next drag left went back to the editor.
 - One page is the screen width plus the 6 dp island gap, so two islands keep their gap and rounded corners while
   sliding (before, they touched mid-swipe).
 - Opening a file from the Project tool window (double tap) slides back to the editor.

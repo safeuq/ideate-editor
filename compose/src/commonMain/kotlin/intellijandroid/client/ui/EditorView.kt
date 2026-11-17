@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -15,24 +14,29 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -78,6 +82,9 @@ import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Where each line starts; line i is text[starts[i] until end(i)], without its line break. */
 private class Lines(val text: String) {
@@ -110,31 +117,6 @@ private class EditorMetrics(
 )
 
 /**
- * The editor's sideways scroll position in px. IntelliJ keeps the gutter in place and scrolls the
- * text area; so does [EditorView]. Hoisted so the phone's swipe pager can ask, when a sideways
- * swipe starts, whether the editor can still scroll that way (ClientScreen).
- */
-@Stable
-class EditorScroll {
-  var x by mutableFloatStateOf(0f)
-    internal set
-
-  internal var max by mutableFloatStateOf(0f)
-
-  internal val scrollable = ScrollableState { delta ->
-    val target = (x + delta).coerceIn(0f, max)
-    val consumed = target - x
-    x = target
-    consumed
-  }
-
-  /**
-   * Whether a sideways drag of [dragX] px (positive: the finger moves right) scrolls the editor.
-   */
-  fun canScroll(dragX: Float) = if (dragX > 0) x > 0f else x < max
-}
-
-/**
  * What the editor asks the session to do; the session applies it locally first and syncs it with
  * the backend.
  */
@@ -160,7 +142,7 @@ fun EditorView(
   actions: EditorActions,
   modifier: Modifier = Modifier,
   lookup: Lookup? = null,
-  scroll: EditorScroll = remember { EditorScroll() },
+  scroll: SidewaysScroll = remember { SidewaysScroll() },
 ) {
   val fonts = LocalClientFonts.current
   val density = LocalDensity.current
@@ -263,6 +245,7 @@ fun EditorView(
   var caretOn by remember { mutableStateOf(true) }
   val focusRequester = remember { FocusRequester() }
   val listState = rememberLazyListState()
+  val stickyScroll = rememberCoroutineScope()
   // The pointer handlers below live across recompositions; they must read the current text, not the
   // first one.
   val currentLines by rememberUpdatedState(lines)
@@ -463,6 +446,21 @@ fun EditorView(
         Modifier.fillMaxSize()
           .scrollable(scroll.scrollable, Orientation.Horizontal, reverseDirection = true)
           .background(Color(scheme.background))
+          .drawWithContent {
+            drawContent()
+            // The gutter's border line, the editor's full height (New UI,
+            // EditorGutterComponentImpl.paint): 1 px in the scheme's INDENT_GUIDE color at
+            // getWhitespaceSeparatorOffset() = gutter width - 3, over the caret row.
+            scheme.color("INDENT_GUIDE")?.let { separatorColor ->
+              val separatorX = metrics.gutterWidth - 3.dp.toPx() + 0.5.dp.toPx()
+              drawLine(
+                Color(separatorColor),
+                Offset(separatorX, 0f),
+                Offset(separatorX, size.height),
+                strokeWidth = 1.dp.toPx(),
+              )
+            }
+          }
           .focusRequester(focusRequester)
           .onFocusChanged { focused = it.hasFocus }
           .then(LocalEditorTextInput.current)
@@ -527,6 +525,101 @@ fun EditorView(
         )
       }
     }
+    // Sticky lines (IntelliJ's StickyLinesPanel): the start lines of the scopes the top of the view
+    // is in, pinned over the text, with a border line and a shadow under them.
+    val stickyScopes =
+      remember(file.stickyRanges, lines) {
+        file.stickyRanges.map {
+          StickyScope(lines.lineOf(it.start), lines.lineOf(it.end), it.start)
+        }
+      }
+    val sticky by
+      remember(stickyScopes, metrics, viewportHeight) {
+        derivedStateOf {
+          stickyPanel(
+            stickyScopes,
+            listState.firstVisibleItemIndex * metrics.lineHeight +
+              listState.firstVisibleItemScrollOffset,
+            metrics.lineHeight,
+            viewportHeight.toFloat(),
+          )
+        }
+      }
+    if (sticky.lines.isNotEmpty()) {
+      val stickyBackground = Color(scheme.color("STICKY_LINES_BACKGROUND") ?: scheme.background)
+      // StickyLineColors: STICKY_LINES_BORDER_COLOR, else RIGHT_MARGIN_COLOR, else the background.
+      val borderColor =
+        Color(
+          scheme.color("STICKY_LINES_BORDER_COLOR")
+            ?: scheme.color("RIGHT_MARGIN_COLOR")
+            ?: scheme.background,
+        )
+      // Dark schemes: a shadow of 0.25 line heights, black at alpha 32 fading out.
+      val shadowHeight = (metrics.lineHeight * 0.25f).toInt().toFloat()
+      with(density) {
+        Box(Modifier.fillMaxWidth().height(sticky.height.toDp()).clipToBounds()) {
+          sticky.lines.forEachIndexed { row, pinned ->
+            val line = pinned.scope.primaryLine
+            Box(
+              Modifier.offset(y = pinned.y.toDp())
+                .fillMaxWidth()
+                .height(metrics.lineHeight.toDp())
+                .background(stickyBackground)
+                .pointerInput(pinned) {
+                  // StickyLineComponent: a click puts the caret at the scope's name and scrolls
+                  // it into view, here just under the pinned lines above it.
+                  detectTapGestures {
+                    val target = pinned.scope.navigateOffset
+                    actions.moveCaret(target, target)
+                    stickyScroll.launch {
+                      listState.scrollToItem(maxOf(0, line - row))
+                      // Focus only once the session has the new caret: gaining focus scrolls to
+                      // the caret, which would still be the old one.
+                      withTimeoutOrNull(1_000) {
+                        snapshotFlow { currentFile.caret }.first { it == target }
+                      }
+                      focusRequester.requestFocus()
+                    }
+                  }
+                },
+            ) {
+              EditorLine(
+                line = line,
+                lines = lines,
+                highlights = highlightsByLine[line].orEmpty(),
+                guides = guidesByLine[line].orEmpty(),
+                selectedGuideLevel = -1,
+                gutterIconPath = gutterIconsByLine[line]?.firstOrNull()?.iconPaths?.firstOrNull(),
+                scheme = scheme,
+                metrics = metrics,
+                measurer = measurer,
+                textStyle = textStyle,
+                lineNumberStyle = lineNumberStyle,
+                caretColumn = null,
+                caretVisible = false,
+                selectionStart = -1,
+                selectionEnd = -1,
+                scroll = scroll,
+              )
+            }
+          }
+        }
+        Box(
+          Modifier.offset(y = sticky.height.toDp())
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(borderColor),
+        )
+        Box(
+          Modifier.offset(y = sticky.height.toDp() + 1.dp)
+            .fillMaxWidth()
+            .height(shadowHeight.toDp())
+            .background(
+              Brush.verticalGradient(listOf(Color(0, 0, 0, 32), Color(0, 0, 0, 0))),
+            ),
+        )
+      }
+    }
     // The completion popup sits under the caret line, its item text lined up with the first letter
     // of the prefix.
     lookup
@@ -564,7 +657,7 @@ private fun EditorLine(
   caretVisible: Boolean,
   selectionStart: Int,
   selectionEnd: Int,
-  scroll: EditorScroll,
+  scroll: SidewaysScroll,
 ) {
   val density = LocalDensity.current
   val lineStart = lines.starts[line]

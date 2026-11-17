@@ -303,7 +303,7 @@ Variant markers on node icons (visibility lock, final, static, test/run mark) ar
 
 ## 6. Open items worth one screenshot check
 1. Real FontMetrics height for JBM 12 on JBR macOS (expected 17 -> line height 21 at spacing 1.2).
-2. Whether the 1 px gutter separator line is visible in 2026.3 Islands Dark (code paints it with `#323438`).
+2. ~~Whether the 1 px gutter separator line is visible in 2026.3 Islands Dark~~: yes, see section 12.
 3. Whether the user's Project tree uses compact mode (row 22 vs 24) and the gutter has git markers (width +10).
 4. Selection corner radius 4 vs 8 (code passes arc 8 as RoundRectangle2D arc width).
 5. Icon x inside the renderer (2 or 3 px) from ipad/border.
@@ -429,3 +429,22 @@ Key values from `darcula.theme.json` → `expUI_dark.theme.json` → `ManyIsland
 Other `.compact` keys in those themes (popups, find, search everywhere, status bar, run widget, VCS log, diff, debugger tabs, title pane) are for parts IDEate doesn't draw.
 
 Checked 2026-11-17 on the desktop against a Mac backend (snapshots with `CLIENT_SNAPSHOT`): in compact mode the main toolbar and the tool window bar both have 16 px icons, the toolbar is 32 high, tree rows 22, the header 31; with `IDEATE_UI_DENSITY=normal` the icons are 20 in both bars, the toolbar 40, rows 24, the header 41. Before this, the bar used compact sizes, the toolbar a mix (30 buttons with 16 icons), and the tree, header and islands the normal ones.
+
+## 12. Gutter border line and sticky lines (2026-11-17)
+
+**Gutter border line.** New UI (`EditorGutterComponentImpl.paint`, IntelliJ Community 263.7307.200): after the gutter backgrounds, a vertical line the editor's full height, 1 px wide, in the scheme's `INDENT_GUIDE` color (`EditorColors.INDENT_GUIDE_COLOR`), at `getWhitespaceSeparatorOffset()` = gutter width − 3 (+1 px when the IDE scale is above 1; on a Mac it is 1). It is not drawn on the sticky lines panel. Seen in the user's IntelliJ 2026.3 (Islands Dark, a screenshot of the `ideate-editor` window): a thin line between the line numbers and the text, past the last line. In IDEate: `EditorView`'s `drawWithContent`, x = gutter width − 3 dp, drawn over the caret row; the sticky panel covers it.
+
+**Sticky lines.** When the start line of a class, method, … has scrolled out of view, IntelliJ pins it at the top of the editor (`StickyLinesPanel`, `VisualStickyLines`):
+
+| Part | IntelliJ | IDEate |
+|---|---|---|
+| Scopes | the backend's `STICKY_LINE_MARKER` highlighters in the document markup; start offset = the name (`Big` in `public class Big {`), end offset = the closing brace | `EditorFile.stickyRanges`; `Big.java` (500 methods with nested `if`/`for`) gets 501: the class and each method, none for the `if`/`for` blocks |
+| Which ones | scopes of at least 5 lines; of scopes on the same start line, one; sorted by start line (longer scope first); pinned while the start line is above the panel's next row and the end line reaches it; a scope ending under the panel pushes its line up by the overlap and ends the list | `stickyPanel()` in `StickyLines.kt`, a port of `VisualStickyLines.setYLocation`; `StickyLinesTest` |
+| Limit | `EditorSettingsExternalizable.STICKY_LINES_LIMIT` 5; the panel stays under half the editor minus two lines | the same |
+| A line | the editor's own painting of that line: gutter (line number, icons) and text with highlighting and indent guides | `EditorLine` for that line, without caret and selection |
+| Background | `STICKY_LINES_BACKGROUND`, else the editor background; hovered: `STICKY_LINES_HOVERED_COLOR`, else `CARET_ROW_COLOR` | background as IntelliJ; no hover color yet |
+| Border | 1 px under the panel in `STICKY_LINES_BORDER_COLOR`, else `RIGHT_MARGIN_COLOR`, else the background | the same |
+| Shadow | under the border, `0.25 × line height` in a dark scheme (0.17 light), black alpha 32 (8 light) fading to transparent | the dark values |
+| Click | caret to the scope's start offset, `scrollToCaret(RELATIVE)` | caret there, then the line is scrolled to just under the pinned lines above it; the editor takes focus once the session has the new caret |
+
+Checked on the desktop against the Mac backend (port 5992), `Big.java`: scrolled into `method1`, `public class Big {` (line 3) and `int method1(final int value) {` (line 16) were pinned, with the border under them. Tapping the pinned `method3` line put the caret on `method3` with line 40 right under the pinned class line. Tapping the class line put line 3 at the top.

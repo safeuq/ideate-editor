@@ -81,6 +81,8 @@ data class EditorFile(
   val highlights: List<Highlight>,
   val indentGuides: List<IndentGuide>,
   val gutterIcons: List<GutterIcon> = emptyList(),
+  /** Scopes for sticky lines, sorted by start. */
+  val stickyRanges: List<StickyRange> = emptyList(),
   val caret: Int = 0,
   val selectionStart: Int = 0,
   val selectionEnd: Int = 0,
@@ -93,6 +95,13 @@ data class EditorFile(
   val name: String
     get() = path.substringAfterLast('/')
 }
+
+/**
+ * A scope the backend marks with a `STICKY_LINE_MARKER` highlighter (`StickyLinesModelImpl`), in
+ * document offsets: [start] is the scope's name (e.g. `Main` in `public class Main {`), where a tap
+ * on its pinned line puts the caret; [end] is its end.
+ */
+data class StickyRange(val start: Int, val end: Int)
 
 /** Editor keys that become backend editor actions. */
 enum class EditorKey {

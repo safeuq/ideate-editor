@@ -705,6 +705,12 @@ class ClientSession(
         .filter { it.gutterIconPaths.isNotEmpty() }
         .sortedBy { it.start }
         .map { GutterIcon(it.start, it.gutterIconPaths) }
+    val stickyRanges =
+      raw
+        .filter { highlight -> highlight.keyChains.any { it.firstOrNull() == STICKY_LINE_MARKER } }
+        .map { StickyRange(it.start, it.end) }
+        .distinct()
+        .sortedBy { it.start }
     val file =
       EditorFile(
         pathOf(documentId),
@@ -712,6 +718,7 @@ class ClientSession(
         highlights,
         guides,
         gutterIcons,
+        stickyRanges,
         caret = session?.caret ?: 0,
         selectionStart = session?.selectionStart ?: 0,
         selectionEnd = session?.selectionEnd ?: 0,
@@ -788,6 +795,9 @@ class ClientSession(
 
     /** The default comment keys every language's comment colors fall back to. */
     val COMMENT_KEYS = setOf("DEFAULT_LINE_COMMENT", "DEFAULT_BLOCK_COMMENT", "DEFAULT_DOC_COMMENT")
+
+    /** Text attributes key of the backend's sticky line scopes (`StickyLinesModelImpl`). */
+    const val STICKY_LINE_MARKER = "STICKY_LINE_MARKER"
 
     fun HighlighterElement.toRaw(): RawHighlight {
       val model = highlighter

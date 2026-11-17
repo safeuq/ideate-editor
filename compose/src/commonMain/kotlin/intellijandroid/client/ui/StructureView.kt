@@ -32,6 +32,7 @@ fun StructureView(
   session: ClientSession,
   onNavigated: () -> Unit,
   modifier: Modifier,
+  scroll: SidewaysScroll = remember { SidewaysScroll() },
 ) {
   val structure = state.structure
   // Node ids change on every rebuild, so remember collapsed nodes by name path instead.
@@ -73,6 +74,7 @@ fun StructureView(
       onNavigated()
     },
     modifier = modifier,
+    scroll = scroll,
   )
 }
 
