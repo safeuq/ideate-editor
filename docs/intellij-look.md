@@ -343,7 +343,7 @@ From a screenshot of the real client's popup at 2× (`compose/src/commonMain/kot
 
 ## 9. Folder chooser, measured (2026-11-16)
 
-From a 2x screenshot of IntelliJ's "Open File or Project" dialog (`FileChooserDialogImpl`, Islands Dark, macOS), browsing Termux's home. Values in pt (= dp in the app). Used by the Android app's project folder picker (`android/.../FolderChooser.kt`).
+From a 2x screenshot of IntelliJ's "Open File or Project" dialog (`FileChooserDialogImpl`, Islands Dark, macOS), browsing Termux's home. Values in pt (= dp in the app). Used by the Android app's project folder picker (`compose/.../connect/FolderChooser.kt`).
 
 | Part | Value |
 |---|---|
@@ -356,6 +356,17 @@ From a 2x screenshot of IntelliJ's "Open File or Project" dialog (`FileChooserDi
 | Browse icon in a text field (`TextFieldWithBrowseButton`) | `expui/inline/browse.svg` |
 
 Left out in the app: Desktop, New Folder, Delete, the path history drop-down, the help button, and the drag-and-drop hint.
+
+**Expand arrows (2026-11-17).** A folder gets ">" only when it holds folders, decided before it is expanded, so an empty folder never shows an arrow that disappears on expand. Until then every folder had an arrow until its own listing came back, which the user saw in "Select Project Folder" ("Expanding an empty dir seems to remove the > icon next to it"). The app can't read Termux's files, so one RUN_COMMAND per expanded folder runs `Termux.LIST_FOLDERS` in Termux's `sh`. For each sub-folder it prints the kind, then whether that sub-folder itself holds visible and hidden folders, then the name:
+
+| Line | Folder | Arrow |
+|---|---|---|
+| `folder/00/Desktop` | no sub-folders (files only, or empty) | none |
+| `folder/10/IdeaProjects` | visible sub-folders | yes |
+| `project/01/IdeaHome` | an IntelliJ project (has `.idea`) whose only folder is `.idea` | only when "Show hidden files" is on |
+| `folder/11/.gradle` | both | yes |
+
+A folder the shell can't read is printed as `11`, so it keeps its arrow and the error shows when it is expanded. Once a folder's own listing is loaded, that listing decides its arrow (`hasChildFolders` in `FolderChooser.kt`); the top folder `/data/data/com.termux/files` has no parent listing and keeps its arrow until loaded. Checked on the phone over SSH: the lines above are its real output for `~` and `~/IdeaProjects`. `FolderListingTest` also runs the script with the Mac's `/bin/sh` on a temporary folder.
 
 ## 10. Connect screen: Gateway's welcome window
 

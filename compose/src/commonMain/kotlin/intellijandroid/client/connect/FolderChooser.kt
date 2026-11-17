@@ -108,27 +108,30 @@ fun FolderChooser(
   val tree =
     remember(children.toMap(), expanded, selected, showHidden) {
       val nodes = mutableMapOf<Int, TreeNode>()
-      fun add(folder: String, parent: String?, name: String, isProject: Boolean, sortKey: Int) {
+      /** [listed]: what the parent's listing said about [folder]; null for [ROOT]. */
+      fun add(folder: String, parent: String?, listed: Termux.Folder?, sortKey: Int) {
         val loaded = children[folder]?.filter { showHidden || !it.name.startsWith(".") }
         nodes[idOf(folder)] =
           TreeNode(
             id = idOf(folder),
             parentId = parent?.let(::idOf),
-            fragments = listOf(TextFragment(name, 0, null)),
+            fragments = listOf(TextFragment(listed?.name ?: ROOT.substringAfterLast('/'), 0, null)),
             iconPaths =
-              listOf(if (isProject) "expui/nodes/ideaProject.svg" else "expui/nodes/folder.svg"),
-            // Like the real chooser: every folder has a chevron until it is known to be empty.
-            hasChildren = loaded == null || loaded.isNotEmpty(),
+              listOf(
+                if (listed?.isProject == true) "expui/nodes/ideaProject.svg"
+                else "expui/nodes/folder.svg",
+              ),
+            hasChildren = hasChildFolders(loaded, listed, showHidden),
             isDirectory = true,
             path = folder,
             sortKey = sortKey,
           )
         if (folder in expanded)
           loaded?.forEachIndexed { index, child ->
-            add("$folder/${child.name}", folder, child.name, child.isProject, index)
+            add("$folder/${child.name}", folder, child, index)
           }
       }
-      add(ROOT, null, ROOT.substringAfterLast('/'), isProject = false, 0)
+      add(ROOT, null, null, 0)
       ProjectTree(nodes, expanded.map(::idOf).toSet(), selected?.let(::idOf))
     }
 
@@ -335,3 +338,20 @@ private object Chooser {
   val buttonBorder = Color(0xFF414349)
   val bottomInset = 11.dp
 }
+
+/**
+ * Whether a chooser row gets an expand arrow. Once the folder is listed, from its own listing
+ * ([loaded], hidden folders already left out unless shown); before that, from what its parent's
+ * listing said ([listed]), so an empty folder never shows an arrow that disappears when expanded.
+ * [ROOT] has no parent listing and keeps its arrow until loaded.
+ */
+internal fun hasChildFolders(
+  loaded: List<Termux.Folder>?,
+  listed: Termux.Folder?,
+  showHidden: Boolean,
+): Boolean =
+  when {
+    loaded != null -> loaded.isNotEmpty()
+    listed != null -> listed.hasFolders || (showHidden && listed.hasHiddenFolders)
+    else -> true
+  }

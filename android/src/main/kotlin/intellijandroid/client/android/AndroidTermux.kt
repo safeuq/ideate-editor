@@ -95,19 +95,13 @@ class AndroidTermux(private val context: Context, private val askPermission: () 
    * them.
    */
   override fun listFolders(path: String, onResult: (kotlin.Result<List<Termux.Folder>>) -> Unit) =
-    run(listOf("-c", LIST_FOLDERS, "sh", path), SHELL) { result ->
+    run(listOf("-c", Termux.LIST_FOLDERS, "sh", path), SHELL) { result ->
       onResult(
         result.mapCatching { output ->
           check(output.exitCode == 0) {
             "Can't list $path: ${output.stderr.ifBlank { "exit ${output.exitCode}" }}"
           }
-          output.stdout
-            .lines()
-            .filter { it.isNotEmpty() }
-            .map { line ->
-              Termux.Folder(line.substringAfter('/'), isProject = line.startsWith("project/"))
-            }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+          Termux.parseFolders(output.stdout)
         },
       )
     }
@@ -118,17 +112,6 @@ class AndroidTermux(private val context: Context, private val askPermission: () 
     const val COMMAND = "/data/data/com.termux/files/usr/bin/intellij-backend"
 
     private const val SHELL = "/data/data/com.termux/files/usr/bin/sh"
-
-    /**
-     * Prints `folder/<name>` or `project/<name>` (has `.idea`) per sub-folder of `$1`. Names can't
-     * hold `/`.
-     */
-    private const val LIST_FOLDERS =
-      """cd "${'$'}1" || exit 1
-for entry in * .[!.]* ..?*; do
-  [ -d "${'$'}entry" ] || continue
-  if [ -d "${'$'}entry/.idea" ]; then echo "project/${'$'}entry"; else echo "folder/${'$'}entry"; fi
-done"""
 
     private val requestCodes = AtomicInteger()
   }
