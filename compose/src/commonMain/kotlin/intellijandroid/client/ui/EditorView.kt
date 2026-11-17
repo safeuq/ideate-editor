@@ -268,6 +268,7 @@ fun EditorView(
   // first one.
   val currentLines by rememberUpdatedState(lines)
   val currentFile by rememberUpdatedState(file)
+  val currentLookup by rememberUpdatedState(lookup)
 
   // IntelliJ hides the completion popup when the editor stops showing (LookupImpl's hideNotify).
   // The
@@ -427,8 +428,10 @@ fun EditorView(
         if (currentFile.editable) actions.type(character)
       }
 
+      // Like a hardware Enter: with the completion popup open it takes the selected item.
       override fun enter() {
-        if (currentFile.editable) actions.key(EditorKey.ENTER)
+        if (currentLookup != null) actions.lookupKey(LookupKey.ACCEPT)
+        else if (currentFile.editable) actions.key(EditorKey.ENTER)
       }
 
       override fun backspace() {
