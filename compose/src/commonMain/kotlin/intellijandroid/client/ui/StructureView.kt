@@ -75,6 +75,9 @@ fun StructureView(
     },
     modifier = modifier,
     scroll = scroll,
+    // ProjectTreeView selects the row first, which moves the caret to the element.
+    onMenu = { session.structureMenu() },
+    menuEntries = { state.contextMenu?.entries },
   )
 }
 

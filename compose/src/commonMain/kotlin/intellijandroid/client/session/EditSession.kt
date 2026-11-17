@@ -857,7 +857,7 @@ class EditSession(
     )
 
   /** The state the action is invoked in (caret before the action), as JetBrains Client sends it. */
-  private fun actionTimestamps(): ActionTimestampSetModel {
+  fun actionTimestamps(): ActionTimestampSetModel {
     val document = DocumentTimestampModel(identity.documentId, documentVersion)
     return ActionTimestampSetModel(
       listOf(

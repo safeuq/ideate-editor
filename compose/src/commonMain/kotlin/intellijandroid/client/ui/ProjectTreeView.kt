@@ -101,6 +101,10 @@ fun ProjectTreeView(
   modifier: Modifier = Modifier,
   /** Sideways scrolling for names wider than the panel; hoisted for the phone's swipe pager. */
   scroll: SidewaysScroll = remember { SidewaysScroll() },
+  /** A right click or long press on a row, after it is selected; null: no context menu. */
+  onMenu: ((TreeNode) -> Unit)? = null,
+  /** The open menu's items; null while they load. */
+  menuEntries: () -> List<MenuEntry>? = { null },
 ) {
   val rows = remember(tree) { tree.visibleRows() }
   // Each laid-out row's right edge (text end plus the side inset), for the sideways scroll range.
@@ -168,23 +172,44 @@ fun ProjectTreeView(
         .onPreviewKeyEvent { event -> event.type == KeyEventType.KeyDown && onKey(event.key) },
   ) {
     items(rows, key = { it.first.id }) { (node, depth) ->
-      TreeRow(
-        node = node,
-        depth = depth,
-        expanded = node.id in tree.expanded,
-        selected = node.id == tree.selected,
-        treeFocused = focused,
-        onPress = {
-          focusRequester.requestFocus()
-          onSelect(node)
+      MenuArea(
+        onMenu?.let { menu ->
+          {
+            onSelect(node)
+            menu(node)
+          }
         },
-        onDoubleClick = { if (node.hasChildren) onToggle(node) else onOpen(node) },
-        onChevron = { onToggle(node) },
-        scroll = scroll,
-        onRight = { right -> rowRights[node.id] = right },
-      )
+        menuEntries,
+      ) {
+        TreeRow(
+          node = node,
+          depth = depth,
+          expanded = node.id in tree.expanded,
+          selected = node.id == tree.selected,
+          treeFocused = focused,
+          onPress = {
+            focusRequester.requestFocus()
+            onSelect(node)
+          },
+          onDoubleClick = { if (node.hasChildren) onToggle(node) else onOpen(node) },
+          onChevron = { onToggle(node) },
+          scroll = scroll,
+          onRight = { right -> rowRights[node.id] = right },
+        )
+      }
     }
   }
+}
+
+/** [content] with a context menu when [onOpen] is set. */
+@Composable
+private fun MenuArea(
+  onOpen: (() -> Unit)?,
+  entries: () -> List<MenuEntry>?,
+  content: @Composable () -> Unit,
+) {
+  if (onOpen == null) content()
+  else ContextMenuArea(entries, Modifier.fillMaxWidth(), onOpen = { onOpen() }) { content() }
 }
 
 @Composable

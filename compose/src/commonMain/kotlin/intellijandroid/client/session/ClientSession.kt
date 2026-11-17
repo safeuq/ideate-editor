@@ -20,6 +20,7 @@ import com.jetbrains.rd.framework.MarshallersProvider
 import com.jetbrains.rd.framework.Protocol
 import com.jetbrains.rd.framework.RdId
 import com.jetbrains.rd.framework.Serializers
+import com.jetbrains.rd.ide.model.ActionTimestampSetModel
 import com.jetbrains.rd.ide.model.BasicIdeRootMarshallersProvider
 import com.jetbrains.rd.ide.model.ClipboardContent
 import com.jetbrains.rd.ide.model.ClipboardModel
@@ -35,6 +36,8 @@ import com.jetbrains.rd.ide.model.ImageIconModel
 import com.jetbrains.rd.ide.model.MarkupDocumentExtension
 import com.jetbrains.rd.ide.model.MarkupTextControlExtension
 import com.jetbrains.rd.ide.model.OriginKind
+import com.jetbrains.rd.ide.model.ProjectTimestampModel
+import com.jetbrains.rd.ide.model.ProjectViewTimestampModel
 import com.jetbrains.rd.ide.model.RdCodeWithMeProject
 import com.jetbrains.rd.ide.model.RdDocumentChangeBase
 import com.jetbrains.rd.ide.model.RdDocumentId
@@ -60,6 +63,7 @@ import com.jetbrains.rd.ide.model.Solution
 import com.jetbrains.rd.ide.model.SuccessfulRequestComposite
 import com.jetbrains.rd.ide.model.TextControlId
 import com.jetbrains.rd.ide.model.VisibleRange
+import com.jetbrains.rd.ide.model.asyncActionsModel
 import com.jetbrains.rd.ide.model.clipboardModel
 import com.jetbrains.rd.ide.model.codeStructureTreeModel
 import com.jetbrains.rd.ide.model.documentsOperationModel
@@ -79,6 +83,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -136,6 +141,8 @@ class ClientSession(
   private var fleet: FleetRpc? = null
   private var completion: Completion? = null
   private var requestResponse: RequestResponseModel? = null
+  private var actionMenus: ActionMenus? = null
+  private val menuSerials = AtomicInteger()
   private var selectedEditorId: RdFileEditorId? = null
 
   fun start() {
@@ -301,6 +308,51 @@ class ClientSession(
 
   fun lookupKey(key: LookupKey) = onRd { completion?.key(key) }
 
+  /**
+   * A right click on Project view node [nodeId]: the backend's `ProjectViewPopupMenu` for it, in
+   * [SessionState.contextMenu]. The backend finds the node's file or folder from the node id.
+   */
+  fun projectMenu(nodeId: Int) {
+    val serial = startMenu()
+    onRd {
+      val id = projectId ?: return@onRd log("No project yet; no menu")
+      val context =
+        ActionTimestampSetModel(
+          listOf(
+            ProjectTimestampModel(id),
+            ProjectViewTimestampModel(PROJECT_PANE, listOf(nodeId)),
+          ),
+        )
+      actionMenus?.show(serial, "ProjectViewPopupMenu", "ProjectViewPopup", context)
+    }
+  }
+
+  /**
+   * A right click on a Structure node, after the caret moved to it: the backend's
+   * `StructureViewPopupMenu` in the editor's context. JetBrains Client sends no context for a
+   * Structure node either (docs/action-protocol.md), so the backend's actions see the element at
+   * the caret.
+   */
+  fun structureMenu() {
+    val serial = startMenu()
+    onRd {
+      val session = selectedEditSession() ?: return@onRd log("No editor; no menu")
+      actionMenus?.show(
+        serial,
+        "StructureViewPopupMenu",
+        "StructureViewPopup",
+        session.actionTimestamps(),
+      )
+    }
+  }
+
+  /** Clears the last menu at once, so the new one shows "Loading…" until the backend answers. */
+  private fun startMenu(): Int {
+    val serial = menuSerials.incrementAndGet()
+    mutableState.update { it.copy(contextMenu = BackendMenu(serial, null)) }
+    return serial
+  }
+
   /** A tap or click on a completion popup row. */
   fun chooseLookupItem(itemId: String) = onRd { completion?.choose(itemId) }
 
@@ -375,8 +427,23 @@ class ClientSession(
         }
       }
     }
+    actionMenus =
+      ActionMenus(
+        lifetime,
+        protocol.asyncActionsModel,
+        ::sendRequest,
+        ::onRd,
+        { icon -> iconPaths(icon).firstOrNull() },
+        ::log,
+      ) { serial, entries ->
+        mutableState.update {
+          if (it.contextMenu?.serial == serial) it.copy(contextMenu = BackendMenu(serial, entries))
+          else it
+        }
+      }
     requestResponseModel.responsesWithTime.advise(lifetime) { responses ->
       for (response in responses.responses) {
+        if (actionMenus?.response(response) == true) continue
         val session =
           editSessions.values.firstOrNull { it.hasPending(response.requestId) } ?: continue
         when (response) {

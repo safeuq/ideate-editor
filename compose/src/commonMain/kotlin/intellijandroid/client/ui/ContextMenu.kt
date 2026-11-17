@@ -377,4 +377,4 @@ private object Menus {
  */
 fun shortcut(mac: String, other: String): String = if (IS_MAC) mac else other
 
-private val IS_MAC = System.getProperty("os.name").orEmpty().lowercase().startsWith("mac")
+internal val IS_MAC = System.getProperty("os.name").orEmpty().lowercase().startsWith("mac")

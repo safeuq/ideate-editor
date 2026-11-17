@@ -262,6 +262,8 @@ private fun ToolWindowContent(
         },
         modifier = Modifier.fillMaxSize(),
         scroll = scroll,
+        onMenu = { session.projectMenu(it.id) },
+        menuEntries = { state.contextMenu?.entries },
       )
     ToolWindow.STRUCTURE ->
       StructureView(state, session, onNavigated, Modifier.fillMaxSize(), scroll)

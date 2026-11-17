@@ -1,5 +1,7 @@
 package intellijandroid.client.session
 
+import intellijandroid.client.ui.MenuEntry
+
 /** One piece of a tree node's label, e.g. the project name (bold) and its path (grey). */
 data class TextFragment(
   val text: String,
@@ -141,7 +143,12 @@ data class SessionState(
   val lookup: Lookup? = null,
   /** The Structure tool window's tree, for the file the backend sees as selected. */
   val structure: StructureTree = StructureTree(),
+  /** The open context menu built by the backend (ActionMenus). */
+  val contextMenu: BackendMenu? = null,
 )
+
+/** Context menu number [serial]; [entries] null until the backend has answered ("Loading…"). */
+data class BackendMenu(val serial: Int, val entries: List<MenuEntry>?)
 
 /**
  * The structure of [path] as the backend sends it (`CodeStructureTreeModel.treeNodes`,
