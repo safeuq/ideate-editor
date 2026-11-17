@@ -16,7 +16,11 @@ dependencies {
   // Dispatchers.Main on the desktop (ConnectController); Compose Desktop doesn't bring it. Same
   // version as coroutines-core.
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
+  // Pixel tests of the Lux painter need Skia, which only this module has.
+  testImplementation(kotlin("test"))
 }
+
+tasks.test { useJUnitPlatform() }
 
 java {
   sourceCompatibility = JavaVersion.VERSION_21

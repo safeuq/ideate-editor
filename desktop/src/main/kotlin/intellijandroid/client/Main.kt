@@ -2,6 +2,7 @@ package intellijandroid.client
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -21,12 +22,15 @@ import intellijandroid.client.desktop.Snapshots
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.LocalIcons
+import intellijandroid.client.ui.lux.PngDecoder
+import intellijandroid.client.ui.lux.pngDecoder
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
 import kotlin.system.exitProcess
+import org.jetbrains.skia.Image
 
 /**
  * Desktop entry point: the same connect screen as the Android app (Link, backends on this
@@ -53,6 +57,10 @@ fun main(arguments: Array<String>) {
     )
   val fonts = DesktopResources.fonts(clientLib)
   IslandsDark.density = DesktopResources.uiDensity()
+  // Lux dialogs' images (ui/lux/LuxImages.kt).
+  pngDecoder = PngDecoder { bytes ->
+    runCatching { Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
+  }
   // Debug aid: CLIENT_GALLERY=<file.png> renders the shared components and exits.
   System.getenv("CLIENT_GALLERY")?.let { target ->
     ComponentGallery.render(File(target), clientLib, fonts)

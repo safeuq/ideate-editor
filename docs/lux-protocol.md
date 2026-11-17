@@ -285,3 +285,66 @@ device works; 3 the order above, and writing `size` right away is accepted; 5 Pr
 codes types into the field; 8 focus events are needed (no caret before them). **Still open:** 4 closing the
 window (`LxWindowEvent(Closing)`), 6 a disconnect mid-dialog, 7 clipboard paste, and New/Delete dialogs (same
 route expected).
+
+## 7. The painter (2026-11-17)
+
+`ui/lux/LuxPainter.kt` replays `drawOperations` onto a bitmap; `ui/lux/LuxImages.kt` keeps the images. The dialog
+window, the attach and the events are the UI session's (`session/LuxDialogs.kt`, `ui/lux/LuxDialogView.kt`).
+
+**Contract.** `LuxPainter(images, fonts, fontFamilyResolver, density)`, one per dialog, on the UI thread:
+`paint(canvas, scale, operations)` draws one batch onto the dialog's bitmap, which is backend pixels × `scale`.
+`LuxImages()`, one per session: `remove(ids)` for `cleanImagesFromCache`, thread-safe. PNGs are decoded by the
+platform's `pngDecoder` (set at startup: Skia on the desktop, `BitmapFactory` on Android).
+
+**Semantics, from the JetBrains Client's `LuxRenderer` and `LuxGraphicsState` (decompiled):**
+
+- **State.** Each operation's state changes apply, then its command draws. The state lasts across batches
+  until `LxClearStateCommand`, which resets it. The starting paint is yellow (`JBColor.YELLOW`), so a missing
+  paint shows.
+- **Transform.** `LxTransformStateChange` replaces the whole transform (`setTransform`); the matrix is AWT's flat
+  order `m00 m10 m01 m11 m02 m12`.
+- **Clip.** `LxClipStateChange` is in device space (the client maps it back through the inverse transform), so
+  a later transform doesn't move it. A null shape removes the clip.
+- **Text.** `LxDrawTextCommand(text, x, y, width, height)`: drawn at the baseline `y`. The client's default
+  `lux.fonts.transform.bounds=shrink` scales text down only when it measures wider than the backend's box;
+  IDEate does the same sideways, with 0.3 px of slack.
+  - Fonts: a name with "Mono" in it uses `fonts.editor`, anything else `fonts.ui`.
+  - AWT style bits: 1 bold, 2 italic. A sub-family (`SemiBold`, `Medium`, …) refines the weight.
+- **Images.** `LxDrawImageCommand(image, dst, transform)`: the command's transform is added, then the image is
+  drawn scaled into `dst`.
+  - `LxCacheableImage` stores by id, `LxCachedImage` reads.
+  - `keepForDiff` keeps the image as the dialog's diff base. `LxDiffImage(x, y, content)` copies the base with
+    the content replacing pixels at (x, y), and becomes the new base (`ImageDiff.applyTo`).
+- **Shapes and paints.**
+  - Shapes: rect, round rect (AWT arcs are diameters), ellipse, line, arc (`Arc2D.OPEN`, angles negated for
+    Compose), polygon, path (segment types 0–4, `WIND_EVEN_ODD` = 0), quad and cubic curves.
+  - `LxGradientPaint` becomes a two-color linear gradient (cyclic = mirror), `LxLinearGradientPaint` a
+    multi-stop one.
+  - Stroke: width, cap, join, miter, dash. `LxAlphaComposite` gives alpha and the blend mode by AWT rule.
+- **Colors.**
+  - `NamedColor(name, fallback)` resolves through `ui/theme/ThemeKeys.kt`: the keys Islands Dark sets, then its
+    `ui."*"` wildcard by suffix (`Panel.background` → `*.background` = tool-window-bg `#191A1C`), then down the
+    fallback chain.
+  - `RgbaColor` is used as is; `DualColor` gives its dark color.
+  - All the keys of the recorded Rename frame resolve this way (`Button.default.startBackground` → `#3871E1`,
+    `Component.borderColor` → `#40434A`, `Label.foreground` → `#D1D3D9`, …).
+
+**Not drawn**, one `[lux] not drawn: …` line each:
+- `LxCopyAreaCommand`: it needs the backing bitmap, which a `Canvas` doesn't expose. Lux uses it to scroll; the
+  recorded Rename frames had none.
+- `LxRadialGradientPaint`, `LxTexturePaint`, `LxXorComposite`, `LxCustomStroke`.
+- A linear gradient's own transform.
+- `LxBackgroundColorStateChange` (Lux sends clears as fills) and `LxAliasingStateChange` (text is always
+  antialiased) are read and ignored.
+
+**Checked.**
+- `desktop/src/test/…/LuxPainterTest.kt` (6 pixel tests):
+  - a default button's gradient from its theme key, under a transform at scale 2;
+  - a device-space clip that a later transform doesn't move;
+  - text shrunk into the backend's box;
+  - an unknown key's fallback;
+  - clear state;
+  - an image cached, reused by id and removed.
+- `CLIENT_GALLERY=<out.png>` also writes `<out>-lux.png`: a Rename dialog from hand-made operations with the
+  recorded texts, text boxes, keys and button geometry (`desktop/…/LuxGallerySample.kt`).
+

@@ -126,6 +126,7 @@ object ComponentGallery {
     val base = target.path.removeSuffix(".png")
     page(File("$base-dialog.png")) { Backdrop { SampleDialog() } }
     page(File("$base-message.png")) { Backdrop { SampleMessage() } }
+    page(File("$base-lux.png")) { Backdrop { SampleLuxDialog() } }
   }
 }
 

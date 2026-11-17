@@ -1,6 +1,7 @@
 package intellijandroid.client.android
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.edit
 import intellijandroid.client.connect.ConnectController
 import intellijandroid.client.connect.ConnectionHistory
@@ -19,6 +21,8 @@ import intellijandroid.client.connect.StoredText
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.LocalEditorTextInput
 import intellijandroid.client.ui.LocalIcons
+import intellijandroid.client.ui.lux.PngDecoder
+import intellijandroid.client.ui.lux.pngDecoder
 import intellijandroid.client.ui.theme.LocalClientFonts
 
 /**
@@ -34,6 +38,10 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    // Lux dialogs' images (ui/lux/LuxImages.kt).
+    pngDecoder = PngDecoder { bytes ->
+      BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+    }
     val fonts = AndroidResources.fonts(this)
     val icons =
       AndroidResources.SvgIcons(AndroidResources.iconJar(this), resources.displayMetrics.density)

@@ -1,0 +1,44 @@
+package intellijandroid.client.ui.lux
+
+import androidx.compose.ui.graphics.ImageBitmap
+import com.jetbrains.rd.ide.model.LxImageContent
+import com.jetbrains.rd.ide.model.LxPngImageContent
+
+/** PNG bytes to a bitmap; null when they can't be decoded. The platform supplies it. */
+fun interface PngDecoder {
+  fun decode(bytes: ByteArray): ImageBitmap?
+}
+
+/**
+ * The platform's PNG decoder (desktop: Skia, Android: BitmapFactory), set once at startup before
+ * any Lux dialog opens, as [intellijandroid.client.ui.theme.IslandsDark.density] is.
+ */
+@Volatile var pngDecoder: PngDecoder = PngDecoder { null }
+
+/**
+ * Images Lux sends once and then refers to by id, shared by all dialogs of a session, as the
+ * JetBrains Client's `LuxImageCache.Frontend` keeps them: `LxCacheableImage(id, content)` stores,
+ * `LxCachedImage(id)` reads, `LuxModel.cleanImagesFromCache(ids)` removes. Thread-safe: the
+ * backend's removals can arrive on the rd thread while a dialog paints on the UI thread.
+ */
+class LuxImages(private val decoder: PngDecoder = pngDecoder) {
+  private val byId = HashMap<Int, ImageBitmap>()
+
+  @Synchronized
+  fun remove(ids: List<Int>) {
+    ids.forEach(byId::remove)
+  }
+
+  /** Decodes [content] and keeps it under [id]; returns the bitmap, or null if undecodable. */
+  @Synchronized
+  internal fun store(id: Int, content: LxImageContent): ImageBitmap? =
+    decode(content)?.also { byId[id] = it }
+
+  @Synchronized internal fun cached(id: Int): ImageBitmap? = byId[id]
+
+  internal fun decode(content: LxImageContent): ImageBitmap? =
+    when (content) {
+      is LxPngImageContent -> decoder.decode(content.bytes)
+      else -> null
+    }
+}
