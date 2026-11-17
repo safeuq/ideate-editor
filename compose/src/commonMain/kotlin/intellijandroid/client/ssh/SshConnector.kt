@@ -1,5 +1,7 @@
 package intellijandroid.client.ssh
 
+import com.hierynomus.sshj.userauth.agent.AgentProxy
+import com.hierynomus.sshj.userauth.agent.AuthAgent
 import java.io.Closeable
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -15,6 +17,8 @@ import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.IOUtils
 import net.schmizz.sshj.connection.channel.direct.Parameters
 import net.schmizz.sshj.transport.verification.HostKeyVerifier
+import net.schmizz.sshj.userauth.method.AuthPassword
+import net.schmizz.sshj.userauth.method.AuthPublickey
 import net.schmizz.sshj.userauth.password.PasswordUtils
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 
@@ -27,14 +31,20 @@ sealed interface SshLogin {
    * one.
    */
   data class PrivateKey(val privateKey: String, val passphrase: String? = null) : SshLogin
+
+  /**
+   * The keys in the user's ssh-agent (`SSH_AUTH_SOCK`), like Gateway's OPEN_SSH mode. Desktop only:
+   * Android has no agent.
+   */
+  data object Agent : SshLogin
 }
 
 /**
- * Asked about every host key: [fingerprint] is OpenSSH's SHA-256 form (`ssh-keygen -l`), for
- * example `SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU`. Returns whether to trust it.
+ * Asked about every host key; returns whether to trust it. [KnownHosts] does the usual check;
+ * [SshSession.fingerprint] gives what to show the user.
  */
 fun interface HostKeyCheck {
-  fun accept(host: String, port: Int, keyType: String, fingerprint: String): Boolean
+  fun accept(host: String, port: Int, key: PublicKey): Boolean
 }
 
 /** A command's exit code and output. */
@@ -121,23 +131,31 @@ private constructor(private val client: SSHClient, val host: String, val port: I
     /** Gateway's connection check timeout (`gateway.ssh.connection.check.timeout`). */
     const val CONNECT_TIMEOUT_MILLIS = 5_000
 
-    /** Connects and logs in; fails with the server's or SSHJ's message. */
+    /** Connects and logs in with [login]; fails with the server's or SSHJ's message. */
+    fun open(host: String, port: Int, user: String, login: SshLogin, hostKeys: HostKeyCheck) =
+      open(host, port, user, listOf(login), hostKeys)
+
+    /**
+     * Connects and tries [logins] in order until the server accepts one, as OpenSSH tries the
+     * agent's keys and then the identity files. Fails with the server's or SSHJ's message.
+     */
     fun open(
       host: String,
       port: Int,
       user: String,
-      login: SshLogin,
+      logins: List<SshLogin>,
       hostKeys: HostKeyCheck,
     ): SshSession {
       require(host.isNotBlank()) { "No host" }
       require(user.isNotBlank()) { "No user name for $host" }
+      require(logins.isNotEmpty()) { "No log-in method for $user@$host" }
       useFullBouncyCastle()
       val client = SSHClient(DefaultConfig())
       client.connectTimeout = CONNECT_TIMEOUT_MILLIS
       client.addHostKeyVerifier(
         object : HostKeyVerifier {
           override fun verify(hostname: String, port: Int, key: PublicKey): Boolean =
-            hostKeys.accept(hostname, port, keyType(key), fingerprint(key))
+            hostKeys.accept(hostname, port, key)
 
           override fun findExistingAlgorithms(hostname: String, port: Int): List<String> =
             emptyList()
@@ -145,18 +163,29 @@ private constructor(private val client: SSHClient, val host: String, val port: I
       )
       try {
         client.connect(host, port)
-        when (login) {
-          is SshLogin.Password -> client.authPassword(user, login.password)
-          is SshLogin.PrivateKey ->
-            client.authPublickey(
-              user,
-              client.loadKeys(
-                login.privateKey,
-                null,
-                login.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) },
-              ),
-            )
+        val methods = logins.flatMap { login ->
+          when (login) {
+            is SshLogin.Password ->
+              listOf(AuthPassword(PasswordUtils.createOneOff(login.password.toCharArray())))
+            is SshLogin.PrivateKey -> {
+              val loaded = runCatching {
+                AuthPublickey(
+                  client.loadKeys(
+                    login.privateKey,
+                    null,
+                    login.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) },
+                  ),
+                )
+              }
+              // One of several candidates (OpenSSH mode's identity files): an unreadable key is
+              // skipped, as OpenSSH does. The only one: its error is the answer.
+              if (logins.size == 1) listOf(loaded.getOrThrow())
+              else listOfNotNull(loaded.getOrNull())
+            }
+            SshLogin.Agent -> AuthAgent.fromIdentities(AgentProxy.fromEnvironment())
+          }
         }
+        client.auth(user, methods)
       } catch (failure: Exception) {
         client.close()
         throw failure
@@ -171,8 +200,8 @@ private constructor(private val client: SSHClient, val host: String, val port: I
       return "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(digest)
     }
 
-    private fun keyType(key: PublicKey): String =
-      net.schmizz.sshj.common.KeyType.fromKey(key).toString()
+    /** E.g. `ssh-ed25519`, `ecdsa-sha2-nistp256`, `ssh-rsa`. */
+    fun keyType(key: PublicKey): String = net.schmizz.sshj.common.KeyType.fromKey(key).toString()
 
     /**
      * SSHJ asks the JCA for provider "BC". Android ships a cut-down provider under that name

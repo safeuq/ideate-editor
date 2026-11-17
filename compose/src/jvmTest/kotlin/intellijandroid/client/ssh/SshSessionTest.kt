@@ -22,9 +22,26 @@ class SshSessionTest {
   private val port = System.getenv("IDEATE_SSH_TEST_PORT")?.toInt() ?: 22
   private val user = System.getenv("IDEATE_SSH_TEST_USER").orEmpty()
   private val seenKeys = mutableListOf<String>()
-  private val trustAll = HostKeyCheck { _, _, keyType, fingerprint ->
-    seenKeys += "$keyType $fingerprint"
-    true
+  private val knownHostsText =
+    object : intellijandroid.client.connect.StoredText {
+      var text: String? = null
+
+      override fun read() = text
+
+      override fun write(text: String) {
+        this.text = text
+      }
+    }
+  private val knownHosts = KnownHosts(knownHostsText)
+  private val verdicts = mutableListOf<KnownHosts.Verdict>()
+
+  // What the SSH page will do: check, and trust an unknown key (there the user confirms first).
+  private val trustAll = HostKeyCheck { host, port, key ->
+    seenKeys += "${SshSession.keyType(key)} ${SshSession.fingerprint(key)}"
+    val verdict = knownHosts.check(host, port, key)
+    verdicts += verdict
+    if (verdict == KnownHosts.Verdict.UNKNOWN) knownHosts.trust(host, port, key)
+    verdict != KnownHosts.Verdict.CHANGED
   }
 
   private fun open(login: SshLogin): SshSession {
@@ -44,10 +61,12 @@ class SshSessionTest {
       assertEquals("one\nit's\n", echoed.stdout)
       assertEquals(3, session.exec("exit 3").exitCode)
     }
+    open(SshLogin.Password(password)).close()
+    assertEquals(listOf(KnownHosts.Verdict.UNKNOWN, KnownHosts.Verdict.KNOWN), verdicts)
     // OpenSSH's form: SHA256 and 43 base64 characters without padding.
     assertTrue(
-      seenKeys.single().matches(Regex("ssh-ed25519 SHA256:[A-Za-z0-9+/]{43}")),
-      seenKeys.single(),
+      seenKeys.first().matches(Regex("ssh-ed25519 SHA256:[A-Za-z0-9+/]{43}")),
+      seenKeys.first(),
     )
   }
 

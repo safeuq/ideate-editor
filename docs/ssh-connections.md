@@ -8,8 +8,10 @@ any backend reachable over SSH, including a Mac backend shown on the phone:
 3. The host appears in the SSH page with its recent projects under it, also ones opened from Gateway or another
    client. Tapping one opens it, starting the backend when it isn't running.
 
-Status: step 1 done (2026-11-17): the SSH layer (`compose/.../ssh/`: `SshSession`, `SshKeys`, the
-`RemoteHost` interface). Everything after it is planned. The findings below come from JetBrains Gateway 2026.3
+Status, 2026-11-17:
+- **Step 1, done:** the SSH layer in `compose/.../ssh/` (`SshSession`, `SshKeys`, the `RemoteHost` interface).
+- **Step 3, done:** saved hosts, secrets, known hosts and the log-in methods.
+- **Everything else** is planned. The findings below come from JetBrains Gateway 2026.3
 (`GW-263.7307.184`), read statically (decompiled `lib/intellij.gateway.core.jar` and `lib/intellij.gateway.ssh.jar`,
 symbol and string tables of the Go worker in `lib/remote-dev-workers/`), from Gateway's log and settings, and from
 the files on the phone and the Mac. **Seen** = read in code, binaries, logs or files. **Inferred** = reasoned
@@ -214,13 +216,35 @@ IDEATE_SSH_TEST_HOST=127.0.0.1 IDEATE_SSH_TEST_PORT=2222 IDEATE_SSH_TEST_USER=de
   IDEATE_SSH_TEST_PASSWORD=<password> IDEATE_SSH_TEST_KEY=<path to id_ed25519> ./gradlew :compose:jvmTest --tests '*SshSessionTest*'
 ```
 
+## Step 3: hosts, secrets, known hosts, log-in (done)
+
+| Piece | What it does | Example |
+|---|---|---|
+| `SshHosts`, `SshHostEntry` | the SSH page's hosts, as JSON in `StoredText` | `{"id":"586e…","host":"192.168.0.107","port":8022,"user":"u0_a404","method":"GENERATED_KEY"}`, shown as `u0_a404@192.168.0.107:8022` (Gateway's `user@host`, `:port` unless 22) |
+| `LoginMethod` | `GENERATED_KEY`, `KEY_FILE`, `PASSWORD`, `OPEN_SSH` (desktop) | |
+| `SecretStore` | keys and passwords, encrypted | Android: `AndroidSecretStore`, AES-GCM under an Android Keystore key, values in the `ssh-secrets` preferences. Desktop: `FileSecretStore`, files in `~/.ideate/secrets/` readable by the user only |
+| `IdeateKey` | one Ed25519 key for the app, made on first use | public line `ssh-ed25519 AAAA… IDEate on Pixel 3a` for the user to add to `~/.ssh/authorized_keys` |
+| `KnownHosts` | OpenSSH `known_hosts` lines in `StoredText`, checked with SSHJ's parser. `KNOWN` passes; `UNKNOWN` asks the user with the fingerprint; `CHANGED` is refused unless the user accepts it (`forget`, then `trust`) | `[192.168.0.107]:8022 ssh-ed25519 AAAA…`. On the desktop `~/.ssh/known_hosts` also counts, read only |
+| `SshLogins.resolve` | a saved host into host, port, user and the methods to try. A missing password or key raises `MissingSecret`, so the UI asks and calls again | |
+| OPEN_SSH | `~/.ssh/config` (`Host` patterns with `*`, `?`, `!`; `HostName`, `Port`, `User`, `IdentityFile`; first value wins), then the agent (`SSH_AUTH_SOCK`, SSHJ's `AgentProxy`), then the identity files, by default `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`. A port typed for the host wins, like `ssh -p`. Keys that can't be read (encrypted, unknown format) are skipped, as OpenSSH does | `Host phone` with `HostName 192.168.0.107`, `Port 8022` gives `192.168.0.107:8022` |
+
+`HostKeyCheck` now gets the `PublicKey`, so the page can save the key it trusts. `SshSession.keyType` and
+`fingerprint` give what to show.
+
+Not supported in `~/.ssh/config`: `Match` blocks (skipped), `Include`, and `%` tokens other than `%h` in
+`HostName`.
+
+Tests: `SshSetupTest` (6 tests, unit) covers the config, known hosts, saved hosts and log-in. `SshSessionTest`
+(3 tests, against the Docker test host) now goes through `KnownHosts`: the first connection is `UNKNOWN` and gets
+trusted, the second is `KNOWN`.
+
 ## Steps
 
 | # | Step | Who | Depends on |
 |---|---|---|---|
 | 1 | Spike: SSHJ on Android and desktop; key and password log-in; exec; local forward; APK size. **Done**. Agent log-in moves to step 3 | intellij-android-ui | |
 | 2 | `RemoteHost` with `ShellHost` and `WorkerHost`, tested against the Mac, Termux on the phone and a Linux container | intellij-android | 1 (interface first, so 2 and 3 can run in parallel) |
-| 3 | Saved hosts, `KeyStore` (Android Keystore, desktop), `KnownHosts`, `SshConnector` log-in methods | intellij-android-ui | 1 |
+| 3 | Saved hosts, `SecretStore` (Android Keystore, desktop), `KnownHosts`, log-in methods. **Done** | intellij-android-ui | 1 |
 | 4 | SSH page, new-connection dialog, host groups, refresh | intellij-android-ui | 2, 3 |
 | 5 | Open project: IDE pick, folder browser over SSH, start, forward, history entry, reconnect after a backend restart | split between the sessions | 4 |
 | 6 | Docs (this file becomes the description), emulator and phone tests, Mac backend from the phone | both | 5 |
