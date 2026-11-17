@@ -7,6 +7,7 @@ import com.jetbrains.ide.model.uiautomation.BeBehaviorControl
 import com.jetbrains.ide.model.uiautomation.BeControl
 import com.jetbrains.ide.model.uiautomation.BeControlContainer
 import com.jetbrains.ide.model.uiautomation.BeEmptyData
+import com.jetbrains.ide.model.uiautomation.BeGrid
 import com.jetbrains.ide.model.uiautomation.BeLabel
 import com.jetbrains.ide.model.uiautomation.BeShortcutListener
 import com.jetbrains.ide.model.uiautomation.BeSpacer
@@ -142,6 +143,11 @@ internal class BackendPopups(
             control.text.advise(popupLifetime) { label.text = it }
           }
       is BeSpacer -> Unit
+      // New ▸ Java Class: the name field above the list of kinds (Class, Interface, …).
+      is BeGrid ->
+        control.items.valueOrNull.orEmpty().forEach { element ->
+          flatten(element.content, items, shortcuts, unknown, popupLifetime)
+        }
       // A Lux panel inside the popup, e.g. New ▸ File's "already exists" hint. As JetBrains
       // Client's
       // BeneluxViewControl: show it, give it the size it asks for, and paint what it draws.

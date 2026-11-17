@@ -468,4 +468,6 @@ activePopups[1] = BeAbstractPopup(
 
 Its colors are `ValidationTooltip.errorBackground` / `errorBorderColor`, which `ThemeKeys` now resolves as Islands Dark does (`#56272B` / `#80383E`; without them the painter used the light fallback, a pale pink). IDEate shows the hint under the name popup, and cancelling the name popup cancels the hint too (the backend doesn't close it on its own).
 
+**New ▸ Java Class** wraps the name field in a `BeGrid` (its `items` are `BeGridElement(content)`), next to a `BeTreeGrid` listing the kinds (Class, Interface, Enum, …). IDEate shows the name field; the kind list isn't drawn yet, so Enter creates the preselected kind, a class (`src/Hello.java` in the test).
+
 **Tested** on the emulator against the isolated Mac backend: New ▸ File `notes.txt` and New ▸ Directory `docs` in `empty/` created both; a second `notes.txt` showed "A file with the name 'notes.txt' already exists"; one Back (after the keyboard closed) cancelled both popups. The field takes focus, so the soft keyboard opens.
