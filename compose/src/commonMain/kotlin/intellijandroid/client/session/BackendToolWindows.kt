@@ -22,6 +22,11 @@ data class BackendToolWindow(
    */
   val anchor: String,
   /**
+   * `BeToolWindow.sideTool`, IntelliJ's "split" flag (`WindowInfo.isSplit`): the window goes in the
+   * second half of its side, e.g. Structure under Project on the left.
+   */
+  val split: Boolean = false,
+  /**
    * `BeIdeaToolWindow.available`: false while it has nothing to show, e.g. Commit in a project
    * without version control. True until the backend says otherwise.
    */
@@ -50,6 +55,7 @@ internal class BackendToolWindows(
           toolWindow.title.text.value,
           toolWindow.title.icon.value?.let(iconPath),
           toolWindow.position.name,
+          toolWindow.sideTool,
         )
       publish(windows.values.toList())
       fun update(change: BackendToolWindow.() -> BackendToolWindow) {

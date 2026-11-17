@@ -9,12 +9,12 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -112,7 +112,8 @@ fun MainToolbar(
     verticalAlignment = Alignment.CenterVertically,
   ) {
     val name = projectName ?: "…"
-    ToolbarDropdown(control, Modifier.weight(1f, fill = false).padding(end = 8.dp)) {
+    // The project widget keeps its width (up to 200 dp); the run configurations give way first.
+    ToolbarDropdown(control, Modifier.widthIn(max = 200.dp).padding(end = 8.dp)) {
       // The project widget's avatar as AvatarUtils.generateColoredAvatar draws it: sized like the
       // toolbar icons (RecentProject.Avatar.iconSize falls back to MainToolbar.Button.iconSize),
       // corners of arcRatio 0.4 (an arc diameter, so a radius of 0.2 × size), the initials in
@@ -148,46 +149,55 @@ fun MainToolbar(
         Image(it, null, Modifier.padding(start = 2.dp).size(16.dp))
       }
     }
-    Spacer(Modifier.weight(1f))
-    ToolbarDropdown(control, onClick = { onUnsupported("Run configurations") }) {
-      BasicText("Current File", style = text, maxLines = 1)
-      icons.painter("expui/general/chevronDown.svg")?.let {
-        Image(it, null, Modifier.padding(start = 2.dp).size(16.dp))
-      }
-    }
-    Row(control, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-      listOf(
-          "expui/build/build.svg" to "Build",
-          "expui/run/run.svg" to "Run",
-          "expui/run/debug.svg" to "Debug",
-          "expui/general/moreVertical.svg" to "More actions",
-        )
-        .forEach { (path, label) ->
-          IconButton(
-            path,
-            label,
-            onClick = { onUnsupported(label) },
-            size = IslandsDark.toolbarButton,
-            iconSize = IslandsDark.toolbarIcon,
-          )
+    Row(
+      Modifier.weight(1f),
+      horizontalArrangement = Arrangement.End,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      ToolbarDropdown(
+        control,
+        Modifier.weight(1f, fill = false),
+        onClick = { onUnsupported("Run configurations") },
+      ) {
+        BasicText("Current File", style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        icons.painter("expui/general/chevronDown.svg")?.let {
+          Image(it, null, Modifier.padding(start = 2.dp).size(16.dp))
         }
-    }
-    // A divider, then the way back to the editor; the run controls move left to make room.
-    back?.let { target ->
-      Box(
-        Modifier.padding(horizontal = 4.dp)
-          .size(1.dp, IslandsDark.toolbarIcon)
-          .background(IslandsDark.toolbarSeparator),
-      )
-      IconButton(
-        if (target.pointsRight) "expui/general/chevronRight.svg"
-        else "expui/general/chevronLeft.svg",
-        "Back to the editor",
-        onClick = target.onClick,
-        modifier = control,
-        size = IslandsDark.toolbarButton,
-        iconSize = IslandsDark.toolbarIcon,
-      )
+      }
+      Row(control, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        listOf(
+            "expui/build/build.svg" to "Build",
+            "expui/run/run.svg" to "Run",
+            "expui/run/debug.svg" to "Debug",
+            "expui/general/moreVertical.svg" to "More actions",
+          )
+          .forEach { (path, label) ->
+            IconButton(
+              path,
+              label,
+              onClick = { onUnsupported(label) },
+              size = IslandsDark.toolbarButton,
+              iconSize = IslandsDark.toolbarIcon,
+            )
+          }
+      }
+      // A divider, then the way back to the editor; the run controls move left to make room.
+      back?.let { target ->
+        Box(
+          Modifier.padding(horizontal = 4.dp)
+            .size(1.dp, IslandsDark.toolbarIcon)
+            .background(IslandsDark.toolbarSeparator),
+        )
+        IconButton(
+          if (target.pointsRight) "expui/general/chevronRight.svg"
+          else "expui/general/chevronLeft.svg",
+          "Back to the editor",
+          onClick = target.onClick,
+          modifier = control,
+          size = IslandsDark.toolbarButton,
+          iconSize = IslandsDark.toolbarIcon,
+        )
+      }
     }
   }
 }

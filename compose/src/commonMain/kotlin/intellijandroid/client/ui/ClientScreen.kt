@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import intellijandroid.client.session.ClientSession
 import intellijandroid.client.session.SessionState
+import intellijandroid.client.ui.component.SplitPane
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.label
@@ -65,34 +66,25 @@ import kotlinx.coroutines.launch
 // Only common Compose APIs here (no AWT, no desktop-only modules), so this screen can move to
 // Android as is.
 
-/** Phone or tablet, upright or sideways (docs/mobile-layout.md). */
-enum class ScreenLayout {
-  PHONE_PORTRAIT,
-  TABLET_PORTRAIT,
-  LANDSCAPE,
-}
-
-/**
- * Android's tablet line: smallest width 600 dp (`sw600dp`). Measured on the window, so a desktop
- * window or a split-screen app picks its layout from its own size.
- */
-fun screenLayout(widthDp: Float, heightDp: Float) =
-  when {
-    widthDp >= heightDp -> ScreenLayout.LANDSCAPE
-    widthDp >= 600f -> ScreenLayout.TABLET_PORTRAIT
-    else -> ScreenLayout.PHONE_PORTRAIT
-  }
-
-/** Phone portrait shows one of these at a time; swipes move between them. */
+/** Phone upright shows one of these at a time; swipes move between them. */
 private enum class Page {
   LEFT,
-  EDITOR,
+  /** The editor, or the bottom tool windows in its place. */
+  MIDDLE,
   RIGHT,
 }
 
+private fun Side.page() =
+  when (this) {
+    Side.LEFT -> Page.LEFT
+    Side.RIGHT -> Page.RIGHT
+    Side.BOTTOM -> Page.MIDDLE
+  }
+
 /**
- * The main window: main toolbar, tool window bar, the editor island and open tool windows, status
- * line below.
+ * The main window: main toolbar, tool window bars, the editor island and open tool windows, status
+ * line below. How they are arranged depends on the window's shape ([screenLayout],
+ * docs/mobile-layout.md).
  */
 @Composable
 fun ClientScreen(state: SessionState, session: ClientSession) {
@@ -121,53 +113,80 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
     // The backend's dialogs (Rename, New, Delete, …): windows of their own (docs/lux-protocol.md).
     intellijandroid.client.ui.lux.LuxDialogs(state.luxDialogs, session)
     val layout = screenLayout(maxWidth.value, maxHeight.value)
-    val windows = remember { ToolWindowState(left = ToolWindow.PROJECT, right = null) }
-    var page by remember { mutableStateOf(Page.EDITOR) }
+    val windows = remember { ToolWindowState() }
+    var page by remember { mutableStateOf(Page.MIDDLE) }
+    var weights by rememberPaneWeights(session)
     // One per screen, shared by the layouts: the pager asks it whether a sideways swipe scrolls the
     // editor or switches to a tool window.
     val editorScroll = remember { SidewaysScroll() }
-    // One per tool window, so each keeps its position; the pager asks the one on screen.
+    // One per tool window, so each keeps its position; the pager asks the ones on screen.
     val windowScrolls = remember { mutableMapOf<ToolWindow, SidewaysScroll>() }
     fun scrollOf(window: ToolWindow) = windowScrolls.getOrPut(window) { SidewaysScroll() }
     val buttons = remember(state.toolWindows) { toolWindowButtons(state.toolWindows) }
-    // Phone portrait starts on the editor; the other layouts start with Project open, like
-    // IntelliJ.
-    LaunchedEffect(layout) { if (layout == ScreenLayout.PHONE_PORTRAIT) page = Page.EDITOR }
+    // After a rotation: keep what the new layout can show; a phone held upright starts on the
+    // editor.
+    LaunchedEffect(layout) {
+      windows.fit(layout)
+      if (layout == ScreenLayout.PORTRAIT) page = Page.MIDDLE
+    }
+    // Phone upright: the middle page shows the bottom windows instead of the editor while any is
+    // open.
+    val bottomShown = layout == ScreenLayout.PORTRAIT && windows.openOn(Side.BOTTOM).isNotEmpty()
+    val editorCovered = layout == ScreenLayout.PORTRAIT && (page != Page.MIDDLE || bottomShown)
     // A tool window covering the editor takes the keyboard away with it.
     val focusManager = LocalFocusManager.current
-    LaunchedEffect(page) { if (page != Page.EDITOR) focusManager.clearFocus() }
-    // Back from a tool window page (phone held upright) returns to the editor first.
-    LocalBackHandler.current(page != Page.EDITOR) { page = Page.EDITOR }
+    LaunchedEffect(editorCovered) { if (editorCovered) focusManager.clearFocus() }
+
+    // Phone upright, back to the editor: from a side page to the middle; from the bottom windows,
+    // closes them.
+    fun backToEditor() {
+      if (page != Page.MIDDLE) page = Page.MIDDLE else windows.closeSide(Side.BOTTOM)
+    }
+    LocalBackHandler.current(editorCovered) { backToEditor() }
 
     fun barClick(window: ToolWindow) {
       if (!window.supported) return unsupported(window.title)
-      if (layout != ScreenLayout.PHONE_PORTRAIT) return windows.toggle(window)
-      val target = if (window.side == Side.LEFT) Page.LEFT else Page.RIGHT
-      val current = if (window.side == Side.LEFT) windows.lastLeft else windows.lastRight
-      page = if (page == target && current == window) Page.EDITOR else target
-      windows.open(window)
-    }
-    val open =
-      when (layout) {
-        ScreenLayout.PHONE_PORTRAIT ->
-          setOfNotNull(
-            windows.lastLeft.takeIf { page == Page.LEFT },
-            windows.lastRight.takeIf { page == Page.RIGHT },
-          )
-        else -> setOfNotNull(windows.left, windows.right)
+      if (layout != ScreenLayout.PORTRAIT) return windows.toggle(window, layout)
+      val target = window.place.side.page()
+      when {
+        // Open on another page: show that page.
+        windows.isOpen(window) && page != target -> page = target
+        // On screen: close it; the last one of a side page takes you back to the middle.
+        windows.isOpen(window) -> {
+          windows.close(window)
+          if (target != Page.MIDDLE && windows.openOn(window.place.side).isEmpty())
+            page = Page.MIDDLE
+        }
+        else -> {
+          windows.open(window, layout)
+          page = target
+        }
       }
+    }
+    // The windows on screen, whose buttons are highlighted.
+    val shown =
+      windows.open.values
+        .filter { layout != ScreenLayout.PORTRAIT || it.place.side.page() == page }
+        .toSet()
 
     // The backend builds the Structure tree only while the tool window shows.
-    val structureShown = ToolWindow.STRUCTURE in open
+    val structureShown = ToolWindow.STRUCTURE in shown
     LaunchedEffect(structureShown) { session.setStructureVisible(structureShown) }
 
+    // Opening a file from a tool window shows the editor on a phone held upright.
+    fun onNavigated() {
+      if (layout != ScreenLayout.PORTRAIT) return
+      page = Page.MIDDLE
+      windows.closeSide(Side.BOTTOM)
+    }
+
     @Composable
-    fun Window(window: ToolWindow, onBack: (() -> Unit)?, modifier: Modifier) {
+    fun Window(window: ToolWindow, modifier: Modifier) {
       // Project's header picks the view: Project, Packages, Project Files, ….
       val views = state.projectViews.takeIf { window == ToolWindow.PROJECT && it.options.size > 1 }
       ToolWindowPanel(
         window,
-        onBack,
+        underline = layout == ScreenLayout.PORTRAIT,
         modifier.island(),
         title = views?.current?.name ?: window.title,
         views =
@@ -179,15 +198,47 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
             )
           },
       ) {
-        ToolWindowContent(
-          window,
-          state,
-          session,
-          scrollOf(window),
-          onNavigated = { onBack?.invoke() },
-        )
+        ToolWindowContent(window, state, session, scrollOf(window), onNavigated = ::onNavigated)
       }
     }
+
+    /**
+     * The open windows of [side]: one fills the area; both halves share it, [stacked] one above the
+     * other or side by side, split as the pane weights say.
+     */
+    @Composable
+    fun Area(side: Side, stacked: Boolean, modifier: Modifier) {
+      val (firstPlace, secondPlace) = Place.entries.filter { it.side == side }
+      val first = windows.open[firstPlace]
+      val second = windows.open[secondPlace]
+      if (first != null && second != null) {
+        SplitPane(
+          stacked,
+          proportion =
+            when (side) {
+              Side.LEFT -> weights.leftSplit
+              Side.RIGHT -> weights.rightSplit
+              Side.BOTTOM -> weights.bottomSplit
+            },
+          onProportion = {
+            weights =
+              when (side) {
+                Side.LEFT -> weights.copy(leftSplit = it)
+                Side.RIGHT -> weights.copy(rightSplit = it)
+                Side.BOTTOM -> weights.copy(bottomSplit = it)
+              }
+          },
+          modifier,
+          first = { Window(first, Modifier.fillMaxSize()) },
+          second = { Window(second, Modifier.fillMaxSize()) },
+        )
+      } else {
+        (first ?: second)?.let { Window(it, modifier) }
+      }
+    }
+
+    @Composable
+    fun Editor(modifier: Modifier) = EditorIsland(state, session, editorScroll, modifier)
 
     Column(Modifier.fillMaxSize()) {
       MainToolbar(
@@ -195,68 +246,130 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
         unsupported,
         onProjectIconCenter = { gradientCenter = it },
         islandsStart =
-          if (layout == ScreenLayout.LANDSCAPE) IslandsDark.stripeThickness
-          else IslandsDark.islandGap,
+          if (layout == ScreenLayout.PORTRAIT) IslandsDark.islandGap
+          else IslandsDark.stripeThickness,
+        back =
+          if (editorCovered) ToolbarBack(pointsRight = page == Page.LEFT, onClick = ::backToEditor)
+          else null,
       )
       when (layout) {
-        ScreenLayout.PHONE_PORTRAIT -> {
+        ScreenLayout.PORTRAIT -> {
+          fun scrolls(side: Side, dragX: Float) =
+            windows.openOn(side).any { scrollOf(it).canScroll(dragX) }
           SwipePager(
             page = page,
-            onPage = { page = it },
+            onPage = { target ->
+              // A swipe to an empty side page opens its last windows again.
+              if (target != Page.MIDDLE)
+                windows.reopen(if (target == Page.LEFT) Side.LEFT else Side.RIGHT)
+              page = target
+            },
+            canShow = { side -> windows.canShow(side) },
             canScroll = { onPage, dragX ->
               when (onPage) {
-                Page.LEFT -> scrollOf(windows.lastLeft).canScroll(dragX)
-                Page.EDITOR -> editorScroll.canScroll(dragX)
-                Page.RIGHT -> scrollOf(windows.lastRight).canScroll(dragX)
+                Page.LEFT -> scrolls(Side.LEFT, dragX)
+                Page.MIDDLE ->
+                  if (bottomShown) scrolls(Side.BOTTOM, dragX) else editorScroll.canScroll(dragX)
+                Page.RIGHT -> scrolls(Side.RIGHT, dragX)
               }
             },
-            left = {
-              Window(windows.lastLeft, onBack = { page = Page.EDITOR }, Modifier.fillMaxSize())
+            left = { Area(Side.LEFT, stacked = true, Modifier.fillMaxSize()) },
+            middle = {
+              if (bottomShown) Area(Side.BOTTOM, stacked = true, Modifier.fillMaxSize())
+              else Editor(Modifier.fillMaxSize())
             },
-            editor = { EditorIsland(state, session, editorScroll, Modifier.fillMaxSize()) },
-            right = {
-              Window(windows.lastRight, onBack = { page = Page.EDITOR }, Modifier.fillMaxSize())
-            },
+            right = { Area(Side.RIGHT, stacked = true, Modifier.fillMaxSize()) },
             modifier =
               Modifier.weight(1f).fillMaxWidth().padding(horizontal = IslandsDark.islandGap),
           )
-          ToolWindowBar(buttons, open, ::barClick, vertical = false, Modifier.fillMaxWidth())
+          ToolWindowBar(buttons, shown, ::barClick, vertical = false, Modifier.fillMaxWidth())
         }
-        ScreenLayout.TABLET_PORTRAIT -> {
-          Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = IslandsDark.islandGap)) {
-            EditorIsland(state, session, editorScroll, Modifier.weight(1f).fillMaxWidth())
-            // Open tool windows share one area under the editor, side by side.
-            if (open.isNotEmpty()) {
-              Spacer(Modifier.height(IslandsDark.islandGap))
-              Row(Modifier.weight(0.8f).fillMaxWidth()) {
-                listOfNotNull(windows.left, windows.right).forEachIndexed { index, window ->
-                  if (index > 0) Spacer(Modifier.width(IslandsDark.islandGap))
-                  Window(window, onBack = null, Modifier.weight(1f).fillMaxHeight())
-                }
-              }
-            }
-          }
-          ToolWindowBar(buttons, open, ::barClick, vertical = false, Modifier.fillMaxWidth())
-        }
-        ScreenLayout.LANDSCAPE ->
+        ScreenLayout.WIDE ->
           Row(Modifier.weight(1f).fillMaxWidth()) {
-            ToolWindowBar(buttons, open, ::barClick, vertical = true, Modifier.fillMaxHeight())
-            // Open tool windows share one column left of the editor, one above the other.
-            if (open.isNotEmpty()) {
-              Column(Modifier.width(300.dp).fillMaxHeight()) {
-                listOfNotNull(windows.left, windows.right).forEachIndexed { index, window ->
-                  if (index > 0) Spacer(Modifier.height(IslandsDark.islandGap))
-                  Window(window, onBack = null, Modifier.weight(1f).fillMaxWidth())
-                }
-              }
-              Spacer(Modifier.width(IslandsDark.islandGap))
-            }
-            EditorIsland(
-              state,
-              session,
-              editorScroll,
-              Modifier.weight(1f).fillMaxHeight().padding(end = IslandsDark.islandGap),
+            ToolWindowBar(
+              buttons,
+              shown,
+              ::barClick,
+              vertical = true,
+              Modifier.fillMaxHeight(),
+              top = listOf(Place.LEFT_TOP, Place.LEFT_BOTTOM),
+              foot = listOf(Place.BOTTOM_LEFT),
             )
+            // The editor, with the bottom area under it when a bottom window is open.
+            @Composable
+            fun Center(modifier: Modifier) {
+              if (windows.openOn(Side.BOTTOM).isEmpty()) Editor(modifier)
+              else
+                SplitPane(
+                  stacked = true,
+                  proportion = 1f - weights.bottom,
+                  onProportion = { weights = weights.copy(bottom = 1f - it) },
+                  modifier,
+                  first = { Editor(Modifier.fillMaxSize()) },
+                  second = { Area(Side.BOTTOM, stacked = false, Modifier.fillMaxSize()) },
+                )
+            }
+            val main = Modifier.weight(1f).fillMaxHeight()
+            when {
+              windows.openOn(Side.LEFT).isNotEmpty() ->
+                SplitPane(
+                  stacked = false,
+                  proportion = weights.left,
+                  onProportion = { weights = weights.copy(left = it) },
+                  main,
+                  first = { Area(Side.LEFT, stacked = true, Modifier.fillMaxSize()) },
+                  second = { Center(Modifier.fillMaxSize()) },
+                )
+              windows.openOn(Side.RIGHT).isNotEmpty() ->
+                SplitPane(
+                  stacked = false,
+                  proportion = 1f - weights.right,
+                  onProportion = { weights = weights.copy(right = 1f - it) },
+                  main,
+                  first = { Center(Modifier.fillMaxSize()) },
+                  second = { Area(Side.RIGHT, stacked = true, Modifier.fillMaxSize()) },
+                )
+              else -> Center(main)
+            }
+            ToolWindowBar(
+              buttons,
+              shown,
+              ::barClick,
+              vertical = true,
+              Modifier.fillMaxHeight(),
+              top = listOf(Place.RIGHT_TOP, Place.RIGHT_BOTTOM),
+              foot = listOf(Place.BOTTOM_RIGHT),
+              mirrored = true,
+            )
+          }
+        ScreenLayout.COMPACT ->
+          Row(Modifier.weight(1f).fillMaxWidth()) {
+            // One bar with every group; left windows open left of the editor, right and bottom
+            // ones right of it, at full height.
+            ToolWindowBar(buttons, shown, ::barClick, vertical = true, Modifier.fillMaxHeight())
+            val main = Modifier.weight(1f).fillMaxHeight().padding(end = IslandsDark.islandGap)
+            val window = Place.entries.firstNotNullOfOrNull { windows.open[it] }
+            when {
+              window == null -> Editor(main)
+              window.place.side == Side.LEFT ->
+                SplitPane(
+                  stacked = false,
+                  proportion = weights.compact,
+                  onProportion = { weights = weights.copy(compact = it) },
+                  main,
+                  first = { Window(window, Modifier.fillMaxSize()) },
+                  second = { Editor(Modifier.fillMaxSize()) },
+                )
+              else ->
+                SplitPane(
+                  stacked = false,
+                  proportion = 1f - weights.compact,
+                  onProportion = { weights = weights.copy(compact = 1f - it) },
+                  main,
+                  first = { Editor(Modifier.fillMaxSize()) },
+                  second = { Window(window, Modifier.fillMaxSize()) },
+                )
+            }
           }
       }
       val status = notice ?: state.failure ?: state.log.lastOrNull().orEmpty()
@@ -333,11 +446,11 @@ private fun ToolWindowContent(
   }
 
 /**
- * Phone portrait: left tool window, editor and right tool window side by side, one screen wide
- * each; the content follows the finger (dragging right reveals the left window). From the editor a
- * swipe opens either side; from a tool window only the swipe back to the editor works. Horizontal
- * drags are taken before the editor sees them, so selecting text by dragging sideways doesn't work
- * in this layout.
+ * Phone upright: the left page, the middle page (editor or bottom windows) and the right page side
+ * by side, one screen wide each; the content follows the finger (dragging right reveals the left
+ * page). From the middle a swipe opens either side when [canShow] allows it; from a side page only
+ * the swipe back to the middle works. Horizontal drags are taken before the editor sees them, so
+ * selecting text by dragging sideways doesn't work in this layout.
  */
 @Composable
 private fun SwipePager(
@@ -348,8 +461,10 @@ private fun SwipePager(
    * (SidewaysScroll.canScroll): the editor's text or a tool window's tree.
    */
   canScroll: (Page, Float) -> Boolean,
+  /** Whether a swipe may show that side's page: it has windows open or to open again. */
+  canShow: (Side) -> Boolean,
   left: @Composable () -> Unit,
-  editor: @Composable () -> Unit,
+  middle: @Composable () -> Unit,
   right: @Composable () -> Unit,
   modifier: Modifier,
 ) {
@@ -361,7 +476,7 @@ private fun SwipePager(
     fun offsetOf(target: Page) =
       when (target) {
         Page.LEFT -> width
-        Page.EDITOR -> 0f
+        Page.MIDDLE -> 0f
         Page.RIGHT -> -width
       }
     val offset = remember { Animatable(offsetOf(page)) }
@@ -373,7 +488,8 @@ private fun SwipePager(
         val range =
           when (page) {
             Page.LEFT -> 0f..width
-            Page.EDITOR -> -width..width
+            Page.MIDDLE ->
+              (if (canShow(Side.RIGHT)) -width else 0f)..(if (canShow(Side.LEFT)) width else 0f)
             Page.RIGHT -> -width..0f
           }
         awaitEachGesture {
@@ -410,16 +526,16 @@ private fun SwipePager(
           val target =
             when {
               moved > width / 3 || flick > 1000f ->
-                if (page == Page.RIGHT) Page.EDITOR else Page.LEFT
+                if (page == Page.RIGHT) Page.MIDDLE else Page.LEFT
               moved < -width / 3 || flick < -1000f ->
-                if (page == Page.LEFT) Page.EDITOR else Page.RIGHT
+                if (page == Page.LEFT) Page.MIDDLE else Page.RIGHT
               else -> page
             }.takeIf { offsetOf(it) in range } ?: page
           if (target == page) scope.launch { offset.animateTo(offsetOf(page)) } else onPage(target)
         }
       },
     ) {
-      listOf(Page.LEFT to left, Page.EDITOR to editor, Page.RIGHT to right).forEach {
+      listOf(Page.LEFT to left, Page.MIDDLE to middle, Page.RIGHT to right).forEach {
         (target, content) ->
         val base = -offsetOf(target)
         Box(Modifier.fillMaxSize().offset { IntOffset((base + offset.value).roundToInt(), 0) }) {

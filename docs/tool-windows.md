@@ -45,11 +45,10 @@ right:  Notifications (0), AIAssistant (1), Database (2), Gradle (3), Maven (4)
 IDEate does what JetBrains Client does with no saved changes (`toolWindowButtons` in `ToolWindows.kt`):
 
 - a window gets a button when it is available (`available` not false) and is in that default layout, or `isVisibleOnLargeStripe` is true; buttons follow the layout's order;
-- bottom windows go on the left bar's lower part, as the new UI puts them; right ones on the right;
-- Structure stays on the right (IDEate shows one window per side on a phone), not on the left as in IntelliJ;
+- each window goes in one of six places from its side (`BeToolWindow.position`) and IntelliJ's split flag (`BeToolWindow.sideTool`): left top/bottom, bottom left/right, right top/bottom; Structure is split, so it sits under Project, as in IntelliJ (since 2026-11-18; before, IDEate kept it on the right). How each screen shape shows the places: [`mobile-layout.md`](mobile-layout.md);
 - every other available window is under ⋯ ("More tool windows", `MoreSquareStripeButton`), by name.
 
-Mac backend result: Project, ⋯ | Version Control, Problems | Structure, Database. Under ⋯: Bookmarks, Coverage, Database Changes, Database Output, Endpoints, Learn, Profiler, Pull Requests. Commit, AI Chat and Gradle are unavailable there.
+Mac backend result: left top Project, ⋯; left bottom Structure; bottom left Version Control, Problems; right top Database. Under ⋯: Bookmarks, Coverage, Database Changes, Database Output, Endpoints, Learn, Profiler, Pull Requests. Commit, AI Chat and Gradle are unavailable there.
 
 IDEate doesn't keep the user's own layout (moving a window to another side); add it when IDEate can move windows.
 

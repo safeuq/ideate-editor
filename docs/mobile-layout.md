@@ -2,21 +2,24 @@
 
 How the main window (`compose/src/commonMain/kotlin/intellijandroid/client/ui/ClientScreen.kt`, `ToolWindows.kt`) arranges
 the editor, the tool windows and the bars on each screen shape. From the user's brainstorm of 2026-11-16
-(`optimize-for-portrait.md` next to the repo) and the answers to its questions.
+(`optimize-for-portrait.md` next to the repo) and the answers to its questions; the pane layout below was redone on
+2026-11-18 from the user's spec, reviewed as a preview first (https://claude.ai/artifact/ChLM2aSm57qt7EESoPh3zR,
+"Agreed details" at its end).
 
 ## Which layout
 
 The layout is picked from the window's size in dp, measured with `BoxWithConstraints`, so a desktop window or a
 split-screen app gets the layout that fits it:
 
-| Window | Layout | Example |
+| Window | Layout (`ScreenLayout`) | Example |
 |---|---|---|
-| wider than tall | landscape | phone sideways 891 × 411, desktop window, tablet sideways |
-| taller than wide, width ≥ 600 dp | tablet portrait | emulator at `wm density 240`: 720 × 1440 |
-| taller than wide, width < 600 dp | phone portrait | Pixel 3a 393 × 807, the user's phone 411 × 891 |
+| taller than wide | portrait (phone and tablet upright) | Pixel 3a 393 × 807, the user's phone 411 × 891, a tablet 800 × 1280 |
+| wider than tall, at least 600 dp tall | wide (desktop, tablet sideways) | desktop window 1200 × 800, emulator at `wm density 240` sideways 1480 × 720 |
+| wider than tall, under 600 dp tall | compact (phone sideways) | phone sideways 891 × 411 |
 
 600 dp is Android's own tablet line (`sw600dp`, `Configuration.smallestScreenWidthDp`). There is no reliable device
-identifier for "tablet"; Android itself uses this width.
+identifier for "tablet"; Android itself uses this size. A desktop window shorter than 600 dp gets the phone's
+sideways rules.
 
 The activity no longer pins `sensorLandscape`: it follows the sensor, and `configChanges` keeps the session alive
 across a rotation.
@@ -31,36 +34,63 @@ across a rotation.
 - **Tool windows that work**: Project, and Structure ([`structure-protocol.md`](structure-protocol.md)): the tree
   of the selected file, all expanded; a tap selects and moves the caret (IntelliJ's "Navigate with Single Click"),
   a double tap also slides back to the editor on a phone held upright.
-- **Tool window bar**: every button from IntelliJ's two stripes in one bar, in three groups split by separators:
-  left stripe top (Project, Commit, Bookmarks), left stripe bottom (Services, Run, Debug, Problems, Git), right
-  stripe (Structure, Notifications). Icons are IntelliJ's `expui/toolwindows/<name>.svg` at the same size as the main
-  toolbar's, as in IntelliJ: 16 in compact mode (buttons 32 in a 40-thick bar), 20 in normal (buttons 40, bar 48).
-  Selected background `#393B40`. Only Project and Structure open; the rest say they aren't supported.
-- **Header line:** when a tool window covers the editor (phone held upright, back chevron shown), a 1 dp line
-  in `ToolWindow.Header.borderColor` (`#26282C`) runs under its header ("‹ Structure").
-- **One tool window per side** at most. Tapping an open window's button closes it, as on IntelliJ's stripes.
-- **Structure is on the right.** IntelliJ puts it on the left by default; on the right it can be open together with
-  Project, which the split layouts below need.
+- **Six places.** Every tool window has a side (left, right, bottom) and IntelliJ's split flag (`BeToolWindow.sideTool`,
+  `WindowInfo.isSplit`), which puts it in the second half of its side. Left and right split top/bottom, the bottom
+  splits left/right (`ToolWindowAnchor.isSplitVertically`). `Place` in `ToolWindows.kt`:
+
+  | Place | Windows by default | Upright | Desktop, tablet sideways | Phone sideways |
+  |---|---|---|---|---|
+  | left top | Project, Commit, Pull Requests | left page, upper half | left pane, upper half | left of the editor |
+  | left bottom | Structure | left page, lower half | left pane, lower half | left of the editor |
+  | bottom left | Version Control, Problems, Terminal, Services | middle page, in the editor's place, upper half | under the editor, left half | right of the editor |
+  | bottom right | none (a bottom window marked split) | middle page, lower half | under the editor, right half | right of the editor |
+  | right top | Notifications, AI Chat, Database, Gradle, Maven | right page, upper half | right pane, upper half | right of the editor |
+  | right bottom | none (a right window marked split) | right page, lower half | right pane, lower half | right of the editor |
+
+  One window per place is open at a time; opening another of the same place replaces it. A window alone in its
+  side (or in the bottom area) takes all of it; two share it (`SplitPane`). Before 2026-11-18 Structure sat on the
+  right so one window could be open on each side.
+- **Tool window bars**: the places' buttons in groups, a 1 dp line between groups, ⋯ (windows without a button) at
+  the end of the left top group. Empty groups and their lines are left out. Every bar scrolls when its buttons don't
+  fit. Icons are IntelliJ's `expui/toolwindows/<name>.svg` at the same size as the main toolbar's, as in IntelliJ:
+  16 in compact mode (buttons 32 in a 40-thick bar), 20 in normal (buttons 40, bar 48). Only Project and Structure
+  open; the rest say they aren't supported.
+- **Header line:** when a tool window covers the editor (phone held upright), a 1 dp line in
+  `ToolWindow.Header.borderColor` (`#26282C`) runs under its header.
+- **Tapping an open window's button closes it**, as on IntelliJ's stripes.
+- **Every split can be resized**: the border between two panes (the halves of a side, a side pane against the
+  editor, the editor against the bottom area, bottom left against bottom right) drags. A finger shows a pill on the
+  border while it moves; a mouse gets the resize pointer and no pill. Each pane keeps at least 60 dp. The sizes are
+  IntelliJ's weights (`WindowInfoImpl`: a side or the bottom area 0.33 of the room, a split 0.5) and are kept per
+  project (`PaneWeights`, `SplitPane`; [`intellij-look.md`](intellij-look.md) section 17).
 
 The connect screen follows the same rule: upright, its connection kinds (This phone or This computer, Link) are tabs in a bar at
 the bottom instead of Gateway's sidebar ([`intellij-look.md`](intellij-look.md) §10).
 
-## Phone portrait
+## Portrait (phone and tablet upright)
 
-- The editor fills the screen between the main toolbar (top) and the tool window bar (bottom).
-- The left tool window, the editor and the right tool window sit side by side, each one screen wide. A tool window
-  covers the whole editor area when open; its header has a back chevron (`expui/general/chevronLeft.svg`) that
-  slides back to the editor.
+- One bar at the bottom, grouped left top | left bottom | bottom left | bottom right | right top | right bottom.
+- Three pages side by side, each one screen wide: the left page (left top over left bottom), the middle page (the
+  editor, or the bottom windows in its place: bottom left over bottom right) and the right page (right top over right
+  bottom). Only one shows at a time.
+- A button opens its window and shows its page. Tapping it again closes it; closing the last window of a side page
+  goes back to the middle. A button of a window open on another page shows that page.
+- **Back to the editor**: the main toolbar ends with a divider and a chevron while a side page or the bottom windows
+  show (IntelliJ's `expui/general/chevronRight.svg` on the left page, `chevronLeft.svg` on the right page and on the
+  bottom windows). It, and Back, go from a side page to the middle, and from the bottom windows to the editor
+  (closing them). The run controls make room for it ("Current File" shortens first); the project widget keeps its
+  width up to 200 dp. The tool window headers no longer have a back chevron.
 - **Swipes** (the user's answer to question 1):
 
   | From | Finger moves right | Finger moves left |
   |---|---|---|
-  | editor | left tool window slides in | right tool window slides in |
-  | left tool window | nothing | back to the editor |
-  | right tool window | back to the editor | nothing |
+  | middle page | left page slides in | right page slides in |
+  | left page | nothing | back to the middle |
+  | right page | back to the middle | nothing |
 
-  The content follows the finger, like a pager: the left window is to the left of the editor, so dragging right
-  pulls it in. The swipe opens the window last used on that side (Project and Structure at first).
+  The content follows the finger, like a pager: the left page is to the left of the middle, so dragging right
+  pulls it in. A swipe to a side page with nothing open opens the windows last open there (Project at first); a side
+  that never had a window doesn't slide in.
 - A drag counts as a swipe once it has moved the touch slop and is at least twice as far sideways as up or down.
   Past a third of the width, or a flick faster than 1000 px/s, it moves one page; otherwise it springs back.
 - **On the editor, a sideways drag scrolls the editor first** (since 2026-11-17, user report "sideways scrolling
@@ -86,16 +116,18 @@ the bottom instead of Gateway's sidebar ([`intellij-look.md`](intellij-look.md) 
   pager asks the one on the current page with the same rule as the editor:
   | Page | Finger moves left | Finger moves right |
   |---|---|---|
-  | Project (left) | tree scrolls on; at its right edge, back to the editor | tree scrolls back; at its left edge, nothing |
-  | Structure (right) | tree scrolls on; at its right edge, nothing | tree scrolls back; at its left edge, back to the editor |
+  | left page (Project, Structure) | tree scrolls on; at its right edge, back to the middle | tree scrolls back; at its left edge, nothing |
+  | right page | tree scrolls on; at its right edge, nothing | tree scrolls back; at its left edge, back to the middle |
 
-  Landscape and tablet portrait have no pager; the trees scroll sideways there too (touch drag, trackpad or
+  With two windows on a page, the swipe is the trees' when either can still scroll that way. The sideways layouts
+  have no pager; the trees scroll sideways there too (touch drag, trackpad or
   Shift+wheel). Checked on the emulator (Pixel 3a) and the desktop, 2026-11-17 against the Mac backend:
   `AVeryLongClassNameThatDoesNotFitInTheProjectToolWindowAtAllEvenOnTablets` in `src/demo`; a drag left on Project
   scrolled to the name's end and stayed on Project, the next drag left went back to the editor.
 - One page is the screen width plus the 6 dp island gap, so two islands keep their gap and rounded corners while
   sliding (before, they touched mid-swipe).
-- Opening a file from the Project tool window (double tap) slides back to the editor.
+- Opening a file from the Project tool window (double tap) slides back to the editor, closing the bottom windows if
+  they were in its place.
 - The swipe takes the touch events in Compose's `Initial` pass, before the editor sees them.
 - **Dragging selects text only with a mouse.** On touch a drag scrolls. Before 2026-11-17 the editor also had a
   touch drag-to-select handler whose start moved the caret; it competed with scrolling for the same drag and,
@@ -106,19 +138,44 @@ the bottom instead of Gateway's sidebar ([`intellij-look.md`](intellij-look.md) 
   the editor focused it and opened the keyboard. When a tool window covers the editor, focus is cleared, so the
   keyboard closes.
 
-## Tablet portrait
+## Wide (desktop, tablet sideways)
 
-Same two bars as the phone, no swipes. Open tool windows share one area under the editor (the editor gets 1 part of
-the height, the area 0.8), side by side when both sides are open: left window on the left, right window on the
-right.
+- A bar on each side, as in IntelliJ's new UI: the left bar has left top and left bottom, with the bottom-left
+  windows at its foot; the right bar has right top and right bottom, with the bottom-right windows at its foot.
+- One side pane at a time, split when both of its halves are open. Opening a window on the other side closes this
+  side's pane.
+- The bottom area sits under the editor, as wide as the editor: bottom left and bottom right side by side. It is
+  open or closed on its own, whatever the side panes do. Any mix works, from the editor alone to a split side pane
+  plus both bottom halves.
+- Project is open at start.
 
-## Landscape (phone and tablet)
+## Compact (phone sideways)
 
-The tool window bar moves to the left edge (40 wide, scrolls when the screen is too short for all ten buttons). Open
-tool windows share one 300-wide column between the bar and the editor, one above the other when both sides are
-open. Project is open at start, as before.
+- One bar on the left with every group, separated by lines (scrolls up and down).
+- The editor keeps its full height with at most one tool window beside it, never split: left windows on its left,
+  right and bottom windows on its right (a bottom window under the editor would leave each about 180 dp of a 411 dp
+  screen). Opening any window replaces the open one.
+
+After a rotation the open windows are cut to what the new layout shows (`ToolWindowState.fit`): wide keeps the left
+side over the right, compact keeps the first window by place.
 
 ## Checked
+
+On the Mac's Android emulator (Pixel 3a, API 34) against the isolated Mac backend, 2026-11-18 ~00:30–00:40 IST, and
+on the desktop:
+- Upright: the bar's groups Project ⋯ | Structure | Version Control, Problems | Database. Project then Structure
+  split the left page; › went back to the editor; a swipe right brought the split page back; closing Structure and
+  then Project went back to the editor. Dragging the border between Project and Structure moved it and showed the
+  pill; it went on release.
+- Sideways (891 × 411): one left bar; Project left of the editor; Structure replaced it.
+- `wm density 240` sideways (1480 × 720, wide): bars on both sides, Version Control and Problems at the left bar's
+  foot, Database on the right; Project over Structure in the left pane.
+- Desktop (1200 × 800, wide): the same bars and the left pane.
+- With a throwaway build that let every window open: upright, Version Control took the editor's place with ‹ in the
+  toolbar, and Back closed it; wide, Version Control under the editor, then Database closed the left pane and kept
+  the bottom area.
+
+Earlier layout:
 
 On the Mac's Android emulator (Pixel 3a, API 34) against the isolated Mac backend, 2026-11-16 ~14:20 IST: landscape
 with Project open; phone portrait editor, swipe right → Project, swipe left twice → editor → Structure; tablet
@@ -131,6 +188,8 @@ portrait (`adb shell wm density 240`) with Project and Structure side by side un
 - The emulator rotates only when the app allows it. `adb shell wm user-rotation lock 0` holds portrait;
   `adb emu rotate` turns the emulator. While the activity pinned `sensorLandscape`, the window stayed landscape
   whatever the emulator's setting (`dumpsys window` showed `mCurrentAppOrientation=SCREEN_ORIENTATION_SENSOR_LANDSCAPE`).
-- `adb shell wm density 240` on the 1080-px-wide emulator gives a 720-dp-wide window, enough for tablet portrait.
-  `adb shell wm density reset` undoes it.
+- `adb shell wm density 240` on the 1080-px-wide emulator gives a 720-dp-wide window; sideways it is 720 dp tall,
+  enough for the wide layout. `adb shell wm density reset` undoes it.
+- `adb shell settings put system user_rotation 1` (with `accelerometer_rotation` 0) turns the emulator sideways.
+- `adb shell input motionevent DOWN|MOVE|UP x y` holds a drag open for a screenshot (the split's pill).
 - `adb shell input swipe 200 1200 900 1200 200` is a 700-px swipe right in 200 ms.
