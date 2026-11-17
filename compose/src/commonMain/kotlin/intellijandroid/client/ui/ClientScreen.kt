@@ -374,6 +374,11 @@ private fun EditorIsland(
   modifier: Modifier,
 ) {
   val fonts = LocalClientFonts.current
+  // What the backend copies (ClipboardModel) goes to the system clipboard, as in JetBrains Client.
+  val systemClipboard = LocalClipboardManager.current
+  LaunchedEffect(state.backendClipboard) {
+    state.backendClipboard?.let { systemClipboard.setText(AnnotatedString(it.text)) }
+  }
   Column(modifier.island()) {
     val selected = state.editors.firstOrNull { it.path == state.selectedEditor }
     EditorTabs(state, session)
@@ -390,6 +395,8 @@ private fun EditorIsland(
             session::complete,
             session::lookupKey,
             session::chooseLookupItem,
+            session::paste,
+            session::copied,
           )
         }
       EditorView(

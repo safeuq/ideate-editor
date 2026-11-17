@@ -263,3 +263,43 @@ Findings:
 * Highlighters are not resent when the text around them changes: the backend expects the client to move them the way IntelliJ moves a non-greedy range marker. Text inserted exactly at a highlighter's end stays outside it; text inserted exactly at its start moves it. Growing them instead (the first Android test, 2026-11-15) painted a whole new line in the colour of the `;` before it.
 * The document hash depends on the edit history, not only the text; `VersionHashesTest` holds recorded numbers.
 * cmux-cua's `type_text` sends select-all and delete before the text in our window, so drive typing tests with one `press_key` per character.
+
+## Paste and the clipboard (2026-11-17)
+
+JetBrains Client keeps the backend's clipboard in step through **`ClipboardModel`**, an extension on the protocol
+(`protocol.clipboardModel`, `intellij.rd.ide.model.generated.jar`). Its parts:
+
+| Part | What |
+|---|---|
+| `content: IProperty<ClipboardContent?>` | `ClipboardContent(text, remoteFiles, internal)`; `internal` = the client's own copy |
+| `blockOutgoingCopy: IProperty<Boolean>` | the backend can stop copies leaving it (not used by IDEate) |
+
+What the client does (`FrontendCopyPasteManagerHolder` in `intellij.platform.frontend.split.jar`, decompiled):
+
+| When | Message |
+|---|---|
+| The user copies in the client | `content.set(ClipboardContent(text, [], internal = true))` |
+| The backend copies (e.g. Copy Reference run there) | the backend sets `content`; the client puts the text on the system clipboard |
+| Just before a paste action runs on the backend (`beforeActionExecutedOnBackend`; the paste ids from `FrontendCopyPasteUtil`: `$Paste`, `EditorPaste`, `EditorPasteSimple`, `PasteMultiple`, `CompareClipboardWithSelection`) | unless `content` is already the client's own copy, the system clipboard goes into `content` with `internal = false` (`syncClipboard`) |
+| The paste | `RdCallEditorActionRequest("EditorPaste", editorId, patch, timestamps)`; the client also runs the paste locally first and sends its result as the patch, like Enter and Backspace |
+
+So the backend pastes the client's text with its own paste handler (reformat on paste, imports, caret), and the
+client's local guess is replaced when the answer differs. `ClipboardHandlerRequest(actionId, dataContext)` and
+`ClipboardTextConstant` exist in the model but no frontend class in `intellij.platform.frontend.split.jar` uses
+them.
+
+IDEate does the same: `ClientSession.paste(text)` sets `content` (line breaks as `\n`), then
+`EditSession.paste` sends `EditorPaste` with the plain insertion as its guess (command names `Paste`). A copy in
+IDEate sets `content` with `internal = true`. A `content` the backend sets goes to
+`SessionState.backendClipboard`, and the editor island copies it to the system clipboard.
+
+Checked 2026-11-17 against the Mac backend (port 5992), `Main.java`, caret at the end of line 8:
+
+| Pasted | Guess | Backend's answer | Result |
+|---|---|---|---|
+| `\nif (greeting.isEmpty()) {\nSystem.out.println("empty");\n}` (no indentation), from the menu | the text as it is | the same insertion, then `+'    '` at 254 and `+'      '` at 284 (reformat on paste), caret after the block | the guess is rolled back and the answer applied: the block indented inside `main` |
+| ⌘Z | | | the whole paste, indentation included, undone in one step |
+| `/*pasted*/`, with ⌘V | the text | the same | `same=true`: the guess kept |
+
+Not done: pasting from the Android soft keyboard. The editor's input connection is `TYPE_NULL`, so the keyboard
+sends key events, not committed text. The editor's menu and ⌘V/Ctrl+V paste on Android too.

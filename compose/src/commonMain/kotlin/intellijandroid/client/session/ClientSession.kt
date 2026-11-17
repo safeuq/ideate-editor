@@ -21,6 +21,8 @@ import com.jetbrains.rd.framework.Protocol
 import com.jetbrains.rd.framework.RdId
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.ide.model.BasicIdeRootMarshallersProvider
+import com.jetbrains.rd.ide.model.ClipboardContent
+import com.jetbrains.rd.ide.model.ClipboardModel
 import com.jetbrains.rd.ide.model.CompositionIconModel
 import com.jetbrains.rd.ide.model.DeferredIconModel
 import com.jetbrains.rd.ide.model.EmptyIconModel
@@ -58,6 +60,7 @@ import com.jetbrains.rd.ide.model.Solution
 import com.jetbrains.rd.ide.model.SuccessfulRequestComposite
 import com.jetbrains.rd.ide.model.TextControlId
 import com.jetbrains.rd.ide.model.VisibleRange
+import com.jetbrains.rd.ide.model.clipboardModel
 import com.jetbrains.rd.ide.model.codeStructureTreeModel
 import com.jetbrains.rd.ide.model.documentsOperationModel
 import com.jetbrains.rd.ide.model.fileEditorsModel
@@ -235,6 +238,45 @@ class ClientSession(
     selectedEditSession()?.moveCaret(offset, anchor)
   }
 
+  /**
+   * Paste, as JetBrains Client does it (FrontendCopyPasteManagerHolder.syncClipboard, then
+   * EditorPaste): [text], the system clipboard, goes to `ClipboardModel.content` first, so the
+   * backend's paste reads the same text. Line breaks become `\n`, as IntelliJ's paste makes them.
+   */
+  fun paste(text: String) = onRd {
+    completion?.cancel()
+    val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
+    clipboard?.let { model ->
+      if (model.content.value?.text != normalized) {
+        sentClipboard = normalized
+        model.content.set(ClipboardContent(normalized, emptyList(), false))
+      }
+    }
+    selectedEditSession()?.paste(normalized)
+  }
+
+  /** A copy in IDEate, sent to the backend's clipboard as the client's own (`internal`) copy. */
+  fun copied(text: String) = onRd {
+    val model = clipboard ?: return@onRd
+    sentClipboard = text
+    model.content.set(ClipboardContent(text, emptyList(), true))
+  }
+
+  private var clipboard: ClipboardModel? = null
+  /** The last text this client set, so its own echo isn't taken for a backend copy. */
+  private var sentClipboard: String? = null
+  private var clipboardSerial = 0
+
+  private fun bindClipboard(model: ClipboardModel) {
+    clipboard = model
+    model.content.advise(lifetime) { content ->
+      val text = content?.text ?: return@advise
+      if (text == sentClipboard) return@advise
+      clipboardSerial++
+      mutableState.update { it.copy(backendClipboard = ClipboardText(text, clipboardSerial)) }
+    }
+  }
+
   fun undo() = onRd {
     completion?.cancel()
     selectedEditSession()?.undo(isUndo = true)
@@ -400,6 +442,7 @@ class ClientSession(
     fleet = rpc
 
     vfs = protocol.vfsModel
+    bindClipboard(protocol.clipboardModel)
     protocol.solutionModel.solutions.view(lifetime) { solutionLifetime, _, newSolution ->
       log("Project ${newSolution.projectId.value} added")
       projectId = newSolution.projectId

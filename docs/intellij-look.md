@@ -490,9 +490,10 @@ caret to that point, unless it is inside the selection, as IntelliJ does.
 | Item | In IDEate |
 |---|---|
 | Cut ⌘X | works: copies the selection, or the caret's whole line with its line break, then deletes it (the backend's `EditorBackSpace`) |
-| Copy ⌘C | works: the selection, or the whole line with its line break, to the system clipboard |
+| Copy ⌘C | works: the selection, or the whole line with its line break, to the system clipboard and the backend's `ClipboardModel` |
 | Copy / Paste Special ▸ Copy Absolute Path, Copy File Name, Copy as Plain Text | work |
-| Paste ⌘V, Paste from History…, Paste as Plain Text | greyed out: pasting goes through the backend's clipboard (`ClipboardModel`, `ClipboardHandlerRequest` in the rd model) and its `EditorPaste`, not done yet |
+| Paste ⌘V | works: the clipboard goes to the backend's `ClipboardModel`, then its `EditorPaste` runs, as in JetBrains Client (docs/edit-protocol.md, "Paste and the clipboard") |
+| Paste from History…, Paste as Plain Text | greyed out: they need the backend's actions (a history popup, `EditorPasteSimple`) |
 | Show Context Actions, Copy Reference, Copy as Rich Text, Column Selection Mode, Find Usages, Go To ▸, Folding ▸, Refactor ▸, Generate…, Run…, Debug…, More Run/Debug ▸, Open In ▸, Local History ▸, Git ▸, Compare with Clipboard | greyed out: they need the backend's actions (see below) |
 
 **The editor tab's menu** (`EditorTabPopupMenu`):

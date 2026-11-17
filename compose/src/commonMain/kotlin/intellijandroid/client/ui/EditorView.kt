@@ -134,6 +134,10 @@ class EditorActions(
   val lookupKey: (LookupKey) -> Unit = {},
   /** A click or tap on a completion popup row, by item id. */
   val chooseLookupItem: (String) -> Unit = {},
+  /** Paste this text (the system clipboard's) through the backend's paste. */
+  val paste: (String) -> Unit = {},
+  /** Text IDEate just copied, for the backend's clipboard. */
+  val copied: (String) -> Unit = {},
 )
 
 @Composable
@@ -349,6 +353,39 @@ fun EditorView(
     return true
   }
 
+  val clipboard = LocalClipboardManager.current
+
+  /** The selection, or the caret's whole line with its line break: what IntelliJ copies. */
+  fun copyRange(): Pair<Int, Int> {
+    val current = currentFile
+    if (current.selectionStart != current.selectionEnd)
+      return minOf(current.selectionStart, current.selectionEnd) to
+        maxOf(current.selectionStart, current.selectionEnd)
+    val line = currentLines.lineOf(current.caret)
+    val end =
+      if (line + 1 < currentLines.count) currentLines.starts[line + 1] else current.text.length
+    return currentLines.starts[line] to end
+  }
+
+  fun copy() {
+    val (start, end) = copyRange()
+    val copiedText = currentFile.text.substring(start, end)
+    clipboard.setText(AnnotatedString(copiedText))
+    actions.copied(copiedText)
+  }
+
+  fun paste() {
+    clipboard.getText()?.text?.takeIf { it.isNotEmpty() }?.let(actions.paste)
+  }
+
+  fun cut() {
+    val (start, end) = copyRange()
+    if (start == end) return
+    copy()
+    actions.moveCaret(end, start)
+    actions.key(EditorKey.BACKSPACE)
+  }
+
   fun onKey(event: KeyEvent): Boolean {
     val key = event.key
     val shift = event.isShiftPressed
@@ -375,6 +412,10 @@ fun EditorView(
         }
       }
     }
+    if ((meta || event.isCtrlPressed) && key == Key.C) {
+      copy()
+      return true
+    }
     if (file.editable && event.isCtrlPressed && key == Key.Spacebar) {
       actions.complete()
       return true
@@ -391,6 +432,14 @@ fun EditorView(
         }
         key == Key.Delete -> {
           actions.key(EditorKey.DELETE)
+          return true
+        }
+        (meta || event.isCtrlPressed) && key == Key.V -> {
+          paste()
+          return true
+        }
+        (meta || event.isCtrlPressed) && key == Key.X -> {
+          cut()
           return true
         }
         meta && key == Key.Z -> {
@@ -442,33 +491,6 @@ fun EditorView(
 
   // IntelliJ's editor context menu (EditorPopupMenu), what IDEate can do enabled, the rest greyed
   // out (docs/intellij-look.md, section 13).
-  val clipboard = LocalClipboardManager.current
-
-  /** The selection, or the caret's whole line with its line break: what IntelliJ copies. */
-  fun copyRange(): Pair<Int, Int> {
-    val current = currentFile
-    if (current.selectionStart != current.selectionEnd)
-      return minOf(current.selectionStart, current.selectionEnd) to
-        maxOf(current.selectionStart, current.selectionEnd)
-    val line = currentLines.lineOf(current.caret)
-    val end =
-      if (line + 1 < currentLines.count) currentLines.starts[line + 1] else current.text.length
-    return currentLines.starts[line] to end
-  }
-
-  fun copy() {
-    val (start, end) = copyRange()
-    clipboard.setText(AnnotatedString(currentFile.text.substring(start, end)))
-  }
-
-  fun cut() {
-    val (start, end) = copyRange()
-    if (start == end) return
-    copy()
-    actions.moveCaret(end, start)
-    actions.key(EditorKey.BACKSPACE)
-  }
-
   fun menu(): List<MenuEntry> {
     val current = currentFile
     val hasSelection = current.selectionStart != current.selectionEnd
@@ -511,8 +533,9 @@ fun EditorView(
       MenuItem(
         "Paste",
         shortcut("⌘V", "Ctrl+V"),
-        enabled = false,
+        enabled = current.editable,
         iconPath = "expui/general/paste.svg",
+        onClick = ::paste,
       ),
       MenuItem("Column Selection Mode", shortcut("⇧⌘8", "Alt+Shift+Insert"), enabled = false),
       MenuSeparator,

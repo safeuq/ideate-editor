@@ -130,6 +130,12 @@ data class SessionState(
   val tree: ProjectTree = ProjectTree(),
   val editors: List<EditorFile> = emptyList(),
   val selectedEditor: String? = null,
+  /**
+   * Text the backend put on the clipboard (`ClipboardModel.content` set by the backend, e.g. its
+   * Copy Reference); the UI copies it to the system clipboard. [ClipboardText.serial] tells two
+   * copies of the same text apart.
+   */
+  val backendClipboard: ClipboardText? = null,
   val scheme: EditorScheme? = null,
   /** The completion popup, if one is open. */
   val lookup: Lookup? = null,
@@ -194,3 +200,5 @@ data class LookupItem(
   val group: String? = null,
   val groupOrder: Int = 0,
 )
+
+data class ClipboardText(val text: String, val serial: Int)

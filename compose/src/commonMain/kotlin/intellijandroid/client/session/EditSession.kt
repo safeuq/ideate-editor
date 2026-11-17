@@ -285,6 +285,28 @@ class EditSession(
     )
   }
 
+  /**
+   * Pastes [text] the way JetBrains Client does (docs/edit-protocol.md, "Paste"): the backend's
+   * `EditorPaste` action, with the plain insertion as the local guess. The backend pastes from the
+   * `ClipboardModel` the session filled just before; when it also reformats, adds imports or moves
+   * the caret, its answer differs and replaces the guess.
+   */
+  fun paste(text: String) {
+    if (!canEdit() || text.isEmpty()) return
+    val (offset, removed) = replacedRange()
+    editorAction(
+      "EditorPaste",
+      offset,
+      removed,
+      text,
+      offset + text.length,
+      "Paste",
+      "Paste",
+      null,
+      null,
+    )
+  }
+
   fun backspace() {
     if (!canEdit()) return
     if (selectionStart != selectionEnd) {
