@@ -175,11 +175,15 @@ class EditSession(
    * change.
    */
   private class Pending(
-    val requestId: Long,
+    var requestId: Long,
+    val request: RdRequest,
     val speculative: RdPatch,
     val undoState: Snapshot,
     val edit: TextEdit?,
-  )
+  ) {
+    /** Whether the backend already asked for this request again (`RdRetryResponse`). */
+    var retried = false
+  }
 
   private data class Snapshot(
     val text: String,
@@ -460,6 +464,7 @@ class EditSession(
     pending.addLast(
       Pending(
         send(request),
+        request,
         RdPatch(emptyList(), emptyList(), emptyList(), emptyList()),
         snapshot(),
         null,
@@ -507,8 +512,30 @@ class EditSession(
       whenAnswered.toList().also { whenAnswered.clear() }.forEach { it() }
   }
 
-  fun retryOrFailure(requestId: Long) {
-    // ponytail: no retry; give up on local speculation and wait for the backend's state.
+  /**
+   * The backend asked for request [requestId] again (`RdRetryResponse`). It ignores, without an
+   * answer, every request sent with an older retry timestamp, so like JetBrains Client this
+   * re-sends it and every later pending request once. A second retry gives up: local edits are
+   * rolled back.
+   */
+  fun retry(requestId: Long) {
+    val index = pending.indexOfFirst { it.requestId == requestId }
+    if (index < 0) return
+    val later = pending.drop(index)
+    if (later.any { it.retried }) {
+      rollBackPending()
+      pending.clear()
+      followingBackend = false
+      return
+    }
+    for (request in later) {
+      request.requestId = send(request.request)
+      request.retried = true
+    }
+  }
+
+  /** The backend refused request [requestId] (`RdFailureResponse`, `RdNoEditorFoundResponse`). */
+  fun failure(requestId: Long) {
     if (pending.any { it.requestId == requestId }) {
       rollBackPending()
       pending.removeAll { it.requestId == requestId }
@@ -675,7 +702,7 @@ class EditSession(
     debug {
       "send #$requestId ${request::class.simpleName} ${describe(patch)} -> text ${text.length} chars, caret $caret ($selectionStart..$selectionEnd)"
     }
-    pending.addLast(Pending(requestId, patch, before, edit))
+    pending.addLast(Pending(requestId, request, patch, before, edit))
   }
 
   private fun describe(patch: RdPatch) =

@@ -54,6 +54,7 @@ import com.jetbrains.rd.ide.model.RdRequest
 import com.jetbrains.rd.ide.model.RdRequestHolder
 import com.jetbrains.rd.ide.model.RdRequests
 import com.jetbrains.rd.ide.model.RdResetDocumentChange
+import com.jetbrains.rd.ide.model.RdRetryResponse
 import com.jetbrains.rd.ide.model.RdRetryTimestamp
 import com.jetbrains.rd.ide.model.RdSuccessResponse
 import com.jetbrains.rd.ide.model.RequestCompositeQuery
@@ -163,6 +164,8 @@ class ClientSession(
   private val earlyPatches = mutableMapOf<RdDocumentId, MutableList<RdPatch>>()
   private val commands = CommandChain()
   private var requestIds = 0L
+  /** The backend's retry timestamp; it comes with every `RdRetryResponse`. */
+  private var retryTimestamp = RdRetryTimestamp(0, 0)
   private var fleet: FleetRpc? = null
   private var completion: Completion? = null
   private var requestResponse: RequestResponseModel? = null
@@ -549,14 +552,20 @@ class ClientSession(
       )
     requestResponseModel.responsesWithTime.advise(lifetime) { responses ->
       for (response in responses.responses) {
+        // The backend ignores requests sent with an older retry timestamp than its own.
+        if (response is RdRetryResponse) retryTimestamp = response.retryTimestamp
         if (actionMenus?.response(response) == true) continue
         val session =
           editSessions.values.firstOrNull { it.hasPending(response.requestId) } ?: continue
         when (response) {
           is RdSuccessResponse -> session.response(response.requestId, response.patch)
+          is RdRetryResponse -> {
+            log("Request ${response.requestId} to be sent again: ${response.message}")
+            session.retry(response.requestId)
+          }
           else -> {
             log("Request ${response.requestId} not applied: $response")
-            session.retryOrFailure(response.requestId)
+            session.failure(response.requestId)
           }
         }
       }
@@ -940,7 +949,7 @@ class ClientSession(
     val now = java.time.Instant.now()
     model.requestsWithTime.fire(
       RdRequests(
-        listOf(RdRequestHolder(requestId, request, RdRetryTimestamp(0, 0), null)),
+        listOf(RdRequestHolder(requestId, request, retryTimestamp, null)),
         now.epochSecond * 1_000_000_000 + now.nano,
       ),
     )
