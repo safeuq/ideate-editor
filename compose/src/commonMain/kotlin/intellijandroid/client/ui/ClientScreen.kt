@@ -1,6 +1,7 @@
 package intellijandroid.client.ui
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,7 +27,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +52,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import intellijandroid.client.session.ClientSession
@@ -199,7 +203,7 @@ fun ClientScreen(
       ToolWindowPanel(
         window,
         underline = layout == ScreenLayout.PORTRAIT,
-        modifier.island(),
+        modifier.island(LocalIslandRadius.current),
         title = views?.current?.name ?: window.title,
         views =
           views?.options?.map { option ->
@@ -291,8 +295,15 @@ fun ClientScreen(
               else Editor(Modifier.fillMaxSize())
             },
             right = { Area(Side.RIGHT, stacked = true, Modifier.fillMaxSize()) },
-            modifier =
-              Modifier.weight(1f).fillMaxWidth().padding(horizontal = IslandsDark.islandGap),
+            // Two islands on a page: the side's halves, or both bottom windows.
+            split = { onPage ->
+              when (onPage) {
+                Page.LEFT -> windows.openOn(Side.LEFT).size > 1
+                Page.MIDDLE -> bottomShown && windows.openOn(Side.BOTTOM).size > 1
+                Page.RIGHT -> windows.openOn(Side.RIGHT).size > 1
+              }
+            },
+            modifier = Modifier.weight(1f).fillMaxWidth(),
           )
           ToolWindowBar(buttons, shown, ::barClick, vertical = false, Modifier.fillMaxWidth())
         }
@@ -402,8 +413,14 @@ fun ClientScreen(
   }
 }
 
-private fun Modifier.island() =
-  clip(RoundedCornerShape(IslandsDark.islandRadius)).background(IslandsDark.islandBackground)
+private fun Modifier.island(radius: Dp) =
+  clip(RoundedCornerShape(radius)).background(IslandsDark.islandBackground)
+
+/**
+ * The islands' corner radius: IntelliJ's everywhere, except on a phone held upright, where a page
+ * with one island at rest draws it square and flush with the screen's sides ([SwipePager]).
+ */
+private val LocalIslandRadius = compositionLocalOf { IslandsDark.islandRadius }
 
 /** `RdProjectViewAsyncPane` "ProjectPane": the Project view, the one with [SessionState.tree]. */
 private const val PROJECT_PANE = "ProjectPane"
@@ -463,6 +480,11 @@ private fun ToolWindowContent(
  * page). From the middle a swipe opens either side when [canShow] allows it; from a side page only
  * the swipe back to the middle works. Horizontal drags are taken before the editor sees them, so
  * selecting text by dragging sideways doesn't work in this layout.
+ *
+ * A page at rest with one island draws it flush with the screen's sides and square: the island gap
+ * and the rounded corners come back while the pages move (a swipe, or a slide after a bar button)
+ * and while the page shows two islands ([split]), so neighbouring islands keep their gap while
+ * sliding. The side bars of the other layouts don't exist here, so the gap would only waste room.
  */
 @Composable
 private fun SwipePager(
@@ -478,80 +500,106 @@ private fun SwipePager(
   left: @Composable () -> Unit,
   middle: @Composable () -> Unit,
   right: @Composable () -> Unit,
+  /** Whether that page shows two islands, which keep their gap and corners. */
+  split: (Page) -> Boolean,
   modifier: Modifier,
 ) {
+  // Where the pages are, in pages: 0 shows the middle, 1 the left page, -1 the right page. Kept in
+  // pages, not px, so the gap growing or shrinking doesn't move them.
+  fun positionOf(target: Page) =
+    when (target) {
+      Page.LEFT -> 1f
+      Page.MIDDLE -> 0f
+      Page.RIGHT -> -1f
+    }
+  val position = remember { Animatable(positionOf(page)) }
+  var dragging by remember { mutableStateOf(false) }
+  val scope = rememberCoroutineScope()
+  LaunchedEffect(page) { position.animateTo(positionOf(page)) }
+
+  val rounded = dragging || position.isRunning || split(page)
+  val gap by animateDpAsState(if (rounded) IslandsDark.islandGap else 0.dp)
+  val radius by animateDpAsState(if (rounded) IslandsDark.islandRadius else 0.dp)
+
   BoxWithConstraints(modifier.clipToBounds()) {
-    // One page is a screen wide plus the gap between islands, so neighbouring islands keep their
-    // gap while sliding.
-    val width =
-      constraints.maxWidth.toFloat() + with(LocalDensity.current) { IslandsDark.islandGap.toPx() }
-    fun offsetOf(target: Page) =
-      when (target) {
-        Page.LEFT -> width
-        Page.MIDDLE -> 0f
-        Page.RIGHT -> -width
-      }
-    val offset = remember { Animatable(offsetOf(page)) }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(page, width) { offset.animateTo(offsetOf(page)) }
+    val density = LocalDensity.current
+    val gapPx = with(density) { gap.toPx() }
+    // One page is a screen wide plus the gap, so neighbouring islands keep their gap while sliding;
+    // the gap also stands between the islands and the screen's sides.
+    val width = constraints.maxWidth.toFloat() - gapPx
 
     Box(
-      Modifier.fillMaxSize().pointerInput(page, width) {
+      Modifier.fillMaxSize().pointerInput(page) {
         val range =
           when (page) {
-            Page.LEFT -> 0f..width
+            Page.LEFT -> 0f..1f
             Page.MIDDLE ->
-              (if (canShow(Side.RIGHT)) -width else 0f)..(if (canShow(Side.LEFT)) width else 0f)
-            Page.RIGHT -> -width..0f
+              (if (canShow(Side.RIGHT)) -1f else 0f)..(if (canShow(Side.LEFT)) 1f else 0f)
+            Page.RIGHT -> -1f..0f
           }
         awaitEachGesture {
           val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
           val velocity = VelocityTracker()
           var travelled = Offset.Zero
           var swiping = false
-          while (true) {
-            val change =
-              awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
-                ?: break
-            if (!change.pressed) break
-            val delta = change.positionChange()
-            if (!swiping) {
-              travelled += delta
-              if (travelled.getDistance() < viewConfiguration.touchSlop) continue
-              // Mostly sideways: a swipe. Anything else belongs to the content (scrolling, taps).
-              if (abs(travelled.x) < 2 * abs(travelled.y)) return@awaitEachGesture
-              // A sideways swipe scrolls the page's content (editor text, tool window tree) unless
-              // it is already at that edge. Decided once here, so one swipe never turns from
-              // scrolling into switching.
-              if (canScroll(page, travelled.x)) return@awaitEachGesture
-              swiping = true
+          try {
+            while (true) {
+              val change =
+                awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
+                  ?: break
+              if (!change.pressed) break
+              val delta = change.positionChange()
+              if (!swiping) {
+                travelled += delta
+                if (travelled.getDistance() < viewConfiguration.touchSlop) continue
+                // Mostly sideways: a swipe. Anything else belongs to the content (scrolling, taps).
+                if (abs(travelled.x) < 2 * abs(travelled.y)) return@awaitEachGesture
+                // A sideways swipe scrolls the page's content (editor text, tool window tree)
+                // unless it is already at that edge. Decided once here, so one swipe never turns
+                // from scrolling into switching.
+                if (canScroll(page, travelled.x)) return@awaitEachGesture
+                swiping = true
+                dragging = true
+              }
+              change.consume()
+              velocity.addPosition(change.uptimeMillis, change.position)
+              val pageWidth = size.width.toFloat()
+              scope.launch {
+                position.snapTo((position.value + delta.x / pageWidth).coerceIn(range))
+              }
             }
-            change.consume()
-            velocity.addPosition(change.uptimeMillis, change.position)
-            scope.launch { offset.snapTo((offset.value + delta.x).coerceIn(range)) }
+            if (!swiping) return@awaitEachGesture
+            // Past a third of the screen, or a quick flick, moves one page; otherwise it springs
+            // back.
+            val flick = velocity.calculateVelocity().x
+            val moved = position.value - positionOf(page)
+            val target =
+              when {
+                moved > 1f / 3 || flick > 1000f ->
+                  if (page == Page.RIGHT) Page.MIDDLE else Page.LEFT
+                moved < -1f / 3 || flick < -1000f ->
+                  if (page == Page.LEFT) Page.MIDDLE else Page.RIGHT
+                else -> page
+              }.takeIf { positionOf(it) in range } ?: page
+            if (target == page) scope.launch { position.animateTo(positionOf(page)) }
+            else onPage(target)
+          } finally {
+            dragging = false
           }
-          if (!swiping) return@awaitEachGesture
-          // Past a third of the screen, or a quick flick, moves one page; otherwise it springs
-          // back.
-          val flick = velocity.calculateVelocity().x
-          val moved = offset.value - offsetOf(page)
-          val target =
-            when {
-              moved > width / 3 || flick > 1000f ->
-                if (page == Page.RIGHT) Page.MIDDLE else Page.LEFT
-              moved < -width / 3 || flick < -1000f ->
-                if (page == Page.LEFT) Page.MIDDLE else Page.RIGHT
-              else -> page
-            }.takeIf { offsetOf(it) in range } ?: page
-          if (target == page) scope.launch { offset.animateTo(offsetOf(page)) } else onPage(target)
         }
       },
     ) {
-      listOf(Page.LEFT to left, Page.MIDDLE to middle, Page.RIGHT to right).forEach {
-        (target, content) ->
-        val base = -offsetOf(target)
-        Box(Modifier.fillMaxSize().offset { IntOffset((base + offset.value).roundToInt(), 0) }) {
-          content()
+      CompositionLocalProvider(LocalIslandRadius provides radius) {
+        listOf(Page.LEFT to left, Page.MIDDLE to middle, Page.RIGHT to right).forEach {
+          (target, content) ->
+          val base = -positionOf(target)
+          Box(
+            Modifier.fillMaxSize().padding(horizontal = gap).offset {
+              IntOffset(((base + position.value) * width).roundToInt(), 0)
+            },
+          ) {
+            content()
+          }
         }
       }
     }
@@ -571,7 +619,7 @@ private fun EditorIsland(
   LaunchedEffect(state.backendClipboard) {
     state.backendClipboard?.let { systemClipboard.setText(AnnotatedString(it.text)) }
   }
-  Column(modifier.island()) {
+  Column(modifier.island(LocalIslandRadius.current)) {
     val selected = state.editors.firstOrNull { it.path == state.selectedEditor }
     EditorTabs(state, session)
     val scheme = state.scheme

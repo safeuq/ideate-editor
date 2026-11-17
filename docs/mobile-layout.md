@@ -124,8 +124,17 @@ the bottom instead of Gateway's sidebar ([`intellij-look.md`](intellij-look.md) 
   Shift+wheel). Checked on the emulator (Pixel 3a) and the desktop, 2026-11-17 against the Mac backend:
   `AVeryLongClassNameThatDoesNotFitInTheProjectToolWindowAtAllEvenOnTablets` in `src/demo`; a drag left on Project
   scrolled to the name's end and stayed on Project, the next drag left went back to the editor.
-- One page is the screen width plus the 6 dp island gap, so two islands keep their gap and rounded corners while
-  sliding (before, they touched mid-swipe).
+- **Flush when alone** (since 2026-11-18, user request): a page at rest with one island (the editor alone, one tool
+  window, one bottom window) draws it square and flush with the screen's sides; with no side bars upright, the gap
+  and corners only waste room. The 6 dp gap and the rounded corners come back, animated, as soon as the pages move
+  (a swipe passes the touch slop, or a bar button slides to another page) and while the page shows two islands
+  (a split). When a swipe or slide settles on a page with one island, it goes flush again. The pages' position is
+  kept in pages, not px, so the gap growing or shrinking doesn't move them (`SwipePager`, `LocalIslandRadius`).
+  Wide and compact keep IntelliJ's gaps and corners. Checked on the emulator, 2026-11-18 ~00:51 IST: editor and
+  Project flush; mid-swipe both islands rounded with the gap; released on the editor, flush again; Project over
+  Structure rounded with gaps.
+- One page is the screen width plus the island gap (0 when flush), so two islands keep their gap and rounded corners
+  while sliding (before 2026-11-17, they touched mid-swipe).
 - Opening a file from the Project tool window (double tap) slides back to the editor, closing the bottom windows if
   they were in its place.
 - The swipe takes the touch events in Compose's `Initial` pass, before the editor sees them.
