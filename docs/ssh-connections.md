@@ -12,7 +12,9 @@ Status, 2026-11-17:
 - **Step 1, done:** the SSH layer in `compose/.../ssh/` (`SshSession`, `SshKeys`, the `RemoteHost` interface).
 - **Step 2, done:** `RemoteHost` in two implementations, `WorkerHost` and `ShellHost`, picked by `RemoteHosts`.
 - **Step 3, done:** saved hosts, secrets, known hosts and the log-in methods.
-- **Everything else** is planned. The findings below come from JetBrains Gateway 2026.3
+- **Step 4, done:** the SSH page, the new-connection and Choose IDE dialogs, the folder browser over SSH, and
+  the open-project flow.
+- **Step 2:** waits for `RemoteHosts.forSession` (intellij-android, #16). The findings below come from JetBrains Gateway 2026.3
 (`GW-263.7307.184`), read statically (decompiled `lib/intellij.gateway.core.jar` and `lib/intellij.gateway.ssh.jar`,
 symbol and string tables of the Go worker in `lib/remote-dev-workers/`), from Gateway's log and settings, and from
 the files on the phone and the Mac. **Seen** = read in code, binaries, logs or files. **Inferred** = reasoned
@@ -301,6 +303,77 @@ Tests: `SshSetupTest` (6 tests, unit) covers the config, known hosts, saved host
 (3 tests, against the Docker test host) now goes through `KnownHosts`: the first connection is `UNKNOWN` and gets
 trusted, the second is `KNOWN`.
 
+## Step 4: the SSH page (done)
+
+The SSH page copies Gateway 2026.3's, captured from the user's Gateway window on 2026-11-17 (read only). The
+texts are Gateway's own, from `messages/GatewayBundle.properties` in `intellij.gateway.core.jar`; the host-key
+questions come from IntelliJ's `messages/SshBundle.properties`.
+
+| Part | Gateway | IDEate |
+|---|---|---|
+| Sidebar | Connections: SSH (`expui/nodes/ssh.svg`), then Link | This phone (an inlined phone outline; IntelliJ has no phone icon) or This computer (`expui/nodes/desktop.svg`), SSH, Link. Portrait: three bottom tabs |
+| Header | "Recent SSH Projects", **New Project** split button | the same, without the drop-down |
+| Host group | `user@host` (`:port` unless 22), then at the right: red "Host unreachable" (Label.errorForeground, Red7 `#DB5C5C`) or "Connecting…" / "Getting projects…" / "Authenticate…"; Reconnect when unreachable, Open SSH Terminal, Open Project (+), the gear menu | the same, without Open SSH Terminal; the gear menu has Remove Host |
+| Unreachable host | paths in disabledText (Gray6 `#5A5D63`), no status, no ⋮ | the same |
+| Project rows | link-blue path shortened in the middle, "Last active: 52 minutes ago", ⋮ with "Remove from Recent Projects" | the same (`TextOverflow.MiddleEllipsis`) |
+| No hosts | "SSH Connection", "Work with a project on a machine reachable using SSH", New Connection | the description and New Connection |
+| A host without projects | "Projects will appear after the first connection…" | the same |
+| Refresh | every 10 s, unreachable hosts every 30 s | the same, while the page shows |
+
+Dialogs, drawn like IntelliJ's (the folder chooser's frame: 475 dp wide, 32 dp title):
+
+| Dialog | Gateway | IDEate |
+|---|---|---|
+| Connect to SSH | Username, Host, Port (22), "Specify private key", **Check Connection and Continue** | the same fields, then the log-in method: IDEate key (its public line and **Copy Public Key**), Specify private key (paste the key and its passphrase), Password (with Save password), and on the desktop "OpenSSH config and authentication agent". The host is saved only once it logs in |
+| Host key, unknown | "The authenticity of host '{0}' cannot be established. {1} key fingerprint is {2}. Are you sure you want to continue connecting?" | the same text in the page, Continue / Cancel |
+| Host key, changed | "Warning: remote host identification has changed! …" | the same; accepting replaces IDEate's entry |
+| Choose IDE and Project | "IDE version:" (installed ones marked "installed"), "Project directory:" with a browse button, **Start IDE and Connect** | the installed IDEs only (no downloads), the path (`~` allowed), **…** opens the folder browser |
+| Choose Remote Project | the remote file browser from `/` | the shared FolderChooser with `root` `/` (or Termux's files folder when `$HOME` is in Termux) and Home = the host's `$HOME` |
+| Authentication | "Authenticating to:", "Password:" or "Key passphrase for the file:", **Authenticate** | the same |
+| Progress | "Checking for already running IDE Backend", "Starting the remote IDE Backend", "Waiting for the IDE Backend to start", "Performing the SSH port forwarding" | the same titles in the start popup, with Cancel |
+
+Opening a project (`SshController.openProject`):
+1. `status`.
+2. If it isn't ready, `launch`, then `status` every second, for up to 3 minutes.
+3. Take the join link.
+4. Forward its port (`SshSession.forward`).
+5. Rewrite the link to `tcp://127.0.0.1:<local port>#<same fragment>`.
+6. Connect with `ConnectionKind.SSH`.
+
+SSH connections are not saved in history: the SSH page lists the host's projects itself, and a forwarded port
+is gone after a restart.
+
+Storage: on the desktop, `~/.ideate/ssh-hosts.json`, `~/.ideate/known_hosts` and `~/.ideate/secrets/`. On
+Android, the `ssh` preferences (`hosts`, `known_hosts`) and the Keystore-encrypted `ssh-secrets`. The key's
+comment is the device: `IDEate on Pixel 3a` (Android `Build.MODEL`), or the computer's host name.
+
+Checked on 2026-11-17:
+- **Desktop, against the Docker test host:**
+  - with a saved password host, IntelliJ's unknown-host question showed the right fingerprint;
+  - Continue saved `[127.0.0.1]:2222 ssh-ed25519 …` to `~/.ideate/known_hosts`, and the host became ready;
+  - the Choose IDE dialog said no IDE is installed;
+  - the folder browser listed `/` and revealed `$HOME` (`/config`);
+  - Connect to SSH showed the generated key.
+- **Emulator:** three bottom tabs; Connect to SSH without the OpenSSH option; the same public key on both
+  openings, so the Keystore encryption round-trips.
+
+- **Desktop, against the phone with the real `RemoteHosts` (92d71ae), read only:**
+  - an OPEN_SSH host `safeuq@192.168.0.107:8022` logged in with the Mac's `~/.ssh` key, without a question,
+    because `~/.ssh/known_hosts` already has the phone;
+  - it listed the same two projects as Gateway: "…/Xflow/xtool, Last active: 23 minutes ago" and
+    "…/intellij/smoke, Last active: Yesterday 1:02 pm";
+  - the first load took about 20 s: finding and checking the worker plus three worker calls, each a phone login
+    shell.
+
+"Last active" follows IntelliJ's `DateFormatUtil.formatPrettyDateTime`, as Gateway does (UtilBundle):
+- within an hour: "Moments ago", "A minute ago", "52 minutes ago", "1 hour ago";
+- then "Today" or "Yesterday" and the time in the locale's short format;
+- else the short date and time.
+
+The JDK puts a narrow no-break space (U+202F) before am/pm (`LastActiveTest`).
+
+Not checked yet: opening a project end to end. It needs `RemoteHosts` (step 2) and a host with an IDE.
+
 ## Steps
 
 | # | Step | Who | Depends on |
@@ -308,7 +381,7 @@ trusted, the second is `KNOWN`.
 | 1 | Spike: SSHJ on Android and desktop; key and password log-in; exec; local forward; APK size. **Done**. Agent log-in moves to step 3 | intellij-android-ui | |
 | 2 | `RemoteHost` with `ShellHost` and `WorkerHost`, tested against the Mac, Termux on the phone and a Linux container. **Done** (launch and the Mac over SSH still untested, see step 2) | intellij-android | 1 (interface first, so 2 and 3 can run in parallel) |
 | 3 | Saved hosts, `SecretStore` (Android Keystore, desktop), `KnownHosts`, log-in methods. **Done** | intellij-android-ui | 1 |
-| 4 | SSH page, new-connection dialog, host groups, refresh | intellij-android-ui | 2, 3 |
+| 4 | SSH page, new-connection dialog, host groups, refresh. **Done** (open project not yet run end to end) | intellij-android-ui | 2, 3 |
 | 5 | Open project: IDE pick, folder browser over SSH, start, forward, history entry, reconnect after a backend restart | split between the sessions | 4 |
 | 6 | Docs (this file becomes the description), emulator and phone tests, Mac backend from the phone | both | 5 |
 

@@ -43,7 +43,7 @@ import intellijandroid.client.ui.IslandsDark
  * at the end, so the bar is indeterminate like IntelliJ's and the detail line names the project.
  */
 @Composable
-fun StartProgress(project: String, fonts: ClientFonts, onCancel: () -> Unit) {
+fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: () -> Unit) {
   val text =
     TextStyle(
       color = IslandsDark.text,
@@ -77,7 +77,7 @@ fun StartProgress(project: String, fonts: ClientFonts, onCancel: () -> Unit) {
       horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        BasicText("Starting the remote IDE Backend", style = text)
+        BasicText(title, style = text)
         Canvas(Modifier.fillMaxWidth().height(Popup.barHeight)) {
           val radius = CornerRadius(size.height / 2)
           drawRoundRect(Popup.track, cornerRadius = radius)
@@ -87,7 +87,7 @@ fun StartProgress(project: String, fonts: ClientFonts, onCancel: () -> Unit) {
             drawRoundRect(Popup.fill, Offset(start, 0f), Size(end - start, size.height), radius)
         }
         BasicText(
-          "Running intellij-backend start for ${project.trimEnd('/').substringAfterLast('/')}; this takes up to 3 minutes",
+          detail,
           style = text.copy(color = IslandsDark.textSecondary),
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,

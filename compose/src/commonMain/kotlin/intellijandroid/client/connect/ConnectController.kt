@@ -37,6 +37,7 @@ import kotlinx.serialization.json.jsonPrimitive
  *
  * @param device the first page's label, `This phone` or `This computer`
  * @param termux null where there is no Termux (the desktop)
+ * @param ssh what the SSH page needs from the platform; null hides the page
  */
 class ConnectController(
   private val history: ConnectionHistory,
@@ -45,7 +46,15 @@ class ConnectController(
   private val lastFile: StoredText,
   private val termux: Termux?,
   private val device: String,
+  ssh: SshSetup? = null,
 ) {
+  /** The SSH page; it hands an opened project's forwarded link back to [connect]. */
+  private val sshController = ssh?.let { setup ->
+    SshController(setup) { forwarded, projectPath ->
+      connect(ConnectionKind.SSH, forwarded, projectPath, openFile = null, identity = null)
+    }
+  }
+
   var session by mutableStateOf<ClientSession?>(null)
     private set
 
@@ -112,6 +121,7 @@ class ConnectController(
       answerQuestion = { question?.onConfirm?.invoke() },
       cancelQuestion = { question = null },
       cancelStart = ::cancelStart,
+      ssh = sshController?.actions,
     )
 
   fun screenState() =
@@ -127,6 +137,7 @@ class ConnectController(
       message,
       question,
       starting,
+      sshController?.state ?: SshPageState(),
     )
 
   /**
@@ -140,6 +151,7 @@ class ConnectController(
 
   fun close() {
     session?.stop()
+    sshController?.close()
     main.cancel()
   }
 
@@ -227,11 +239,14 @@ class ConnectController(
   private fun onAccepted(current: Attempt, identity: String) {
     if (attempt !== current) return
     accepted = true
+    // The SSH page lists the host's projects itself; a forwarded link is no use after a restart.
+    if (current.kind == ConnectionKind.SSH) return
     val previous = saved.firstOrNull { it.key == keyOf(current) }
     val name =
       when (current.kind) {
         ConnectionKind.TERMUX -> "$device · ${current.project?.substringAfterLast('/')}"
-        ConnectionKind.LINK -> previous?.name ?: "${current.link.host}:${current.link.port}"
+        ConnectionKind.LINK,
+        ConnectionKind.SSH -> previous?.name ?: "${current.link.host}:${current.link.port}"
       }
     history.save(
       SavedConnection(
@@ -264,6 +279,8 @@ class ConnectController(
         connect(ConnectionKind.LINK, entry.lastLink, project = null, entry.openFile, entry.identity)
       }
       ConnectionKind.TERMUX -> openTermux(entry.project)
+      // Never saved (onAccepted); kept for the exhaustive when.
+      ConnectionKind.SSH -> page = ConnectPage.SSH
     }
   }
 

@@ -11,9 +11,13 @@ import intellijandroid.client.connect.ConnectController
 import intellijandroid.client.connect.ConnectScreen
 import intellijandroid.client.connect.ConnectionHistory
 import intellijandroid.client.connect.IdeateApp
+import intellijandroid.client.connect.SshSetup
 import intellijandroid.client.connect.StoredText
+import intellijandroid.client.desktop.DesktopOpenSshFiles
 import intellijandroid.client.desktop.DesktopResources
+import intellijandroid.client.desktop.FileSecretStore
 import intellijandroid.client.desktop.Snapshots
+import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.IslandsDark
 import intellijandroid.client.ui.LocalClientFonts
@@ -67,6 +71,18 @@ fun main(arguments: Array<String>) {
       lastFile = FileText(dataFolder.resolve("open-file.txt")),
       termux = null,
       device = "This computer",
+      ssh =
+        SshSetup(
+          hosts = FileText(dataFolder.resolve("ssh-hosts.json")),
+          knownHosts = FileText(dataFolder.resolve("known_hosts")),
+          secrets = FileSecretStore(dataFolder.resolve("secrets")),
+          openSsh = DesktopOpenSshFiles,
+          alsoKnownHosts = DesktopOpenSshFiles::knownHosts,
+          remoteHostFor = RemoteHosts::forSession,
+          deviceName =
+            runCatching { java.net.InetAddress.getLocalHost().hostName.substringBefore('.') }
+              .getOrDefault("desktop"),
+        ),
     )
   arguments.firstOrNull()?.let { link -> controller.connectLink(link, arguments.getOrNull(1)) }
 

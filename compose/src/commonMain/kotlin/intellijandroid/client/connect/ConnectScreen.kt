@@ -43,6 +43,11 @@ import androidx.compose.ui.window.PopupProperties
 import intellijandroid.client.ui.ClientFonts
 import intellijandroid.client.ui.IslandsDark
 import intellijandroid.client.ui.LocalIcons
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 /** What the connect screen shows; [ConnectController] owns it. */
 data class ConnectScreenState(
@@ -68,11 +73,14 @@ data class ConnectScreenState(
    * Backend" popup.
    */
   val starting: String?,
+  /** The SSH page (SshController). */
+  val ssh: SshPageState = SshPageState(),
 )
 
-/** The sidebar's connection kinds, like Gateway's SSH and Link. SSH is not built yet. */
+/** The sidebar's connection kinds: this device, Gateway's SSH and Link. */
 enum class ConnectPage {
   PHONE,
+  SSH,
   LINK,
 }
 
@@ -101,6 +109,7 @@ class ConnectActions(
   val answerQuestion: () -> Unit,
   val cancelQuestion: () -> Unit,
   val cancelStart: () -> Unit,
+  val ssh: SshActions? = null,
 )
 
 /**
@@ -126,6 +135,7 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
         when (state.page) {
           ConnectPage.PHONE ->
             PhonePage(state, actions, styles, onNewProject = { choosingFolder = true })
+          ConnectPage.SSH -> actions.ssh?.let { SshPage(state.ssh, it, styles) }
           ConnectPage.LINK -> LinkPage(state, actions, styles)
         }
       }
@@ -161,7 +171,15 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
       onCancel = { choosingFolder = false },
     )
   }
-  state.starting?.let { project -> StartProgress(project, fonts, actions.cancelStart) }
+  state.starting?.let { project ->
+    StartProgress(
+      "Starting the remote IDE Backend",
+      "Running intellij-backend start for ${project.trimEnd('/').substringAfterLast('/')}; this takes up to 3 minutes",
+      fonts,
+      actions.cancelStart,
+    )
+  }
+  actions.ssh?.let { ssh -> SshOverlays(state.ssh, ssh, fonts) }
 }
 
 /**
@@ -200,10 +218,18 @@ private fun BottomTabs(
   }
 }
 
-/** The connection kinds: page, icon, label. */
+/**
+ * The connection kinds: page, icon, label. SSH takes Gateway's `ssh.svg`; this device gets a phone
+ * (IntelliJ has none, so it's inlined in IconJar) or the platform's desktop icon.
+ */
 private fun pages(device: String) =
   listOf(
-    Triple(ConnectPage.PHONE, "expui/nodes/ssh.svg", device),
+    Triple(
+      ConnectPage.PHONE,
+      if (device == "This phone") "ideate/phone.svg" else "expui/nodes/desktop.svg",
+      device,
+    ),
+    Triple(ConnectPage.SSH, "expui/nodes/ssh.svg", "SSH"),
     Triple(ConnectPage.LINK, "markdown/link.svg", "Link"),
   )
 
@@ -243,8 +269,9 @@ private fun Sidebar(
     ) {
       BasicText("Connections", style = styles.secondary)
     }
-    val (phone, link) = pages(device)
+    val (phone, ssh, link) = pages(device)
     Item(phone.first, phone.second, phone.third)
+    Item(ssh.first, ssh.second, ssh.third)
     Box(Modifier.padding(vertical = 7.dp).fillMaxWidth().height(1.dp).background(Gateway.divider))
     Item(link.first, link.second, link.third)
   }
@@ -254,13 +281,17 @@ private fun Sidebar(
  * One project row: Gateway's product icon, the path in link blue, then Running with a stop square
  * or Last active.
  */
-private class ProjectRow(
+internal class ProjectRow(
   val title: String,
   val running: Boolean,
   val lastActive: Long?,
   val onOpen: () -> Unit,
   val onStop: (() -> Unit)?,
   val onRemove: (() -> Unit)?,
+  /** False while the host is unreachable: Gateway greys the path and shows no status. */
+  val enabled: Boolean = true,
+  /** Gateway shortens long remote paths in the middle: `/data/data/c…es/home/Files/…/xtool`. */
+  val middleEllipsis: Boolean = false,
 )
 
 @Composable
@@ -433,7 +464,7 @@ private fun Notices(state: ConnectScreenState, actions: ConnectActions, styles: 
 }
 
 @Composable
-private fun Notice(text: String, styles: ConnectStyles, color: Color = IslandsDark.textSecondary) =
+internal fun Notice(text: String, styles: ConnectStyles, color: Color = IslandsDark.textSecondary) =
   BasicText(
     text,
     style = styles.body.copy(color = color),
@@ -441,7 +472,7 @@ private fun Notice(text: String, styles: ConnectStyles, color: Color = IslandsDa
   )
 
 @Composable
-private fun Header(title: String, styles: ConnectStyles, trailing: @Composable () -> Unit) {
+internal fun Header(title: String, styles: ConnectStyles, trailing: @Composable () -> Unit) {
   Row(
     Modifier.fillMaxWidth()
       .height(Gateway.headerHeight)
@@ -461,7 +492,7 @@ private fun Header(title: String, styles: ConnectStyles, trailing: @Composable (
 }
 
 @Composable
-private fun SearchRow(value: String, onChange: (String) -> Unit, styles: ConnectStyles) {
+internal fun SearchRow(value: String, onChange: (String) -> Unit, styles: ConnectStyles) {
   val icon = LocalIcons.current.painter("expui/inline/searchHistory.svg")
   Row(
     Modifier.fillMaxWidth().height(Gateway.searchHeight).padding(start = Gateway.searchIconInset),
@@ -489,10 +520,21 @@ private fun SearchRow(value: String, onChange: (String) -> Unit, styles: Connect
   Box(Modifier.fillMaxWidth().height(1.dp).background(Gateway.divider))
 }
 
-private class HeaderIcon(val path: String, val description: String, val onClick: () -> Unit)
+internal class HeaderIcon(val path: String, val description: String, val onClick: () -> Unit)
 
 @Composable
-private fun HostGroup(host: String, styles: ConnectStyles, icons: List<HeaderIcon>) {
+internal fun HostGroup(
+  host: String,
+  styles: ConnectStyles,
+  icons: List<HeaderIcon>,
+  /** Gateway's state at the right, e.g. red "Host unreachable" or "Connecting…". */
+  status: String? = null,
+  statusColor: Color = IslandsDark.textSecondary,
+  onStatusClick: (() -> Unit)? = null,
+  /** Gateway's host gear menu. */
+  menu: List<Pair<String, () -> Unit>> = emptyList(),
+) {
+  var menuOpen by remember { mutableStateOf(false) }
   Row(
     Modifier.fillMaxWidth()
       .padding(top = 17.dp)
@@ -507,17 +549,36 @@ private fun HostGroup(host: String, styles: ConnectStyles, icons: List<HeaderIco
       overflow = TextOverflow.Ellipsis,
       modifier = Modifier.weight(1f),
     )
+    status?.let {
+      BasicText(
+        it,
+        style = styles.body.copy(color = statusColor),
+        maxLines = 1,
+        modifier =
+          Modifier.padding(end = 8.dp)
+            .then(
+              if (onStatusClick != null) Modifier.clickable(onClick = onStatusClick) else Modifier,
+            ),
+      )
+    }
     icons.forEach { icon -> IconButton(icon.path, icon.description, icon.onClick) }
+    if (menu.isNotEmpty()) {
+      Box {
+        IconButton("expui/general/settings.svg", "Host Settings") { menuOpen = true }
+        if (menuOpen) ProjectMenu(onDismiss = { menuOpen = false }, items = menu, styles)
+      }
+    }
   }
   Spacer(Modifier.height(5.dp))
 }
 
 @Composable
-private fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
+internal fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
   val icon = LocalIcons.current.painter("expui/nodes/ideaProject.svg")
   var menuOpen by remember { mutableStateOf(false) }
   val status =
-    if (row.running) "Running"
+    if (!row.enabled) ""
+    else if (row.running) "Running"
     else
       row.lastActive?.let { "Last active: ${lastActive(it, System.currentTimeMillis())}" }.orEmpty()
   val statusStyle =
@@ -533,10 +594,11 @@ private fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
       @Composable { modifier: Modifier ->
         BasicText(
           row.title,
-          style = styles.body.copy(color = IslandsDark.link),
+          style =
+            styles.body.copy(color = if (row.enabled) IslandsDark.link else Gateway.disabledText),
           maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = modifier.clickable(onClick = row.onOpen),
+          overflow = if (row.middleEllipsis) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
+          modifier = if (row.enabled) modifier.clickable(onClick = row.onOpen) else modifier,
         )
       }
     if (styles.twoLineRows) {
@@ -554,7 +616,7 @@ private fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
       }
     }
     row.onStop?.let { stop -> IconButton("expui/run/stop.svg", "Stop", stop) }
-    if (row.onRemove != null) {
+    if (row.onRemove != null && row.enabled) {
       Box {
         IconButton("expui/general/moreVertical.svg", "More") { menuOpen = true }
         if (menuOpen) {
@@ -611,7 +673,7 @@ private fun ProjectMenu(
 }
 
 @Composable
-private fun IconButton(path: String, description: String, onClick: () -> Unit) {
+internal fun IconButton(path: String, description: String, onClick: () -> Unit) {
   val icon = LocalIcons.current.painter(path) ?: return
   Box(
     Modifier.size(width = Gateway.iconStep, height = 28.dp).clickable(onClick = onClick),
@@ -623,7 +685,7 @@ private fun IconButton(path: String, description: String, onClick: () -> Unit) {
 
 /** A bordered text field, for the join link and the file to open. */
 @Composable
-private fun Field(value: String, onChange: (String) -> Unit, styles: ConnectStyles) {
+internal fun Field(value: String, onChange: (String) -> Unit, styles: ConnectStyles) {
   BasicTextField(
     value = value,
     onValueChange = onChange,
@@ -635,7 +697,7 @@ private fun Field(value: String, onChange: (String) -> Unit, styles: ConnectStyl
 }
 
 @Composable
-private fun OutlinedButton(text: String, styles: ConnectStyles, onClick: () -> Unit) {
+internal fun OutlinedButton(text: String, styles: ConnectStyles, onClick: () -> Unit) {
   Box(
     Modifier.height(Gateway.buttonHeight)
       .border(1.dp, Gateway.buttonBorder, Gateway.buttonShape)
@@ -654,20 +716,39 @@ private fun OutlinedButton(text: String, styles: ConnectStyles, onClick: () -> U
 private fun shortPath(path: String) =
   if (path.startsWith(Termux.HOME)) "~" + path.removePrefix(Termux.HOME) else path
 
-/** Gateway's "17 minutes ago". */
-internal fun lastActive(thenMillis: Long, nowMillis: Long): String {
-  val minutes = (nowMillis - thenMillis) / 60_000
-  fun ago(count: Long, unit: String) = "$count $unit${if (count == 1L) "" else "s"} ago"
-  return when {
-    minutes < 1 -> "just now"
-    minutes < 60 -> ago(minutes, "minute")
-    minutes < 24 * 60 -> ago(minutes / 60, "hour")
-    else -> ago(minutes / (24 * 60), "day")
+/**
+ * IntelliJ's `DateFormatUtil.formatPrettyDateTime`, which Gateway's "Last active:" uses (Community
+ * 263.7307.200): within about an hour "Moments ago", "A minute ago", "52 minutes ago", "1 hour ago"
+ * (UtilBundle `date.format.minutes.ago`); then "Today 1:02 pm" or "Yesterday 1:02 pm"; else the
+ * short date and time, e.g. "15/11/26, 10:21 am" (in the locale's own formats).
+ */
+internal fun lastActive(
+  thenMillis: Long,
+  nowMillis: Long,
+  zone: ZoneId = ZoneId.systemDefault(),
+  locale: Locale = Locale.getDefault(),
+): String {
+  val delta = nowMillis - thenMillis
+  if (delta in 0..(61 * 60_000L)) {
+    return when (val minutes = Math.rint(delta / 60_000.0).toInt()) {
+      0 -> "Moments ago"
+      1 -> "A minute ago"
+      in 2..59 -> "$minutes minutes ago"
+      else -> "1 hour ago"
+    }
+  }
+  val then = Instant.ofEpochMilli(thenMillis).atZone(zone)
+  val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+  val time = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).format(then)
+  return when (then.toLocalDate()) {
+    today -> "Today $time"
+    today.minusDays(1) -> "Yesterday $time"
+    else -> DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT).withLocale(locale).format(then)
   }
 }
 
 /** [twoLineRows]: the status goes under the path, for narrow screens. */
-private class ConnectStyles(fonts: ClientFonts, val twoLineRows: Boolean) {
+internal class ConnectStyles(fonts: ClientFonts, val twoLineRows: Boolean) {
   val body =
     TextStyle(
       color = IslandsDark.text,
@@ -687,11 +768,13 @@ private class ConnectStyles(fonts: ClientFonts, val twoLineRows: Boolean) {
 }
 
 /** Measured on Gateway 2026.3's welcome window and its ⋮ menu (2x screenshots), in dp = pt. */
-private object Gateway {
+internal object Gateway {
   val background = Color(0xFF1C1D20)
   val divider = Color(0xFF2B2D30)
   val selection = Color(0xFF2E436E) // selected sidebar row, full width, square
   val running = Color(0xFF6AAB73)
+  val error = Color(0xFFDB5C5C) // Label.errorForeground: Red7, "Host unreachable"
+  val disabledText = Color(0xFF5A5D63) // disabledText: Gray6, an unreachable host's paths
   val sidebarWidth = 224.dp
   val tabBarHeight = 40.dp // portrait: like the main window's tool window bar
   val tabHeight = 32.dp

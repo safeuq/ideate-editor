@@ -19,6 +19,8 @@ import kotlinx.serialization.json.put
 enum class ConnectionKind {
   LINK,
   TERMUX,
+  /** Opened from the SSH page: not saved in history, the page lists the host's projects itself. */
+  SSH,
 }
 
 /**

@@ -58,6 +58,10 @@ fun FolderChooser(
   listFolders: (path: String, onResult: (Result<List<Termux.Folder>>) -> Unit) -> Unit,
   onChoose: (String) -> Unit,
   onCancel: () -> Unit,
+  /** The tree's top folder: Termux's files folder, or `/` on an SSH host. */
+  root: String = TERMUX_ROOT,
+  /** Where the Home button goes. */
+  home: String = Termux.HOME,
 ) {
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
@@ -85,15 +89,19 @@ fun FolderChooser(
     }
 
   /**
-   * Expands the folders from [ROOT] down to [target] and selects it, like the real chooser does for
+   * Expands the folders from [root] down to [target] and selects it, like the real chooser does for
    * its path.
    */
   fun reveal(target: String) {
-    val clean = target.trimEnd('/')
-    if (!clean.startsWith(ROOT)) return
+    val clean = target.trimEnd('/').ifEmpty { "/" }
+    if (!clean.startsWith(root)) return
     val chain =
       generateSequence(clean) { folder ->
-          folder.substringBeforeLast('/').takeIf { it.length >= ROOT.length && it != folder }
+          // `/home` → `/`, so a root of `/` is part of the chain too.
+          folder
+            .substringBeforeLast('/')
+            .ifEmpty { "/" }
+            .takeIf { it.length >= root.length && it != folder }
         }
         .toList()
         .reversed()
@@ -103,19 +111,22 @@ fun FolderChooser(
     path = clean
   }
 
-  LaunchedEffect(Unit) { if (initialPath.startsWith(ROOT)) reveal(initialPath) else load(ROOT) }
+  LaunchedEffect(Unit) { if (initialPath.startsWith(root)) reveal(initialPath) else load(root) }
 
   val tree =
     remember(children.toMap(), expanded, selected, showHidden) {
       val nodes = mutableMapOf<Int, TreeNode>()
-      /** [listed]: what the parent's listing said about [folder]; null for [ROOT]. */
+      /** [listed]: what the parent's listing said about [folder]; null for [root]. */
       fun add(folder: String, parent: String?, listed: Termux.Folder?, sortKey: Int) {
         val loaded = children[folder]?.filter { showHidden || !it.name.startsWith(".") }
         nodes[idOf(folder)] =
           TreeNode(
             id = idOf(folder),
             parentId = parent?.let(::idOf),
-            fragments = listOf(TextFragment(listed?.name ?: ROOT.substringAfterLast('/'), 0, null)),
+            fragments =
+              listOf(
+                TextFragment(listed?.name ?: root.substringAfterLast('/').ifEmpty { "/" }, 0, null),
+              ),
             iconPaths =
               listOf(
                 if (listed?.isProject == true) "expui/nodes/ideaProject.svg"
@@ -128,10 +139,10 @@ fun FolderChooser(
           )
         if (folder in expanded)
           loaded?.forEachIndexed { index, child ->
-            add("$folder/${child.name}", folder, child, index)
+            add("${folder.trimEnd('/')}/${child.name}", folder, child, index)
           }
       }
-      add(ROOT, null, null, 0)
+      add(root, null, null, 0)
       ProjectTree(nodes, expanded.map(::idOf).toSet(), selected?.let(::idOf))
     }
 
@@ -178,7 +189,7 @@ fun FolderChooser(
             Image(painter, contentDescription = description, modifier = Modifier.size(16.dp))
           }
         }
-        ToolbarIcon("expui/nodes/homeFolder.svg", "Home") { reveal(Termux.HOME) }
+        ToolbarIcon("expui/nodes/homeFolder.svg", "Home") { reveal(home) }
         Box(
           Modifier.padding(horizontal = 6.dp)
             .width(1.dp)
@@ -308,7 +319,7 @@ private fun DialogButton(
  * Termux's files folder, the top of the tree: it holds `home` and `usr`. Folders above it aren't
  * readable.
  */
-private const val ROOT = "/data/data/com.termux/files"
+private const val TERMUX_ROOT = "/data/data/com.termux/files"
 
 /**
  * Measured on IntelliJ's "Open File or Project" dialog (Islands Dark, macOS, 2x screenshot), in dp
@@ -343,7 +354,7 @@ private object Chooser {
  * Whether a chooser row gets an expand arrow. Once the folder is listed, from its own listing
  * ([loaded], hidden folders already left out unless shown); before that, from what its parent's
  * listing said ([listed]), so an empty folder never shows an arrow that disappears when expanded.
- * [ROOT] has no parent listing and keeps its arrow until loaded.
+ * [root] has no parent listing and keeps its arrow until loaded.
  */
 internal fun hasChildFolders(
   loaded: List<Termux.Folder>?,
