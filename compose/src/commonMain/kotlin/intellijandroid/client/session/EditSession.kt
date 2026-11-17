@@ -515,23 +515,37 @@ class EditSession(
   /**
    * The backend asked for request [requestId] again (`RdRetryResponse`). It ignores, without an
    * answer, every request sent with an older retry timestamp, so like JetBrains Client this
-   * re-sends it and every later pending request once. A second retry gives up: local edits are
-   * rolled back.
+   * re-sends it and every later pending request once. Returns false on a second retry: the versions
+   * here no longer match the backend's, and the caller has to fetch its state ([dropPending],
+   * [recovered]).
    */
-  fun retry(requestId: Long) {
+  fun retry(requestId: Long): Boolean {
     val index = pending.indexOfFirst { it.requestId == requestId }
-    if (index < 0) return
+    if (index < 0) return true
     val later = pending.drop(index)
-    if (later.any { it.retried }) {
-      rollBackPending()
-      pending.clear()
-      followingBackend = false
-      return
-    }
+    if (later.any { it.retried }) return false
     for (request in later) {
       request.requestId = send(request.request)
       request.retried = true
     }
+    return true
+  }
+
+  /** The editor's id in the rd protocol, as `getEditorStates` takes it. */
+  val editorId
+    get() = identity.editorId
+
+  /** Forgets the pending edits and ignores typing until [recovered]. */
+  fun dropPending() {
+    rollBackPending()
+    pending.clear()
+    followingBackend = true
+  }
+
+  /** The backend's state of every open editor (`getEditorStates`), or null if it didn't come. */
+  fun recovered(state: RdPatch?) {
+    state?.let(::apply)
+    followingBackend = false
   }
 
   /** The backend refused request [requestId] (`RdFailureResponse`, `RdNoEditorFoundResponse`). */

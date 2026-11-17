@@ -561,7 +561,7 @@ class ClientSession(
           is RdSuccessResponse -> session.response(response.requestId, response.patch)
           is RdRetryResponse -> {
             log("Request ${response.requestId} to be sent again: ${response.message}")
-            session.retry(response.requestId)
+            if (!session.retry(response.requestId)) recoverEditors()
           }
           else -> {
             log("Request ${response.requestId} not applied: $response")
@@ -939,6 +939,35 @@ class ClientSession(
     earlyPatches.remove(documentId)?.forEach(session::backendPatch)
     controlLifetime.onTermination {
       if (editSessions[documentId] === session) editSessions.remove(documentId)
+    }
+  }
+
+  private var recovering = false
+
+  /**
+   * Like JetBrains Client's `TrustBackendRecoveringStrategy`: drop every queued request on the
+   * backend, then take its text, caret and versions of every open editor. `dropAllRequests` moves
+   * the backend's retry timestamp to (0, generation + 1).
+   */
+  private fun recoverEditors() {
+    val model = requestResponse ?: return
+    if (recovering) return
+    recovering = true
+    log("Edits keep being refused; taking the backend's editor state")
+    editSessions.values.forEach { it.dropPending() }
+    model.dropAllRequests.start(lifetime, Unit).result.advise(lifetime) {
+      retryTimestamp = RdRetryTimestamp(0, retryTimestamp.generation + 1)
+      val sessions = editSessions.values.toList()
+      model.getEditorStates.start(lifetime, sessions.map { it.editorId }).result.advise(lifetime) {
+        result ->
+        val state = runCatching {
+          result.unwrap()
+        }
+          .onFailure { failure -> log("No editor state from the backend: $failure") }
+          .getOrNull()
+        sessions.forEach { it.recovered(state) }
+        recovering = false
+      }
     }
   }
 

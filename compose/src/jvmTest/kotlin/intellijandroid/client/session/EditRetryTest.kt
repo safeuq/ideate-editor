@@ -12,6 +12,8 @@ import com.jetbrains.rd.ide.model.RdResetDocumentChange
 import com.jetbrains.rd.ide.model.TextControlLocation
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * The backend ignores requests sent with a retry timestamp older than its own, so after an
@@ -76,11 +78,15 @@ class EditRetryTest {
   }
 
   @Test
-  fun aSecondRetryRollsBackAndLetsTypingContinue() {
+  fun aSecondRetryAsksForTheBackendsStateAndTypingWaitsForIt() {
     session.type('a')
-    session.retry(1)
-    session.retry(sent.size.toLong() - 1)
+    assertTrue(session.retry(1))
+    assertFalse(session.retry(sent.size.toLong() - 1))
+    session.dropPending()
     assertEquals("", session.text)
+    session.type('x')
+    assertEquals("", session.text)
+    session.recovered(null)
     session.type('c')
     assertEquals("c", session.text)
   }
