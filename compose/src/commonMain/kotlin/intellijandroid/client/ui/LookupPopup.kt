@@ -96,7 +96,9 @@ internal fun LookupPopup(lookup: Lookup, onChoose: (String) -> Unit) {
             .toDp() + Lookups.textInset + Lookups.typeGap + Lookups.rightPadding
         val footer =
           lookup.advertisement?.let {
-            measurer.measure(it, footerStyle).size.width.toDp() + Lookups.footerInset * 2
+            measurer.measure(it, footerStyle).size.width.toDp() +
+              Lookups.footerInset +
+              Lookups.footerRightInset
           } ?: 0.dp
         maxOf(rows, footer).coerceIn(Lookups.minWidth, Lookups.maxWidth)
       }
@@ -152,8 +154,10 @@ internal fun LookupPopup(lookup: Lookup, onChoose: (String) -> Unit) {
         overflow = TextOverflow.Ellipsis,
         modifier =
           Modifier.padding(
-            horizontal = Lookups.footerInset,
-            vertical = Lookups.footerVerticalPadding,
+            start = Lookups.footerInset,
+            end = Lookups.footerRightInset,
+            top = Lookups.footerVerticalPadding,
+            bottom = Lookups.footerVerticalPadding,
           ),
       )
     } else {
@@ -270,7 +274,9 @@ private object Lookups {
   val selection = Color(0xFF2A4371) // selection-bg-active: after the user moved the selection
   val selectionUnfocused = Color(0xFF33353B) // measured #33353A: autopopup before any arrow key
   val secondary = Color(0xFF73767C) // text-secondary: tail, type, group header, footer
-  val rowHeight = 22.dp
+  val rowHeight
+    get() = if (IslandsDark.density == UiDensity.COMPACT) 22.dp else 24.dp // List.rowHeight
+
   val maxRows = 11
   val radius = 6.dp // arc 12
   val verticalPadding = 2.dp // border to first row
@@ -284,8 +290,15 @@ private object Lookups {
   val typeGap = 24.dp
   val separatorGap = 4.dp
   val separatorInset = 11.dp
-  val footerInset = 12.dp // Popup.Advertiser borderInsets 6,12,6,12
-  val footerVerticalPadding = 6.dp
+  // CompletionPopup.Advertiser.borderInsets 6,12,6,12 (compact 2,12,2,8): top, left, bottom, right.
+  val footerInset = 12.dp
+
+  val footerRightInset
+    get() = if (IslandsDark.density == UiDensity.COMPACT) 8.dp else 12.dp
+
+  val footerVerticalPadding
+    get() = if (IslandsDark.density == UiDensity.COMPACT) 2.dp else 6.dp
+
   val minWidth = 160.dp
   val maxWidth = 640.dp
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -122,14 +123,14 @@ fun ToolWindowBar(
   }
   if (vertical) {
     Column(
-      modifier.width(Bars.thickness).verticalScroll(rememberScrollState()),
+      modifier.width(IslandsDark.stripeThickness).verticalScroll(rememberScrollState()),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       Buttons()
     }
   } else {
     Row(
-      modifier.height(Bars.thickness).horizontalScroll(rememberScrollState()),
+      modifier.height(IslandsDark.stripeThickness).horizontalScroll(rememberScrollState()),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Buttons()
@@ -140,15 +141,15 @@ fun ToolWindowBar(
 @Composable
 private fun StripeButton(window: ToolWindow, selected: Boolean, onClick: () -> Unit) {
   val icon = LocalIcons.current.painter(window.icon)
-  Box(Modifier.padding(2.dp).size(Bars.button), contentAlignment = Alignment.Center) {
+  Box(Modifier.padding(2.dp).size(IslandsDark.stripeButton), contentAlignment = Alignment.Center) {
     Box(
       Modifier.matchParentSize()
         .background(if (selected) Bars.selected else Color.Transparent, Bars.buttonShape)
         .clickable(onClick = onClick),
     )
-    // 16 like the main toolbar's icons; IntelliJ's stripes use the 20 px set, which looked heavier
-    // next to them.
-    icon?.let { Image(it, contentDescription = window.title, modifier = Modifier.size(16.dp)) }
+    icon?.let {
+      Image(it, contentDescription = window.title, modifier = Modifier.size(IslandsDark.stripeIcon))
+    }
   }
 }
 
@@ -169,10 +170,10 @@ fun MainToolbar(
     TextStyle(
       color = IslandsDark.text,
       fontFamily = fonts.ui,
-      fontSize = IslandsDark.UI_FONT_SIZE.sp,
+      fontSize = IslandsDark.toolbarFontSize.sp,
     )
   Row(
-    modifier.fillMaxWidth().height(Bars.toolbarHeight).padding(horizontal = 6.dp),
+    modifier.fillMaxWidth().height(IslandsDark.toolbarHeight).padding(horizontal = 6.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     val name = projectName ?: "…"
@@ -180,9 +181,12 @@ fun MainToolbar(
       Modifier.weight(1f, fill = false).padding(end = 8.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      // The project widget's coloured square with the name's first letters.
+      // The project widget's coloured square with the name's first letters; IntelliJ sizes it like
+      // the toolbar icons (RecentProject.Avatar.iconSize falls back to
+      // MainToolbar.Button.iconSize).
       Box(
-        Modifier.size(20.dp).background(Bars.projectBadge, RoundedCornerShape(4.dp)),
+        Modifier.size(IslandsDark.toolbarIcon)
+          .background(Bars.projectBadge, RoundedCornerShape(4.dp)),
         contentAlignment = Alignment.Center,
       ) {
         BasicText(
@@ -222,11 +226,15 @@ fun MainToolbar(
         )
         .forEach { (path, label) ->
           Box(
-            Modifier.size(Bars.toolbarButton).clickable { onUnsupported(label) },
+            Modifier.size(IslandsDark.toolbarButton).clickable { onUnsupported(label) },
             contentAlignment = Alignment.Center,
           ) {
             icons.painter(path)?.let {
-              Image(it, contentDescription = label, modifier = Modifier.size(16.dp))
+              Image(
+                it,
+                contentDescription = label,
+                modifier = Modifier.size(IslandsDark.toolbarIcon),
+              )
             }
           }
         }
@@ -255,7 +263,10 @@ fun ToolWindowPanel(
     ) {
       onBack?.let { back ->
         LocalIcons.current.painter("expui/general/chevronLeft.svg")?.let { icon ->
-          Box(Modifier.size(32.dp).clickable(onClick = back), contentAlignment = Alignment.Center) {
+          Box(
+            Modifier.fillMaxHeight().width(32.dp).clickable(onClick = back),
+            contentAlignment = Alignment.Center,
+          ) {
             Image(icon, contentDescription = "Back to the editor", modifier = Modifier.size(16.dp))
           }
         }
@@ -266,7 +277,7 @@ fun ToolWindowPanel(
           TextStyle(
             color = IslandsDark.text,
             fontFamily = fonts.ui,
-            fontSize = IslandsDark.UI_FONT_SIZE.sp,
+            fontSize = IslandsDark.headerFontSize.sp,
           ),
       )
     }
@@ -283,15 +294,13 @@ internal fun initials(name: String): String {
   }.uppercase()
 }
 
-/** Sizes from IntelliJ's new UI (stripe 40 wide; main toolbar 40 high). Icons are 16 everywhere. */
+/**
+ * Colors and fixed sizes of the bars; the sizes that follow the UI density are in [IslandsDark].
+ */
 private object Bars {
-  val thickness = 40.dp
-  val button = 32.dp
   val buttonShape = RoundedCornerShape(6.dp)
   val selected = Color(0xFF393B40)
   val separator = Color(0xFF393B40)
   val separatorLength = 20.dp
-  val toolbarHeight = 40.dp
-  val toolbarButton = 30.dp
   val projectBadge = Color(0xFF3574F0)
 }

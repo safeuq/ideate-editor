@@ -15,6 +15,7 @@ import intellijandroid.client.connect.StoredText
 import intellijandroid.client.desktop.DesktopResources
 import intellijandroid.client.desktop.Snapshots
 import intellijandroid.client.ui.ClientScreen
+import intellijandroid.client.ui.IslandsDark
 import intellijandroid.client.ui.LocalClientFonts
 import intellijandroid.client.ui.LocalIcons
 import java.io.File
@@ -46,6 +47,7 @@ fun main(arguments: Array<String>) {
       },
     )
   val fonts = DesktopResources.fonts(clientLib)
+  IslandsDark.density = DesktopResources.uiDensity()
 
   val dataFolder = File(System.getProperty("user.home"), ".ideate")
   if (dataFolder.mkdirs()) {

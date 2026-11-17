@@ -10,7 +10,7 @@ Values were read from the installed IDE's jars and from the IntelliJ Community s
 
 Things I could NOT read (user config is off limits) and that change numbers; confirm with the user:
 1. Editor line spacing (default 1.2, `FontPreferences.DEFAULT_LINE_SPACING`). The user may have changed it.
-2. Compact mode (default off). If on, row height 22, tree border 2,8,2,8, header height 31, etc. (values given below as "compact").
+2. Compact mode (IntelliJ's default is off). The user's IntelliJ runs in compact mode (`UI_DENSITY = COMPACT`, seen 2026-11-17), and so does IDEate by default. Both densities are in section 11; values below marked "compact" are the same pairs.
 3. Whether line numbers / folding outline / git change markers / breadcrumbs are shown (assumed default: line numbers on, folding outline on, gutter icons on, left free painters (git markers) shown in a git project).
 
 ---------------------------------------------------------------------
@@ -324,6 +324,8 @@ Pixel measurements of the real client (263.7307.200, Islands Dark, default setti
 
 Open item 3 of section 6 is answered: rows are 22 and there are no git markers in a non-git project.
 
+These measurements were most likely taken in compact mode: the row height (22) and the empty annotation area (0) match only the compact values (normal: 24 and 4), and none of them matches only a normal value. The user's IntelliJ is set to compact (2026-11-17). Section 11 uses them as compact values.
+
 
 ## 8. Completion popup, measured (2026-11-15)
 
@@ -389,3 +391,40 @@ Left out: the logo and version, All Providers, the settings gear, New Project's 
 window's tool window bar ([`mobile-layout.md`](mobile-layout.md)): 40 high, two equal tabs (icon and label), the
 selected one on a 32-high `#393B40` pill with radius 6. Project rows put the status under the path (rows 48 high).
 Landscape keeps the sidebar, now always 224 wide.
+
+## 11. UI density: normal and compact (2026-11-17)
+
+IntelliJ's Settings | Appearance | UI density has two values, `DEFAULT` and `COMPACT` (`com.intellij.ide.ui.UIDensity`). In compact mode `LafManagerImpl` copies every theme key ending in `.compact` over the key without it, e.g. `Tree.rowHeight.compact` 22 over `Tree.rowHeight` 24; a key without a `.compact` twin stays the same. The setting is saved in `<config>/options/ui.lnf.xml` as `<option name="UI_DENSITY" value="COMPACT" />`; at `DEFAULT` the option is left out.
+
+IDEate has one setting, `IslandsDark.density`, and every size below that IDEate draws reads it. The default is compact. The desktop app reads it at start (never writes) from the newest `IntelliJIdea<version>/options/ui.lnf.xml` (macOS `~/Library/Application Support/JetBrains`, Linux `~/.config/JetBrains`, Windows `%APPDATA%\JetBrains`): option present means that value, a settings folder without the file means normal, and no IntelliJ settings means compact. `IDEATE_UI_DENSITY=normal` or `compact` overrides it. The Android app uses compact.
+
+Key values from `darcula.theme.json` → `expUI_dark.theme.json` → `ManyIslandsDark.theme.json` (each overrides the one before), and code defaults from `JBUI.CurrentTheme` where the theme has only the compact key.
+
+| What | Key | Normal | Compact | In IDEate (`IslandsDark` unless named) |
+|---|---|---|---|---|
+| Main toolbar button | `MainToolbar.Button.size` | 30,30 (code) | 26,26 | `toolbarButton` |
+| Main toolbar icon | `MainToolbar.Button.iconSize` | 20 (code) | 16 | `toolbarIcon`; the project badge too (`RecentProject.Avatar.iconSize` falls back to it) |
+| Main toolbar icon insets | `MainToolbar.Icon.insets` | 6,5,4,5 | 3,4,3,4 | `toolbarHeight` = button + top + bottom: 40 / 32 |
+| Main toolbar font | `MainToolbar.fontSizeOffset` | 0 | -1 | `toolbarFontSize` 13 / 12 |
+| Main toolbar button arc | `MainToolbar.Button.arc` | (code) | 8 | not drawn (no button background) |
+| Tool window bar button | `StripeToolbar.Button.size` | 37,40 | 32,32 | `stripeButton` 40 / 32 (square, so normal takes 40) |
+| Tool window bar icon | `StripeToolbar.Button.iconSize` | 20 (code) | 16 | `stripeIcon` |
+| Tool window bar thickness | `ToolBar.verticalToolbarInsets` | (code 5,7) | 2,4,2,4 | `stripeThickness` = button + 8: 48 / 40 |
+| Tool window header height | `ToolWindow.Header.height` | 41 (code) | 31 | `headerHeight` |
+| Tool window header font | `ToolWindow.Header.fontSizeOffset` | 0 | -1 | `headerFontSize` 13 / 12 |
+| Tree row | `Tree.rowHeight` | 24 | 22 (measured 22) | `treeRowHeight`; also the folder chooser |
+| Tree border | `Tree.border` | 4,12,4,12 | 2,8,2,8 | `treeTopInset` 4 / 2. The sides stay 12 (`treeSideInset`): measured 12 in compact (section 7) |
+| List row (completion popup) | `List.rowHeight` | 24 | 22 (measured 22) | `Lookups.rowHeight` in `LookupPopup.kt` |
+| Completion footer | `CompletionPopup.Advertiser.borderInsets` | 6,12,6,12 | 2,12,2,8 | `Lookups.footerVerticalPadding`, `footerInset` (left), `footerRightInset` |
+| Island gap | `Island.borderWidth` | 6 | 4 | `islandGap` |
+| Island corner | `Island.arc` | 20 (radius 10) | 16 (radius 8) | `islandRadius` |
+| Island border arc | `Island.borderArcLength` | 14 | 10 | not drawn |
+| Gutter, empty annotation area | `Editor.Gutter.emptyAnnotationAreaWidth` | 4 (code) | 0 (measured 0) | `gutterEmptyAnnotationArea`; `EditorView.kt` still uses 0 |
+| Gutter gaps after VCS markers, line numbers, icons | `Editor.Gutter.gapAfter*Width` | 4 (code) | 2 | not used: the gutter in `EditorView.kt` follows section 7's measurements |
+| Editor tabs | `EditorTabs.tabInsets` | -6,8,-6,8 | -2,6,-2,4 | not used: `tabRowHeight`/`tabHeight` are measured (section 7) |
+| Editor tabs font | `EditorTabs.fontSizeOffset` | 0 | -1 | not used yet |
+| Component arc, button and field heights | `Component.arc`, `Button.minimumSize`, `TextField.minimumSize`, `ComboBox.minimumSize` | 8, 28 | 6, 24 | not used (connect screen sizes are Gateway's, section 10) |
+
+Other `.compact` keys in those themes (popups, find, search everywhere, status bar, run widget, VCS log, diff, debugger tabs, title pane) are for parts IDEate doesn't draw.
+
+Checked 2026-11-17 on the desktop against a Mac backend (snapshots with `CLIENT_SNAPSHOT`): in compact mode the main toolbar and the tool window bar both have 16 px icons, the toolbar is 32 high, tree rows 22, the header 31; with `IDEATE_UI_DENSITY=normal` the icons are 20 in both bars, the toolbar 40, rows 24, the header 41. Before this, the bar used compact sizes, the toolbar a mix (30 buttons with 16 icons), and the tree, header and islands the normal ones.

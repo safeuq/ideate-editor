@@ -23,7 +23,8 @@ across a rotation.
 
 ## All layouts
 
-- **Main toolbar on top** (40 high), a reduced copy of IntelliJ's: the project widget (blue square with the
+- **Main toolbar on top** (32 high in compact mode, 40 in normal; sizes for both densities:
+  [`intellij-look.md`](intellij-look.md) section 11), a reduced copy of IntelliJ's: the project widget (blue square with the
   project's initials, `smoke` → `SM`, and its name), then on the right the run widget ("Current File"), Build, Run,
   Debug and More. Only the project name is live; the others show "… isn't supported in this client yet" in the
   status line for 3 s.
@@ -32,9 +33,9 @@ across a rotation.
   a double tap also slides back to the editor on a phone held upright.
 - **Tool window bar**: every button from IntelliJ's two stripes in one bar, in three groups split by separators:
   left stripe top (Project, Commit, Bookmarks), left stripe bottom (Services, Run, Debug, Problems, Git), right
-  stripe (Structure, Notifications). Icons are IntelliJ's `expui/toolwindows/<name>.svg` at 16, like the main toolbar's
-  (IntelliJ's stripes use the 20 px set, which looked larger and heavier next to the toolbar), buttons 32 in a
-  40-thick bar, selected background `#393B40`. Only Project and Structure open; the rest say they aren't supported.
+  stripe (Structure, Notifications). Icons are IntelliJ's `expui/toolwindows/<name>.svg` at the same size as the main
+  toolbar's, as in IntelliJ: 16 in compact mode (buttons 32 in a 40-thick bar), 20 in normal (buttons 40, bar 48).
+  Selected background `#393B40`. Only Project and Structure open; the rest say they aren't supported.
 - **One tool window per side** at most. Tapping an open window's button closes it, as on IntelliJ's stripes.
 - **Structure is on the right.** IntelliJ puts it on the left by default; on the right it can be open together with
   Project, which the split layouts below need.
