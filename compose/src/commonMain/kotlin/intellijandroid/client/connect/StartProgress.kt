@@ -1,4 +1,4 @@
-package intellijandroid.client.android
+package intellijandroid.client.connect
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat

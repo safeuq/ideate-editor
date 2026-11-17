@@ -41,6 +41,6 @@ object DesktopResources {
         private val jar = IconJar(clientLib.resolve("intellij.platform.icons.jar"))
         private val cache = ConcurrentHashMap<String, Painter?>()
 
-        override fun painter(path: String): Painter? = cache.computeIfAbsent(path) { jar.svg(it)?.let { svg -> loadSvgPainter(svg.byteInputStream(), density) } }
+        override fun painter(path: String): Painter? = cache.computeIfAbsent(path) { (jar.svg(it) ?: IconJar.EXTRA_ICONS[it])?.let { svg -> loadSvgPainter(svg.byteInputStream(), density) } }
     }
 }

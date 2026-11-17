@@ -1,4 +1,4 @@
-package intellijandroid.client.android
+package intellijandroid.client.connect
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -44,14 +44,17 @@ import intellijandroid.client.ui.ClientFonts
 import intellijandroid.client.ui.IslandsDark
 import intellijandroid.client.ui.LocalIcons
 
-/** What the connect screen shows; the activity owns it. */
+/** What the connect screen shows; [ConnectController] owns it. */
 data class ConnectScreenState(
+    /** `This phone` or `This computer`: the first page's label. */
+    val device: String,
     val page: ConnectPage,
     val link: String,
     val file: String,
     val discovered: List<DiscoveredBackend>,
     val history: List<SavedConnection>,
-    val termux: TermuxAccess,
+    /** Null where there is no Termux (the desktop): the first page then lists open local ports only. */
+    val termux: TermuxAccess?,
     /** Work in progress, e.g. "Asking Termux for the backend's link…"; taps are ignored meanwhile. */
     val busy: String?,
     /** The last error or hint. */
@@ -113,11 +116,11 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
             Column(Modifier.fillMaxSize()) {
                 Page(Modifier.weight(1f).fillMaxWidth())
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Gateway.divider))
-                BottomTabs(state.page, actions.pageChanged, styles)
+                BottomTabs(state.device, state.page, actions.pageChanged, styles)
             }
         } else {
             Row(Modifier.fillMaxSize()) {
-                Sidebar(state.page, actions.pageChanged, styles, Modifier.width(Gateway.sidebarWidth))
+                Sidebar(state.device, state.page, actions.pageChanged, styles, Modifier.width(Gateway.sidebarWidth))
                 Box(Modifier.width(1.dp).fillMaxHeight().background(Gateway.divider))
                 Page(Modifier.weight(1f).fillMaxHeight())
             }
@@ -137,9 +140,9 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
 
 /** The two connection kinds side by side; the selected one gets the stripe buttons' selected background. */
 @Composable
-private fun BottomTabs(page: ConnectPage, onSelect: (ConnectPage) -> Unit, styles: ConnectStyles) {
+private fun BottomTabs(device: String, page: ConnectPage, onSelect: (ConnectPage) -> Unit, styles: ConnectStyles) {
     Row(Modifier.fillMaxWidth().height(Gateway.tabBarHeight).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        PAGES.forEach { (target, iconPath, label) ->
+        pages(device).forEach { (target, iconPath, label) ->
             val icon = LocalIcons.current.painter(iconPath)
             Row(
                 Modifier.weight(1f).padding(horizontal = 2.dp).height(Gateway.tabHeight)
@@ -156,13 +159,13 @@ private fun BottomTabs(page: ConnectPage, onSelect: (ConnectPage) -> Unit, style
 }
 
 /** The connection kinds: page, icon, label. */
-private val PAGES = listOf(
-    Triple(ConnectPage.PHONE, "expui/nodes/ssh.svg", "This phone"),
+private fun pages(device: String) = listOf(
+    Triple(ConnectPage.PHONE, "expui/nodes/ssh.svg", device),
     Triple(ConnectPage.LINK, "markdown/link.svg", "Link"),
 )
 
 @Composable
-private fun Sidebar(page: ConnectPage, onSelect: (ConnectPage) -> Unit, styles: ConnectStyles, modifier: Modifier) {
+private fun Sidebar(device: String, page: ConnectPage, onSelect: (ConnectPage) -> Unit, styles: ConnectStyles, modifier: Modifier) {
     @Composable
     fun Item(target: ConnectPage, iconPath: String, label: String) {
         val icon = LocalIcons.current.painter(iconPath)
@@ -181,7 +184,7 @@ private fun Sidebar(page: ConnectPage, onSelect: (ConnectPage) -> Unit, styles: 
         Box(Modifier.height(Gateway.sidebarRowHeight).padding(start = Gateway.sidebarTextInset), contentAlignment = Alignment.CenterStart) {
             BasicText("Connections", style = styles.secondary)
         }
-        val (phone, link) = PAGES
+        val (phone, link) = pages(device)
         Item(phone.first, phone.second, phone.third)
         Box(Modifier.padding(vertical = 7.dp).fillMaxWidth().height(1.dp).background(Gateway.divider))
         Item(link.first, link.second, link.third)
@@ -202,7 +205,7 @@ private class ProjectRow(
 private fun PhonePage(state: ConnectScreenState, actions: ConnectActions, styles: ConnectStyles, onNewProject: () -> Unit) {
     var search by remember { mutableStateOf("") }
     val termuxReady = state.termux == TermuxAccess.READY
-    Header("Recent Termux Projects", styles) {
+    Header(if (state.termux != null) "Recent Termux Projects" else "Backends on ${state.device}", styles) {
         if (termuxReady) OutlinedButton("New Project", styles, onNewProject)
     }
     SearchRow(search, { search = it }, styles)
@@ -214,7 +217,7 @@ private fun PhonePage(state: ConnectScreenState, actions: ConnectActions, styles
                 Notice("This app needs permission to run intellij-backend in Termux.", styles)
                 Box(Modifier.padding(horizontal = Gateway.contentInset)) { OutlinedButton("Allow", styles, actions.allowTermux) }
             }
-            TermuxAccess.READY -> Unit
+            TermuxAccess.READY, null -> Unit
         }
         val running = state.discovered.firstOrNull { it.joinLink != null }
         val rows = buildList {
@@ -230,12 +233,20 @@ private fun PhonePage(state: ConnectScreenState, actions: ConnectActions, styles
                 add(ProjectRow("127.0.0.1:${backend.port}", true, null, { actions.openDiscovered(backend) }, null, null))
             }
         }.filter { search.isBlank() || it.title.contains(search.trim(), ignoreCase = true) }
-        HostGroup("This phone", styles, icons = buildList {
+        HostGroup(state.device, styles, icons = buildList {
             if (termuxReady) add(HeaderIcon("expui/general/add.svg", "New Project", onNewProject))
             add(HeaderIcon("expui/general/refresh.svg", "Refresh", actions.refresh))
         })
         if (rows.isEmpty()) {
-            Notice(if (termuxReady && search.isBlank()) "No recent projects. Tap New Project to start a backend in Termux." else "No projects", styles)
+            Notice(
+                when {
+                    search.isNotBlank() -> "No projects"
+                    termuxReady -> "No recent projects. Tap New Project to start a backend in Termux."
+                    state.termux == null -> "No backend on ports 5990 to 5999 here. Use Link to connect by join link."
+                    else -> "No projects"
+                },
+                styles,
+            )
         }
         rows.forEach { ProjectRowView(it, styles) }
     }

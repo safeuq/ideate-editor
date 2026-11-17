@@ -39,7 +39,7 @@ across a rotation.
 - **Structure is on the right.** IntelliJ puts it on the left by default; on the right it can be open together with
   Project, which the split layouts below need.
 
-The connect screen follows the same rule: upright, its connection kinds (This phone, Link) are tabs in a bar at
+The connect screen follows the same rule: upright, its connection kinds (This phone or This computer, Link) are tabs in a bar at
 the bottom instead of Gateway's sidebar ([`intellij-look.md`](intellij-look.md) §10).
 
 ## Phone portrait

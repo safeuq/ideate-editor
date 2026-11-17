@@ -1,14 +1,14 @@
-package intellijandroid.client.android
+package intellijandroid.client.connect
 
 import java.net.InetSocketAddress
 import java.net.Socket
 
 /**
- * A backend found on this phone (docs/connections.md, "Discovery"): from Termux's `intellij-backend status --json`, or
+ * A backend found on this device (docs/connections.md, "Discovery"): from Termux's `intellij-backend status --json`, or
  * a port on 127.0.0.1 that accepts connections. LAN machines are added once by link and then reached from history.
  */
 data class DiscoveredBackend(
-    /** For example `This phone · smoke` or `This phone · port 5990`. */
+    /** For example `This phone · smoke` or `This computer · port 5991`. */
     val name: String,
     val port: Int,
     /** Project path from `status --json`, e.g. `/data/data/com.termux/files/home/intellij/smoke`. */

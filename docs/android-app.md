@@ -21,7 +21,7 @@ The protocol jars are patched for ART on the way (class file version, `sun.misc.
 
 ## Run
 
-The app opens on the connect screen ([`connections.md`](https://github.com/safeuq/intellij-backend-android/blob/main/docs/connections.md)):
+The app opens on the connect screen, shared with the desktop since 2026-11-17 (`compose/.../connect/`; [`connections.md`](https://github.com/safeuq/intellij-backend-android/blob/main/docs/connections.md)):
 
 | Part | What it does |
 |---|---|

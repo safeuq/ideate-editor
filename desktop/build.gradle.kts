@@ -13,6 +13,8 @@ dependencies {
     implementation(project(":compose"))
     implementation(files(protocolJars.map { "$jetbrainsClientLib/$it" }))
     implementation(compose.desktop.currentOs)
+    // Dispatchers.Main on the desktop (ConnectController); Compose Desktop doesn't bring it. Same version as coroutines-core.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
 }
 
 java {

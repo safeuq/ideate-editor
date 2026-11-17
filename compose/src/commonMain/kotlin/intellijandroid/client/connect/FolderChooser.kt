@@ -1,4 +1,4 @@
-package intellijandroid.client.android
+package intellijandroid.client.connect
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
