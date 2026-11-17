@@ -43,9 +43,9 @@ import androidx.compose.ui.window.PopupProperties
 import intellijandroid.client.ui.ContextMenuArea
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.MenuItem
-import intellijandroid.client.ui.MessageKind
 import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.component.TextField
+import intellijandroid.client.ui.dialog.MessageKind
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import java.time.Instant

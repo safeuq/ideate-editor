@@ -64,6 +64,7 @@ object IslandsDark {
   val text = Color(0xFFD1D3D9) // *.foreground = text-default = gray-130
   val textSecondary = Color(0xFF73767C) // *.infoForeground = text-secondary = gray-80
   val textDisabled = Color(0xFF4C4F56) // *.disabledForeground = text-disabled = gray-60
+  val textError = Color(0xFFF57E84) // Label.errorForeground = text-error
   val textOverAccent = Color(0xFFFFFFFF) // Button.default.foreground = text-over-accent = white
   val link = Color(0xFF538AF9) // measured: completion match highlight, the theme's blue for links
 

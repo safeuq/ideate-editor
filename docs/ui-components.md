@@ -161,7 +161,7 @@ the desktop app and the emulator before it's pushed.
 | 6 | `component/PopupContainer.kt` + `Menu.kt`: `MenuPanel` out of ContextMenu.kt; `LookupPopup`'s frame and StartProgress on `PopupContainer` | me (`ProjectMenu` call site: UI session) | done |
 | 7 | `component/LinearProgressBar.kt`: StartProgress's bar; StartProgress's Cancel on step 2's `OutlinedButton` | me | done |
 | 8 | `component/SearchTextField.kt`: `SearchRow` | UI session | to do |
-| 9 | `dialog/DialogWrapper.kt`: `DialogFrame` and FolderChooser's frame, south panel order; `MessageDialog` moves onto it | UI session | to do |
+| 9 | `dialog/DialogWrapper.kt`: `DialogFrame` and FolderChooser's frame, south panel order; `MessageDialog` moves onto it | UI session | done |
 
 ### Step 1 (done)
 
@@ -275,6 +275,30 @@ the desktop app and the emulator before it's pushed.
   text (`RadioButton.iconTextGap`, `CheckBox.textIconGap`).
 - Callers moved: SshPage's `Choice` (Authentication choices, IDE choice, Save password) is gone.
 - IconJar.kt was touched for the extra icons (not in either list in section 5).
+
+### Step 9 (done)
+
+- `ui/dialog/DialogWrapper.kt`:
+  `DialogWrapper(title, actions, onCancel, modifier, width, maxHeight, error, contentPadding,
+  scrollable, content)`, after IntelliJ's `DialogWrapper.java`. It has the title row, the center
+  panel, the error text (`Label.errorForeground` = text-error `#F57E84`, new
+  `IslandsDark.textError`) and the south panel.
+- `DialogAction(label, enabled, onClick)` stands for `createActions()`. The first is the default:
+  filled, and Enter runs it. The south panel puts it last on macOS (`sortActionsOnMac`) and first
+  elsewhere, with 12 between buttons (`BASE_BUTTON_GAP`). Escape or a click outside cancels.
+- `ui/dialog/MessageDialog.kt` (moved from `ui/`, package `intellijandroid.client.ui.dialog`) uses
+  the same window and south panel. Its `MessageOption` is gone; it takes `DialogAction`s.
+- The frame values stay measured: no theme key exists, since macOS draws the window. Width 475,
+  title 32, sides 14, south panel 12 below the content, 11 at the bottom, corner 10, outline
+  `#393B40`.
+- Callers moved:
+  - SshPage's Connect to SSH, Choose IDE and Project and Authentication. Their buttons became
+    `actions` and their error moved to `error`. `DialogFrame`, `DialogLook` and `DialogStyles` are
+    gone; labels use `fonts.label()`.
+  - FolderChooser now runs on `DialogWrapper(contentPadding = 0, scrollable = false)`, and its
+    `ToolbarIcon` became step 5's `IconButton(selected = …)`.
+- `CLIENT_GALLERY=<out.png>` now also writes `<out>-dialog.png` (a `DialogWrapper` with fields,
+  radio buttons and an error) and `<out>-message.png` (the host key question).
 
 ## 5. Split
 

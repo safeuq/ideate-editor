@@ -1,23 +1,19 @@
 package intellijandroid.client.connect
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,19 +26,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import intellijandroid.client.session.ProjectTree
 import intellijandroid.client.session.TextFragment
 import intellijandroid.client.session.TreeNode
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.ProjectTreeView
-import intellijandroid.client.ui.component.DefaultButton
-import intellijandroid.client.ui.component.OutlinedButton
+import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.component.TextField
+import intellijandroid.client.ui.dialog.DialogAction
+import intellijandroid.client.ui.dialog.DialogWrapper
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 
@@ -146,127 +140,89 @@ fun FolderChooser(
       ProjectTree(nodes, expanded.map(::idOf).toSet(), selected?.let(::idOf))
     }
 
-  Dialog(
-    onDismissRequest = onCancel,
-    properties = DialogProperties(usePlatformDefaultWidth = false),
+  DialogWrapper(
+    title,
+    actions =
+      listOf(
+        DialogAction("OK") { onChoose(path.trim().trimEnd('/')) },
+        DialogAction("Cancel", onClick = onCancel),
+      ),
+    onCancel = onCancel,
+    modifier = Modifier.fillMaxHeight(),
+    maxHeight = Chooser.maxHeight,
+    contentPadding = PaddingValues(0.dp),
+    scrollable = false,
   ) {
-    Column(
-      Modifier.width(Chooser.width)
-        .heightIn(max = Chooser.maxHeight)
-        .fillMaxHeight()
-        .background(IslandsDark.islandBackground, Chooser.shape)
-        .border(1.dp, Chooser.outline, Chooser.shape),
+    Row(
+      Modifier.fillMaxWidth()
+        .height(Chooser.toolbarHeight)
+        .padding(start = Chooser.toolbarInset, end = Chooser.sideInset),
+      verticalAlignment = Alignment.CenterVertically,
     ) {
+      IconButton("expui/nodes/homeFolder.svg", "Home", { reveal(home) })
       Box(
-        Modifier.fillMaxWidth().height(Chooser.titleHeight).padding(start = Chooser.sideInset),
-        contentAlignment = Alignment.CenterStart,
-      ) {
-        BasicText(title, style = text.copy(fontWeight = FontWeight.SemiBold))
-      }
-      Row(
-        Modifier.fillMaxWidth()
-          .height(Chooser.toolbarHeight)
-          .padding(start = Chooser.toolbarInset, end = Chooser.sideInset),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        @Composable
-        fun ToolbarIcon(
-          iconPath: String,
-          description: String,
-          active: Boolean = false,
-          onClick: () -> Unit,
-        ) {
-          val painter = icons.painter(iconPath) ?: return
-          Box(
-            Modifier.size(Chooser.toolbarButton)
-              .background(
-                if (active) Chooser.toggledButton else Color.Transparent,
-                RoundedCornerShape(4.dp),
-              )
-              .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
-          ) {
-            Image(painter, contentDescription = description, modifier = Modifier.size(16.dp))
-          }
-        }
-        ToolbarIcon("expui/nodes/homeFolder.svg", "Home") { reveal(home) }
-        Box(
-          Modifier.padding(horizontal = 6.dp)
-            .width(1.dp)
-            .height(20.dp)
-            .background(Chooser.separator),
-        )
-        ToolbarIcon("expui/general/refresh.svg", "Refresh") {
+        Modifier.padding(horizontal = 6.dp).width(1.dp).height(20.dp).background(Chooser.separator),
+      )
+      IconButton(
+        "expui/general/refresh.svg",
+        "Refresh",
+        {
           error = null
           val open = children.keys.toList()
           children.clear()
           open.forEach(::load)
-        }
-        ToolbarIcon(
-          "expui/actions/toggleVisibility.svg",
-          "Show hidden files",
-          active = showHidden,
-        ) {
-          showHidden = !showHidden
-        }
-        Spacer(Modifier.weight(1f))
-        BasicText(
-          if (showPath) "Hide path" else "Show path",
-          style = text.copy(color = IslandsDark.link),
-          modifier = Modifier.clickable { showPath = !showPath },
-        )
-      }
-      if (showPath) {
-        TextField(path, { path = it }, Modifier.padding(horizontal = Chooser.sideInset))
-      }
-      Box(
-        Modifier.padding(horizontal = Chooser.treeInset)
-          .padding(top = 6.dp)
-          .weight(1f)
-          .fillMaxWidth()
-          .border(1.dp, Chooser.treeBorder),
-      ) {
-        ProjectTreeView(
-          tree = tree,
-          onToggle = { node ->
-            val folder = node.path ?: return@ProjectTreeView
-            if (folder in expanded) {
-              expanded = expanded - folder
-            } else {
-              if (folder !in children) load(folder)
-              expanded = expanded + folder
-            }
-          },
-          onSelect = { node ->
-            node.path?.let {
-              selected = it
-              path = it
-            }
-          },
-          onOpen = { node -> node.path?.let(onChoose) },
-          modifier = Modifier.fillMaxSize(),
-        )
-      }
-      error?.let { message ->
-        BasicText(
-          message,
-          style = text.copy(color = IslandsDark.textSecondary),
-          modifier = Modifier.padding(horizontal = Chooser.sideInset, vertical = 4.dp),
-        )
-      }
-      Row(
-        Modifier.fillMaxWidth()
-          .padding(
-            start = Chooser.sideInset,
-            end = Chooser.sideInset,
-            top = 12.dp,
-            bottom = Chooser.bottomInset,
-          ),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-      ) {
-        DefaultButton("OK") { onChoose(path.trim().trimEnd('/')) }
-        OutlinedButton("Cancel", onClick = onCancel)
-      }
+        },
+      )
+      IconButton(
+        "expui/actions/toggleVisibility.svg",
+        "Show hidden files",
+        { showHidden = !showHidden },
+        selected = showHidden,
+      )
+      Spacer(Modifier.weight(1f))
+      BasicText(
+        if (showPath) "Hide path" else "Show path",
+        style = text.copy(color = IslandsDark.link),
+        modifier = Modifier.clickable { showPath = !showPath },
+      )
+    }
+    if (showPath) {
+      TextField(path, { path = it }, Modifier.padding(horizontal = Chooser.sideInset))
+    }
+    Box(
+      Modifier.padding(horizontal = Chooser.treeInset)
+        .padding(top = 6.dp)
+        .weight(1f)
+        .fillMaxWidth()
+        .border(1.dp, Chooser.treeBorder),
+    ) {
+      ProjectTreeView(
+        tree = tree,
+        onToggle = { node ->
+          val folder = node.path ?: return@ProjectTreeView
+          if (folder in expanded) {
+            expanded = expanded - folder
+          } else {
+            if (folder !in children) load(folder)
+            expanded = expanded + folder
+          }
+        },
+        onSelect = { node ->
+          node.path?.let {
+            selected = it
+            path = it
+          }
+        },
+        onOpen = { node -> node.path?.let(onChoose) },
+        modifier = Modifier.fillMaxSize(),
+      )
+    }
+    error?.let { message ->
+      BasicText(
+        message,
+        style = text.copy(color = IslandsDark.textSecondary),
+        modifier = Modifier.padding(horizontal = Chooser.sideInset, vertical = 4.dp),
+      )
     }
   }
 }
@@ -282,20 +238,13 @@ private const val TERMUX_ROOT = "/data/data/com.termux/files"
  * = pt.
  */
 private object Chooser {
-  val width = 475.dp
   val maxHeight = 482.dp
-  val shape = RoundedCornerShape(10.dp)
-  val outline = Color(0xFF393B40)
-  val titleHeight = 32.dp
   val toolbarHeight = 28.dp
   val toolbarInset = 17.dp // first icon's 16 px box starts 21 pt in; buttons have 2 pt padding
-  val toolbarButton = 22.dp
-  val toggledButton = Color(0xFF393B40)
   val separator = Color(0xFF393B40)
   val sideInset = 14.dp // path field: 14.5 pt from the dialog's side
   val treeInset = 12.dp // tree panel: 12.5 pt from the dialog's side
   val treeBorder = Color(0xFF2B2D30)
-  val bottomInset = 11.dp
 }
 
 /**

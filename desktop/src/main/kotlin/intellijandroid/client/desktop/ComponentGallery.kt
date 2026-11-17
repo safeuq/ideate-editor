@@ -33,6 +33,10 @@ import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.component.RadioButtonRow
 import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.component.popupContainer
+import intellijandroid.client.ui.dialog.DialogAction
+import intellijandroid.client.ui.dialog.DialogWrapper
+import intellijandroid.client.ui.dialog.MessageDialog
+import intellijandroid.client.ui.dialog.MessageKind
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -53,21 +57,62 @@ object ComponentGallery {
   fun render(target: File, clientLib: File, fonts: ClientFonts) {
     val density = Density(SCALE)
     val icons = DesktopResources.JarIcons(clientLib, density)
-    val scene =
-      ImageComposeScene((WIDTH * SCALE).toInt(), (HEIGHT * SCALE).toInt(), density) {
-        CompositionLocalProvider(LocalClientFonts provides fonts, LocalIcons provides icons) {
-          Gallery()
+    fun page(file: File, content: @Composable () -> Unit) {
+      val scene =
+        ImageComposeScene((WIDTH * SCALE).toInt(), (HEIGHT * SCALE).toInt(), density) {
+          CompositionLocalProvider(LocalClientFonts provides fonts, LocalIcons provides icons) {
+            content()
+          }
         }
+      try {
+        scene.render(0)
+        // A second frame, after the focus requests ran.
+        val image = scene.render(500_000_000L)
+        file.writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes)
+      } finally {
+        scene.close()
       }
-    try {
-      scene.render(0)
-      // A second frame, after the focus requests ran.
-      val image = scene.render(500_000_000L)
-      target.writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes)
-    } finally {
-      scene.close()
     }
+    page(target) { Gallery() }
+    // Dialogs cover the window, so each gets its own page next to the target: out-dialog.png, …
+    val base = target.path.removeSuffix(".png")
+    page(File("$base-dialog.png")) { Backdrop { SampleDialog() } }
+    page(File("$base-message.png")) { Backdrop { SampleMessage() } }
   }
+}
+
+@Composable
+private fun Backdrop(content: @Composable () -> Unit) {
+  Box(Modifier.fillMaxSize().background(IslandsDark.windowBackground)) { content() }
+}
+
+/** DialogWrapper.kt with fields, radio buttons, an error and the south panel. */
+@Composable
+private fun SampleDialog() {
+  DialogWrapper(
+    "Connect to SSH",
+    actions = listOf(DialogAction("Check Connection and Continue") {}, DialogAction("Cancel") {}),
+    onCancel = {},
+    error = "SSH Connection Check Failed: Auth fail for methods 'publickey'",
+  ) {
+    BasicText("Host:", style = LocalClientFonts.current.label())
+    TextField("127.0.0.1", {})
+    RadioButtonRow("IDEate key", selected = true) {}
+    RadioButtonRow("Password", selected = false) {}
+  }
+}
+
+/** MessageDialog.kt: the SSH host key question. */
+@Composable
+private fun SampleMessage() {
+  MessageDialog(
+    "SSH",
+    "The authenticity of host '127.0.0.1' cannot be established. ED25519 key fingerprint is " +
+      "SHA256:1cqIIjvMAkHA74RCulfxLHBTSoesotqO3/xCQus8u4E.\n\nAre you sure you want to continue connecting?",
+    MessageKind.QUESTION,
+    listOf(DialogAction("Continue") {}, DialogAction("Cancel") {}),
+    onCancel = {},
+  )
 }
 
 @Composable

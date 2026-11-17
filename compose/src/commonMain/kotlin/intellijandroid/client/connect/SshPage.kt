@@ -1,7 +1,6 @@
 package intellijandroid.client.connect
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,11 +9,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -25,26 +22,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import intellijandroid.client.ssh.LoginMethod
 import intellijandroid.client.ui.MenuItem
-import intellijandroid.client.ui.MessageDialog
-import intellijandroid.client.ui.MessageOption
 import intellijandroid.client.ui.component.CheckboxRow
-import intellijandroid.client.ui.component.DefaultButton
 import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.component.RadioButtonRow
 import intellijandroid.client.ui.component.TextField
+import intellijandroid.client.ui.dialog.DialogAction
+import intellijandroid.client.ui.dialog.DialogWrapper
+import intellijandroid.client.ui.dialog.MessageDialog
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
+import intellijandroid.client.ui.theme.editor
+import intellijandroid.client.ui.theme.label
 import kotlinx.coroutines.delay
 
 /**
@@ -185,10 +180,10 @@ private fun QuestionDialog(question: Question, actions: SshActions) =
     title = "SSH",
     message = question.text,
     kind = question.kind,
-    options =
+    actions =
       listOf(
-        MessageOption(question.confirm, actions.answerQuestion),
-        MessageOption("Cancel", actions.cancelQuestion),
+        DialogAction(question.confirm, onClick = actions.answerQuestion),
+        DialogAction("Cancel", onClick = actions.cancelQuestion),
       ),
     onCancel = actions.cancelQuestion,
   )
@@ -204,12 +199,24 @@ private fun NewConnectionDialog(
   fonts: ClientFonts,
 ) {
   val form = dialog.form
-  val styles = DialogStyles(fonts)
-  DialogFrame("Connect to SSH", styles, actions.cancelDialog) {
-    LabeledField("Username:", form.user, { actions.formChanged(form.copy(user = it)) }, styles)
-    LabeledField("Host:", form.host, { actions.formChanged(form.copy(host = it)) }, styles)
-    LabeledField("Port:", form.port, { actions.formChanged(form.copy(port = it)) }, styles)
-    BasicText("Authentication:", style = styles.label)
+  DialogWrapper(
+    "Connect to SSH",
+    actions =
+      listOf(
+        DialogAction(
+          if (dialog.checking) "Checking Connection…" else "Check Connection and Continue",
+        ) {
+          if (!dialog.checking) actions.checkAndContinue()
+        },
+        DialogAction("Cancel", onClick = actions.cancelDialog),
+      ),
+    onCancel = actions.cancelDialog,
+    error = dialog.error,
+  ) {
+    LabeledField("Username:", form.user, { actions.formChanged(form.copy(user = it)) })
+    LabeledField("Host:", form.host, { actions.formChanged(form.copy(host = it)) })
+    LabeledField("Port:", form.port, { actions.formChanged(form.copy(port = it)) })
+    BasicText("Authentication:", style = fonts.label())
     RadioButtonRow(
       "IDEate key (add it to the host's ~/.ssh/authorized_keys)",
       form.method == LoginMethod.GENERATED_KEY,
@@ -219,7 +226,11 @@ private fun NewConnectionDialog(
     if (form.method == LoginMethod.GENERATED_KEY) {
       dialog.publicKey?.let { publicKey ->
         val clipboard = LocalClipboardManager.current
-        BasicText(publicKey, style = styles.code, modifier = Modifier.padding(start = 28.dp))
+        BasicText(
+          publicKey,
+          style = fonts.editor(IslandsDark.textSecondary).copy(fontSize = 11.sp),
+          modifier = Modifier.padding(start = 28.dp),
+        )
         Box(Modifier.padding(start = 28.dp)) {
           OutlinedButton("Copy Public Key") {
             clipboard.setText(AnnotatedString(publicKey))
@@ -235,14 +246,12 @@ private fun NewConnectionDialog(
         "Private key (paste the file's text):",
         form.privateKey,
         { actions.formChanged(form.copy(privateKey = it)) },
-        styles,
         singleLine = false,
       )
       LabeledField(
         "Key passphrase, if any:",
         form.passphrase,
         { actions.formChanged(form.copy(passphrase = it)) },
-        styles,
         secret = true,
       )
     }
@@ -254,7 +263,6 @@ private fun NewConnectionDialog(
         "Password:",
         form.password,
         { actions.formChanged(form.copy(password = it)) },
-        styles,
         secret = true,
       )
       CheckboxRow("Save password", form.savePassword) { checked ->
@@ -269,16 +277,6 @@ private fun NewConnectionDialog(
         actions.formChanged(form.copy(method = LoginMethod.OPEN_SSH))
       }
     }
-    dialog.error?.let { BasicText(it, style = styles.error) }
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-      OutlinedButton("Cancel", onClick = actions.cancelDialog)
-      Spacer(Modifier.width(8.dp))
-      DefaultButton(
-        if (dialog.checking) "Checking Connection…" else "Check Connection and Continue",
-      ) {
-        if (!dialog.checking) actions.checkAndContinue()
-      }
-    }
   }
 }
 
@@ -290,10 +288,18 @@ private fun ChooseIdeDialog(
   fonts: ClientFonts,
   onBrowse: () -> Unit,
 ) {
-  val styles = DialogStyles(fonts)
-  DialogFrame("Choose IDE and Project", styles, actions.cancelDialog) {
-    BasicText(dialog.host.name, style = styles.label.copy(color = IslandsDark.textSecondary))
-    BasicText("IDE version:", style = styles.label)
+  DialogWrapper(
+    "Choose IDE and Project",
+    actions =
+      listOf(
+        DialogAction("Start IDE and Connect", onClick = actions.startAndConnect),
+        DialogAction("Cancel", onClick = actions.cancelDialog),
+      ),
+    onCancel = actions.cancelDialog,
+    error = dialog.error,
+  ) {
+    BasicText(dialog.host.name, style = fonts.label(IslandsDark.textSecondary))
+    BasicText("IDE version:", style = fonts.label())
     dialog.ides.forEach { ide ->
       RadioButtonRow(
         "${ide.name} ${ide.version} (${ide.buildNumber}) installed",
@@ -302,19 +308,13 @@ private fun ChooseIdeDialog(
         actions.ideChosen(ide)
       }
     }
-    BasicText("Project directory:", style = styles.label)
+    BasicText("Project directory:", style = fonts.label())
     Row(verticalAlignment = Alignment.CenterVertically) {
       Box(Modifier.weight(1f)) {
         TextField(dialog.projectPath, actions.projectPathChanged)
       }
       Spacer(Modifier.width(6.dp))
       OutlinedButton("…", onClick = onBrowse)
-    }
-    dialog.error?.let { BasicText(it, style = styles.error) }
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-      OutlinedButton("Cancel", onClick = actions.cancelDialog)
-      Spacer(Modifier.width(8.dp))
-      DefaultButton("Start IDE and Connect", onClick = actions.startAndConnect)
     }
   }
 }
@@ -326,65 +326,19 @@ private fun AuthenticateDialog(
   actions: SshActions,
   fonts: ClientFonts,
 ) {
-  val styles = DialogStyles(fonts)
   var typed by remember(dialog) { mutableStateOf("") }
-  DialogFrame("Authentication", styles, actions.cancelDialog) {
-    BasicText("Authenticating to: ${dialog.host.name}", style = styles.label)
-    LabeledField(dialog.prompt, typed, { typed = it }, styles, secret = true)
-    dialog.error?.let { BasicText(it, style = styles.error) }
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-      OutlinedButton("Cancel", onClick = actions.cancelDialog)
-      Spacer(Modifier.width(8.dp))
-      DefaultButton("Authenticate") { actions.authenticate(typed) }
-    }
-  }
-}
-
-private class DialogStyles(fonts: ClientFonts) {
-  val label =
-    TextStyle(
-      color = IslandsDark.text,
-      fontFamily = fonts.ui,
-      fontSize = IslandsDark.UI_FONT_SIZE.sp,
-    )
-  val title = label.copy(fontWeight = FontWeight.SemiBold)
-  val error = label.copy(color = Gateway.error)
-  val code =
-    TextStyle(color = IslandsDark.textSecondary, fontFamily = fonts.editor, fontSize = 11.sp)
-}
-
-/** The frame of IntelliJ's dialogs, as measured for the folder chooser: 475 wide, title 32 high. */
-@Composable
-private fun DialogFrame(
-  title: String,
-  styles: DialogStyles,
-  onDismiss: () -> Unit,
-  content: @Composable () -> Unit,
-) {
-  Dialog(
-    onDismissRequest = onDismiss,
-    properties = DialogProperties(usePlatformDefaultWidth = false),
+  DialogWrapper(
+    "Authentication",
+    actions =
+      listOf(
+        DialogAction("Authenticate") { actions.authenticate(typed) },
+        DialogAction("Cancel", onClick = actions.cancelDialog),
+      ),
+    onCancel = actions.cancelDialog,
+    error = dialog.error,
   ) {
-    Column(
-      Modifier.width(DialogLook.width)
-        .heightIn(max = DialogLook.maxHeight)
-        .background(IslandsDark.islandBackground, DialogLook.shape)
-        .border(1.dp, DialogLook.outline, DialogLook.shape),
-    ) {
-      Box(
-        Modifier.fillMaxWidth().height(DialogLook.titleHeight).padding(start = 14.dp),
-        contentAlignment = Alignment.CenterStart,
-      ) {
-        BasicText(title, style = styles.title)
-      }
-      Column(
-        Modifier.verticalScroll(rememberScrollState())
-          .padding(start = 14.dp, end = 14.dp, bottom = 11.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        content()
-      }
-    }
+    BasicText("Authenticating to: ${dialog.host.name}", style = fonts.label())
+    LabeledField(dialog.prompt, typed, { typed = it }, secret = true)
   }
 }
 
@@ -393,21 +347,11 @@ private fun LabeledField(
   label: String,
   value: String,
   onChange: (String) -> Unit,
-  styles: DialogStyles,
   secret: Boolean = false,
   singleLine: Boolean = true,
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-    BasicText(label, style = styles.label)
+    BasicText(label, style = LocalClientFonts.current.label())
     TextField(value, onChange, secret = secret, singleLine = singleLine)
   }
-}
-
-/** The values measured on IntelliJ's "Open File or Project" dialog (FolderChooser's Chooser). */
-private object DialogLook {
-  val width = 475.dp
-  val maxHeight = 600.dp
-  val shape = RoundedCornerShape(10.dp)
-  val outline = Color(0xFF393B40)
-  val titleHeight = 32.dp
 }

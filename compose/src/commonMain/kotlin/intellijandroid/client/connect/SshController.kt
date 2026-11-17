@@ -19,7 +19,7 @@ import intellijandroid.client.ssh.SshHostEntry
 import intellijandroid.client.ssh.SshHosts
 import intellijandroid.client.ssh.SshLogins
 import intellijandroid.client.ssh.SshSession
-import intellijandroid.client.ui.MessageKind
+import intellijandroid.client.ui.dialog.MessageKind
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
