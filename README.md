@@ -22,5 +22,6 @@ docs/           all documentation (below)
 | [`structure-protocol.md`](docs/structure-protocol.md) | the Structure tool window over rd (`CodeStructureTreeModel`), and the Fleet RPC `StructureTreeApi` the Ctrl+F12 popup uses |
 | [`mobile-layout.md`](docs/mobile-layout.md) | the main window on phone and tablet, portrait and landscape: bars, swipes, which layout when |
 | [`intellij-look.md`](docs/intellij-look.md) | IntelliJ's Islands Dark look: colors, fonts, metrics, icons |
+| [`ssh-connections.md`](docs/ssh-connections.md) | plan for the SSH page (Gateway's SSH connections): how Gateway finds IDEs and recent projects on a host, opens a project, and forwards the port |
 
 Every finding goes into the matching doc in the same commit as the work; a new doc gets a row above.
