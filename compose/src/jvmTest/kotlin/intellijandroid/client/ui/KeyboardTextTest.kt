@@ -33,6 +33,8 @@ class KeyboardTextTest {
 
     override fun cut() = error("not sent by KeyboardText")
 
+    override fun selectAll() = error("not sent by KeyboardText")
+
     override fun textBeforeCaret(count: Int) = before.takeLast(count)
 
     override fun textAfterCaret(count: Int) = ""

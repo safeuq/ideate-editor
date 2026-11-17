@@ -445,6 +445,8 @@ fun EditorView(
         if (currentFile.editable) cutSelection()
       }
 
+      override fun selectAll() = actions.moveCaret(currentFile.text.length, 0)
+
       override fun textBeforeCaret(count: Int): String {
         val caretNow = currentFile.caret
         return currentFile.text.substring(maxOf(0, caretNow - count), caretNow)

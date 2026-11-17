@@ -388,4 +388,5 @@ Limits:
 - Not tried: other keyboards (SwiftKey, Samsung).
 - `performContextMenuAction`: Gboard's Text Editing panel (its ⋮ tiles, "Text Editing") has Paste, which
   pasted the clipboard (`Main.java`) through the backend's paste (2026-11-17). Copy and Cut are wired the same
-  way. Select all (`android.R.id.selectAll`) isn't handled; the call returns false and nothing happens.
+  way. Select all (`android.R.id.selectAll`) selects the whole document, caret at the end (not tried on a
+  device).

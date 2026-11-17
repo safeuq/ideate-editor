@@ -25,6 +25,9 @@ interface EditorTextTarget {
 
   fun cut()
 
+  /** The whole document selected, caret at its end. */
+  fun selectAll()
+
   /** Up to [count] characters before the caret, for the keyboard's capitalisation and Backspace. */
   fun textBeforeCaret(count: Int): String
 
