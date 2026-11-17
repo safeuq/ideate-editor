@@ -139,6 +139,11 @@ class ClientSession(
   private val tabOrder = mutableListOf<String>()
   /** Saved editors still being reopened; [saveEditors] waits for them so it doesn't drop any. */
   private val reopening = mutableSetOf<String>()
+  /** Saved carets of reopened files, put back once each file's edit session is ready. */
+  private val caretsToRestore = mutableMapOf<String, Int>()
+  /** How often each file's caret was put back, for [EditorFile.caretRestored]. */
+  private val caretsRestored = mutableMapOf<String, Int>()
+  private var saveScheduled = false
   private val editSessions = mutableMapOf<RdDocumentId, EditSession>()
   /**
    * Backend patches for a document that arrived before its editor existed (normally the editor
@@ -724,6 +729,7 @@ class ClientSession(
     if (files.isNotEmpty()) log("Reopening ${files.size} editors: ${files.joinToString()}")
     reopening += files
     tabOrder += files
+    caretsToRestore += saved.carets.filterKeys { it in files }
     for (path in files) openFile(path, select = path == saved.selected && initialFile == null)
   }
 
@@ -731,9 +737,52 @@ class ClientSession(
   private fun saveEditors() {
     val slot = savedEditors ?: return
     if (reopening.isNotEmpty()) return
-    slot.save(
-      SavedEditors(tabOrder.filter { it in compositeIds }, mutableState.value.selectedEditor),
+    val files = tabOrder.filter { it in compositeIds }
+    val carets =
+      files
+        .mapNotNull { path -> (caretsToRestore[path] ?: caretOf(path))?.let { path to it } }
+        .toMap()
+    slot.save(SavedEditors(files, mutableState.value.selectedEditor, carets))
+  }
+
+  /** [path]'s caret offset in its edit session, once the backend has sent it. */
+  private fun caretOf(path: String): Int? =
+    editSessions.entries
+      .firstOrNull { (documentId, _) -> pathOf(documentId) == path }
+      ?.value
+      ?.takeIf { it.isReady }
+      ?.caret
+
+  /**
+   * Saves the editors a second after the last edit or caret move, so a caret that moved since the
+   * last tab change is kept without a write per key stroke.
+   */
+  private fun saveEditorsSoon() {
+    if (saveScheduled || savedEditors == null) return
+    val rdScheduler = scheduler ?: return
+    saveScheduled = true
+    markupTimer.schedule(
+      {
+        rdScheduler.queue {
+          saveScheduled = false
+          saveEditors()
+        }
+      },
+      SAVE_DELAY_MS,
+      TimeUnit.MILLISECONDS,
     )
+  }
+
+  /**
+   * Puts [path]'s caret back where it was last time, once [session] has the document and the
+   * editor's caret version: a move sent with the document alone was refused ("not matched expected
+   * versions").
+   */
+  private fun restoreCaret(path: String, session: EditSession) {
+    if (!session.isReady || session.caretModelVersion < 0) return
+    val offset = caretsToRestore.remove(path) ?: return
+    caretsRestored[path] = (caretsRestored[path] ?: 0) + 1
+    session.moveCaret(offset)
   }
 
   /** [path]'s open request ended, opened or not. */
@@ -808,6 +857,8 @@ class ClientSession(
       EditSession(identity, commands, ::sendRequest) { edit ->
         edit?.let { shiftHighlights(documentId, it) }
         publishDocument(documentId)
+        restoreCaret(pathOf(documentId), editSessions[documentId] ?: return@EditSession)
+        saveEditorsSoon()
       }
     editSessions[documentId] = session
     earlyPatches.remove(documentId)?.forEach(session::backendPatch)
@@ -943,6 +994,7 @@ class ClientSession(
         selectionStart = session?.selectionStart ?: 0,
         selectionEnd = session?.selectionEnd ?: 0,
         editable = session != null,
+        caretRestored = caretsRestored[pathOf(documentId)] ?: 0,
       )
     // Debug aid: CLIENT_HIGHLIGHT_DUMP=<file> writes every highlight with its keys and covered
     // text.
@@ -1016,6 +1068,8 @@ class ClientSession(
 
     /** About two frames at 60 Hz. */
     const val MARKUP_DELAY_MS = 32L
+    /** How long after an edit or caret move the open editors and carets are saved. */
+    const val SAVE_DELAY_MS = 1_000L
 
     /** The default comment keys every language's comment colors fall back to. */
     val COMMENT_KEYS = setOf("DEFAULT_LINE_COMMENT", "DEFAULT_BLOCK_COMMENT", "DEFAULT_DOC_COMMENT")

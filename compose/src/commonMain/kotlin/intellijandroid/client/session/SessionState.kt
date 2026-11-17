@@ -93,6 +93,8 @@ data class EditorFile(
    * catching up with it.
    */
   val editable: Boolean = false,
+  /** Bumped when the caret was put back where it was last time; the view scrolls to it then. */
+  val caretRestored: Int = 0,
 ) {
   val name: String
     get() = path.substringAfterLast('/')

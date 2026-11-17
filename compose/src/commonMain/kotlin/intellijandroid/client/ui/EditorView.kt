@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -260,7 +260,9 @@ fun EditorView(
   var focused by remember { mutableStateOf(false) }
   var caretOn by remember { mutableStateOf(true) }
   val focusRequester = remember { FocusRequester() }
-  val listState = rememberLazyListState()
+  // Each file keeps its own scroll position, as each of IntelliJ's tabs does.
+  val listStates = remember { mutableMapOf<String, LazyListState>() }
+  val listState = listStates.getOrPut(file.path) { LazyListState() }
   val stickyScroll = rememberCoroutineScope()
   // The pointer handlers below live across recompositions; they must read the current text, not the
   // first one.
@@ -280,6 +282,12 @@ fun EditorView(
       delay(500)
       caretOn = !caretOn
     }
+  }
+
+  // A reopened file's caret was put back where it was: show its line a few lines from the top.
+  // ponytail: IntelliJ restores the exact scroll position; the caret's line is close enough.
+  LaunchedEffect(file.path, file.caretRestored) {
+    if (file.caretRestored > 0) listState.scrollToItem(maxOf(0, lines.lineOf(caret) - 5))
   }
 
   // Keep the caret's line on screen: after typing or arrows past an edge, and when the view gets

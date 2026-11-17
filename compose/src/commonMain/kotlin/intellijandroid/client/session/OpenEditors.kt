@@ -7,13 +7,21 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-/** A project's open editors: the files in tab order and the selected one. */
-data class SavedEditors(val files: List<String>, val selected: String?)
+/**
+ * A project's open editors: the files in tab order, the selected one, and each file's caret offset,
+ * e.g. `carets = {"/Users/me/smoke/src/demo/Big.java": 3120}`.
+ */
+data class SavedEditors(
+  val files: List<String>,
+  val selected: String?,
+  val carets: Map<String, Int> = emptyMap(),
+)
 
 /**
  * The editors open in each project, kept on this device so the next connection reopens them, as
@@ -29,6 +37,8 @@ class OpenEditors(private val storage: StoredText) {
     return SavedEditors(
       entry.getValue("files").jsonArray.map { it.jsonPrimitive.content },
       entry["selected"]?.jsonPrimitive?.contentOrNull,
+      // Saved before carets were kept: none.
+      entry["carets"]?.jsonObject?.mapValues { it.value.jsonPrimitive.int }.orEmpty(),
     )
   }
 
@@ -36,6 +46,7 @@ class OpenEditors(private val storage: StoredText) {
     val entry = buildJsonObject {
       put("files", JsonArray(editors.files.map(::JsonPrimitive)))
       editors.selected?.let { put("selected", it) }
+      put("carets", JsonObject(editors.carets.mapValues { JsonPrimitive(it.value) }))
     }
     storage.write(JsonObject(all() + (project to entry)).toString())
   }

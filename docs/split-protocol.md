@@ -908,7 +908,24 @@ Main.java opened with Other.java reopened behind it; no file given, both reopene
 selected; a saved list of Other.java, Gone.java (missing), Util.kt and Main.java with Util.kt
 selected came back as three tabs in that order, Util.kt selected, Gone.java dropped.
 
-Not done: caret and scroll position per file (JetBrains Client keeps them too), split editors.
+Not done: ~~caret and scroll position per file~~ (caret done, see below), split editors.
+
+### Reopened editors' carets (2026-11-17)
+
+The saved list also keeps each file's caret offset, e.g.
+`"carets": {"…/Main.java": 0, "…/Big.java": 2971}`; an older entry without it reads as no carets.
+- **When it's saved:** on every open, close and tab change, and one second after an edit or caret move.
+- **When it's put back:** once the file's edit session has the document and the editor's caret version.
+  The first try, sent as soon as the document arrived, was refused: `RdRetryResponse` "not matched
+  expected versions" for request 1, and the caret stayed at 0.
+- **What the view shows:** the caret's line, 5 lines below the top. JetBrains Client restores the exact
+  scroll position; the caret's line is close enough for now.
+- **Scroll per tab:** each tab now keeps its own scroll position. Before, all tabs shared one
+  `LazyListState`, so switching tabs kept the other file's line index.
+
+Checked on the 5991 backend, desktop client: Big.java (4,505 lines) saved with its caret at offset 2971
+(line 150, `if (value > 0) {`). On reconnect it came back on line 150, shown near the top, with the backend
+accepting the move, and the saved offset stayed 2971.
 
 ## Plan for the client that follows from this
 
