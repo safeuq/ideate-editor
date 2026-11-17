@@ -7,8 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -24,6 +22,7 @@ import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.LocalBackHandler
 import intellijandroid.client.ui.LocalEditorTextInput
 import intellijandroid.client.ui.LocalIcons
+import intellijandroid.client.ui.LocalTitleBarArea
 import intellijandroid.client.ui.lux.PngDecoder
 import intellijandroid.client.ui.lux.pngDecoder
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -79,10 +78,12 @@ class MainActivity : ComponentActivity() {
         LocalIcons provides icons,
         LocalEditorTextInput provides ::editorTextInput,
         LocalBackHandler provides { enabled, onBack -> BackHandler(enabled, onBack) },
+        LocalTitleBarArea provides rememberCaptionBar(),
       ) {
-        IdeateApp(controller, fonts, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
+        IdeateApp(controller, fonts, Modifier.windowInsetsPadding(appInsets()))
       }
     }
+    transparentCaptionBar()
   }
 
   // With the screen off the activity stops; a dropped connection is retried once it starts again.

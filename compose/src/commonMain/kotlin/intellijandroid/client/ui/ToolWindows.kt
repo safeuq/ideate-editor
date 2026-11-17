@@ -29,6 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -205,17 +207,27 @@ fun MainToolbar(
   projectName: String?,
   onUnsupported: (String) -> Unit,
   modifier: Modifier = Modifier,
+  /** The project widget's icon centre in the window, in px: where the project gradient peaks. */
+  onProjectIconCenter: (Float) -> Unit = {},
 ) {
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
   val text = fonts.label().copy(fontSize = IslandsDark.toolbarFontSize.sp)
+  // In the window's title bar (TitleBar.kt): leave the window's buttons their room, be at least as
+  // tall as the system's caption bar, and keep the controls from dragging the window.
+  val titleBar = LocalTitleBarArea.current
+  val control = titleBar?.control ?: Modifier
   Row(
-    modifier.fillMaxWidth().height(IslandsDark.toolbarHeight).padding(horizontal = 6.dp),
+    modifier
+      .fillMaxWidth()
+      .height(maxOf(IslandsDark.toolbarHeight, titleBar?.height ?: 0.dp))
+      .padding(start = titleBar?.start ?: 0.dp, end = titleBar?.end ?: 0.dp)
+      .padding(horizontal = 6.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     val name = projectName ?: "…"
     Row(
-      Modifier.weight(1f, fill = false).padding(end = 8.dp),
+      Modifier.weight(1f, fill = false).padding(end = 8.dp).then(control),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       // The project widget's avatar as AvatarUtils.generateColoredAvatar draws it: sized like the
@@ -225,6 +237,9 @@ fun MainToolbar(
       val avatarSize = IslandsDark.toolbarIcon
       Box(
         Modifier.size(avatarSize)
+          .onGloballyPositioned { coordinates ->
+            onProjectIconCenter(coordinates.positionInWindow().x + coordinates.size.width / 2f)
+          }
           .background(projectAvatarBrush(name), RoundedCornerShape(avatarSize * 0.2f)),
         contentAlignment = Alignment.Center,
       ) {
@@ -252,7 +267,8 @@ fun MainToolbar(
     }
     Spacer(Modifier.weight(1f))
     Row(
-      Modifier.clickable { onUnsupported("Run configurations") }
+      control
+        .clickable { onUnsupported("Run configurations") }
         .padding(horizontal = 6.dp, vertical = 4.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -261,7 +277,7 @@ fun MainToolbar(
         Image(it, null, Modifier.padding(start = 2.dp).size(16.dp))
       }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(control, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
       listOf(
           "expui/build/build.svg" to "Build",
           "expui/run/run.svg" to "Run",
@@ -366,13 +382,36 @@ internal fun initials(name: String): String {
  * project name as the id. `smoke` → Color4, blue.
  */
 fun projectAvatarBrush(name: String): Brush {
-  val (start, end) = AVATAR_GRADIENTS[abs(name.hashCode() % AVATAR_GRADIENTS.size)]
+  val (start, end) = AVATAR_GRADIENTS[projectColorIndex(name)]
   return Brush.linearGradient(
     listOf(end, start),
     start = Offset(0f, Float.POSITIVE_INFINITY),
     end = Offset(Float.POSITIVE_INFINITY, 0f),
   )
 }
+
+/** The project's colour, 0 to 8, picked as [projectAvatarBrush] describes. */
+private fun projectColorIndex(name: String) = abs(name.hashCode() % AVATAR_GRADIENTS.size)
+
+/**
+ * The colour of the project gradient behind the main toolbar ([drawProjectGradient]): the same
+ * colour index as the avatar, `RecentProject.ColorN.MainToolbarGradientStart` in
+ * ManyIslandsDark.theme.json. `smoke` → Color4 `#335661`.
+ */
+fun projectGradientColor(name: String): Color = MAIN_TOOLBAR_GRADIENT[projectColorIndex(name)]
+
+private val MAIN_TOOLBAR_GRADIENT =
+  listOf(
+    Color(0xFF664832),
+    Color(0xFF5E4724),
+    Color(0xFF45522F),
+    Color(0xFF335661),
+    Color(0xFF394773),
+    Color(0xFF613861),
+    Color(0xFF503D70),
+    Color(0xFF325959),
+    Color(0xFF365439),
+  )
 
 /** `RecentProject.Color1..9.Avatar.Start/End` in ManyIslandsDark.theme.json. */
 private val AVATAR_GRADIENTS =

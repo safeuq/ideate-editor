@@ -573,5 +573,56 @@ SemiBold (Inter has no Bold file), at the header size (13, compact 12).
 
 **Git status and file colours.** See docs/split-protocol.md, "Project view rows: file status and scope colour".
 
-Not done (docs/pending.md): the backend's own tool window list and the ⋯ button, the "Project ▾" view selector,
-the project-colour tint on the main toolbar, and the title bar merged with the toolbar.
+Not done here: the backend's own tool window list and the ⋯ button, the "Project ▾" view selector (docs/pending.md
+#14, #15). The title bar and the project-colour tint are section 15.
+
+## 15. Title bar and project gradient (2026-11-17)
+
+The user asked for Gateway's title bar: no separate title bar, the window's buttons inside the main toolbar row.
+
+**macOS** (`desktop/MacTitleBar.kt`), as IntelliJ's `MacToolbarFrameHeader` and Jewel's `TitleBar.MacOS.kt` do it:
+
+| Step | Call | Value |
+|---|---|---|
+| Make the title bar transparent and as tall as the toolbar | `JBR.getWindowDecorations().createCustomTitleBar()`, `height =`, `setCustomTitleBar(window, bar)` | `IslandsDark.toolbarHeight`: 40, compact 32 (`CustomHeader` uses the same 40 / 32) |
+| Leave the traffic lights their room | `bar.leftInset` (JBR's own figure; IntelliJ hard-codes 78 = 52 + 26) | 0 in full screen, where they are hidden |
+| Drag the window, double-click to zoom | nothing: JBR does it for the title bar area | |
+| Let the toolbar's controls take clicks | `bar.forceHitTest(true)` while the pointer is over one; set on every press, release, move and drag | the areas come from `TitleBarArea.control`, in window px; the mouse point is scaled by `defaultTransform` (2 on Retina) |
+
+The JBR API comes from `intellij.libraries.jbr.jar` in the same JetBrains Client install as the protocol jars.
+On another Java runtime, `JBR.isWindowDecorationsSupported()` is false and the window keeps its native title bar.
+The connect screen has no toolbar, so it gets an empty strip of the toolbar's height that drags the window
+(`TitleBarSpacer`).
+
+Checked on the desktop (2026-11-17): the traffic lights sit in the toolbar row; a click on "Current File" reaches
+the app ("Run configurations isn't supported"). Not checked: dragging and double-click zoom (the window left the
+screen when the user changed Spaces), full screen.
+
+The user's earlier attempt in another project moved the traffic lights by hand through AppKit (`setFrameOrigin`
+on `standardWindowButton:` via JNA and `AWTAccessor`) with `apple.awt.fullWindowContent` and
+`apple.awt.transparentTitleBar`. It had no title bar height, no hit test and no full-screen handling. AppKit resets
+hand-moved buttons on resize and full screen, and Compose content over a transparent title bar takes the drag.
+
+**Android desktop windowing** (API 35+, `android/CaptionBar.kt`), from
+[Customizable header insets](https://developer.android.com/develop/adaptive-apps/guides/support-desktop-windowing#customizable_header_insets):
+
+| Step | Call |
+|---|---|
+| Draw under the caption bar; light caption buttons over the dark toolbar | `setSystemBarsAppearance(APPEARANCE_TRANSPARENT_CAPTION_BAR_BACKGROUND, … or APPEARANCE_LIGHT_CAPTION_BARS)` |
+| Toolbar at least the caption bar's height; the rest of the app below it | `WindowInsets.captionBar` top; the app's padding is `safeDrawing.exclude(captionBar)` |
+| Keep clear of the system's parts (window buttons, app chip) | `rootWindowInsets.getBoundingRects(Type.captionBar())`: each rect counts against the nearer window edge |
+| Taps on the toolbar's controls reach the app, the rest drags the window | `Modifier.systemGestureExclusion()` as `TitleBarArea.control` |
+
+Outside desktop windowing the caption bar is 0 and nothing changes. Not run: no Android 15+ emulator image is
+installed (the download was blocked in this session). Checked on the API 34 emulator that the phone layout is
+unchanged apart from the gradient.
+
+**Project gradient** (`drawProjectGradient` in `ui/TitleBar.kt`; `IslandsGradientPainter.renderFrameGradientImage`):
+painted on the window background behind the islands, so it tints the toolbar and the top of the tool window bar.
+
+| Part | Value |
+|---|---|
+| Across | `main-window-bg` `#26282C` at x = 0 → the project colour blended in at 85% under the project widget's icon centre → `#26282C` 600 dp further right (`RecentProject.MainToolbarGradient.width` 600) |
+| Down | fades to `#26282C` over 300 dp (`.height` 300) |
+| Project colour | `RecentProject.ColorN.MainToolbarGradientStart`, same index as the avatar: `#664832`, `#5E4724`, `#45522F`, `#335661` (`smoke`), `#394773`, `#613861`, `#503D70`, `#325959`, `#365439` |
+| Inactive window | IntelliJ fades it; IDEate doesn't yet |

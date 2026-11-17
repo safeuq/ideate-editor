@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -36,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -104,7 +106,18 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
   }
   val unsupported = { what: String -> notice = "$what isn't supported in this client yet" }
 
-  BoxWithConstraints(Modifier.fillMaxSize().background(IslandsDark.windowBackground)) {
+  // Where the project gradient peaks: the project widget's icon, once laid out (IntelliJ's default
+  // before that is 150).
+  var gradientCenter by remember { mutableFloatStateOf(Float.NaN) }
+  val projectColor = state.projectName?.let(::projectGradientColor)
+  BoxWithConstraints(
+    Modifier.fillMaxSize().background(IslandsDark.windowBackground).drawBehind {
+      if (projectColor != null) {
+        val center = if (gradientCenter.isNaN()) 150.dp.toPx() else gradientCenter
+        drawProjectGradient(IslandsDark.windowBackground, projectColor, center)
+      }
+    },
+  ) {
     // The backend's dialogs (Rename, New, Delete, …): windows of their own (docs/lux-protocol.md).
     intellijandroid.client.ui.lux.LuxDialogs(state.luxDialogs, session)
     val layout = screenLayout(maxWidth.value, maxHeight.value)
@@ -159,7 +172,7 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
       }
 
     Column(Modifier.fillMaxSize()) {
-      MainToolbar(state.projectName, unsupported)
+      MainToolbar(state.projectName, unsupported, onProjectIconCenter = { gradientCenter = it })
       when (layout) {
         ScreenLayout.PHONE_PORTRAIT -> {
           SwipePager(

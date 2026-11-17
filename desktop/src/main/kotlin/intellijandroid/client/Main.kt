@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import intellijandroid.client.connect.ConnectController
@@ -19,10 +20,12 @@ import intellijandroid.client.desktop.DesktopOpenSshFiles
 import intellijandroid.client.desktop.DesktopResources
 import intellijandroid.client.desktop.FileSecretStore
 import intellijandroid.client.desktop.Snapshots
+import intellijandroid.client.desktop.rememberMacTitleBar
 import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.LocalIcons
+import intellijandroid.client.ui.LocalTitleBarArea
 import intellijandroid.client.ui.lux.PngDecoder
 import intellijandroid.client.ui.lux.pngDecoder
 import intellijandroid.client.ui.theme.IslandsDark
@@ -112,17 +115,25 @@ fun main(arguments: Array<String>) {
     }
   }
   application {
+    val windowState = rememberWindowState(width = 1200.dp, height = 800.dp)
     Window(
       onCloseRequest = {
         controller.close()
         exitApplication()
       },
       title = "IDEate",
-      state = rememberWindowState(width = 1200.dp, height = 800.dp),
+      state = windowState,
     ) {
       val density = LocalDensity.current
       val icons = remember(density) { DesktopResources.JarIcons(clientLib, density) }
-      CompositionLocalProvider(LocalClientFonts provides fonts, LocalIcons provides icons) {
+      // On macOS the main toolbar takes the title bar's place, as in IntelliJ.
+      val titleBar =
+        rememberMacTitleBar(window, windowState.placement == WindowPlacement.Fullscreen)
+      CompositionLocalProvider(
+        LocalClientFonts provides fonts,
+        LocalIcons provides icons,
+        LocalTitleBarArea provides titleBar,
+      ) {
         IdeateApp(controller, fonts)
       }
     }

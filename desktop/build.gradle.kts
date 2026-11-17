@@ -12,6 +12,9 @@ val protocolJars: List<String> by rootProject.extra
 dependencies {
   implementation(project(":compose"))
   implementation(files(protocolJars.map { "$jetbrainsClientLib/$it" }))
+  // JetBrains Runtime's API (com.jetbrains.JBR): the macOS title bar (MacTitleBar.kt). The same jar
+  // IntelliJ ships; it calls into the runtime and reports "not supported" on other Java runtimes.
+  implementation(files("$jetbrainsClientLib/intellij.libraries.jbr.jar"))
   implementation(compose.desktop.currentOs)
   // Dispatchers.Main on the desktop (ConnectController); Compose Desktop doesn't bring it. Same
   // version as coroutines-core.
