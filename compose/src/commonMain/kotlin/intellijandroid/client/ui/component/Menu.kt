@@ -191,6 +191,8 @@ private fun Separator() {
 }
 
 internal object Menus {
+  val pointerRowHeight = 24.dp // rows opened by mouse, as IntelliJ's
+  val touchRowHeight = 40.dp // rows opened by touch, easy to hit with a finger
   val border = IslandsDark.popupBorder // Separator.separatorColor = popup-border
   val selection = IslandsDark.selectionBackground // MenuItem.selectionBackground
   val shortcut = IslandsDark.textSecondary // MenuItem.acceleratorForeground = text-secondary

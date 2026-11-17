@@ -38,6 +38,7 @@ import intellijandroid.client.ui.component.Link
 import intellijandroid.client.ui.component.Menu
 import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.component.RadioButtonRow
+import intellijandroid.client.ui.component.SearchHistory
 import intellijandroid.client.ui.component.SearchTextField
 import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.component.popupContainer
@@ -197,7 +198,13 @@ private fun Gallery(focused: FocusedShots) {
       Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         SearchTextField("", {}, Modifier.width(200.dp))
         SearchTextField("smoke", {}, Modifier.width(200.dp))
-        SearchTextField("", {}, Modifier.width(200.dp), history = true, undecorated = true)
+        SearchTextField(
+          "",
+          {},
+          Modifier.width(200.dp),
+          history = SearchHistory(),
+          undecorated = true,
+        )
       }
     }
     Section(

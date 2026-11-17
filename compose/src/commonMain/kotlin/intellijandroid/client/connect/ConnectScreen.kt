@@ -43,6 +43,7 @@ import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.component.Link
 import intellijandroid.client.ui.component.Menu
 import intellijandroid.client.ui.component.OutlinedButton
+import intellijandroid.client.ui.component.SearchHistory
 import intellijandroid.client.ui.component.SearchTextField
 import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.dialog.MessageKind
@@ -509,6 +510,9 @@ internal fun Header(title: String, styles: ConnectStyles, trailing: @Composable 
  * there with its border emptied (`RecentProjectFilteringTree.installSearchField`), and a separator
  * under it. [styles] is unused now; kept so SshPage's call stays the same.
  */
+/** Recent searches of the connect screen's pages, shared like Gateway's one search field. */
+private val connectSearches = SearchHistory()
+
 @Composable
 internal fun SearchRow(value: String, onChange: (String) -> Unit, styles: ConnectStyles) {
   Row(
@@ -517,7 +521,7 @@ internal fun SearchRow(value: String, onChange: (String) -> Unit, styles: Connec
       .padding(start = Gateway.searchIconInset, end = Gateway.contentInset),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    SearchTextField(value, onChange, history = true, undecorated = true)
+    SearchTextField(value, onChange, history = connectSearches, undecorated = true)
   }
   Box(Modifier.fillMaxWidth().height(1.dp).background(Gateway.divider))
 }

@@ -354,7 +354,18 @@ the desktop app and the emulator before it's pushed.
   paints it, and Jewel's `SearchTextField`.
   - The search icon sits before the text: `AllIcons.Actions.Search` = `expui/general/search.svg`,
     or `SearchWithHistory` = `expui/inline/searchHistory.svg` with [history]. The paths come from
-    `PlatformIconMappings.json`. The history popup itself isn't done.
+    `PlatformIconMappings.json`.
+  - History (2026-11-17): `SearchTextField(history = SearchHistory())`.
+    - `SearchHistory` keeps 5 searches, newest first. A repeat moves to the top, compared ignoring
+      case, and an entry already at the top stays as it is (`SearchTextField.MyModel.addElement`).
+    - The text joins the history when the field loses focus and when the popup opens.
+    - A click or tap on the icon opens the list under the field: `Menu` with 24 or 40 rows, by
+      pointer or touch. Choosing an entry puts it in the field, with the caret at the end.
+    - Kept in memory for the app's life. IntelliJ saves it only under a property name, which the
+      connect screen's field doesn't have.
+    - The connect screen's pages share one `SearchHistory` (`connectSearches`).
+- `TextField` keeps its own caret (`TextFieldValue`). Text set from outside puts the caret at the end,
+  as Swing's `setText` does; before, a chosen history entry left the caret at the start.
   - Once there is text, a clear icon follows it (`Actions.Close`/`CloseHovered` =
     `expui/general/closeSmall.svg`/`closeSmallHovered.svg`); a click empties the field. The gap
     between icon and text is 2 (`getSearchIconGap`, `getClearIconGap`).

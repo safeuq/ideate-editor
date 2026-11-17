@@ -16,7 +16,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -26,7 +28,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import intellijandroid.client.ui.theme.IslandsDark
@@ -68,9 +72,17 @@ fun TextField(
   val focused by interaction.collectIsFocusedAsState()
   val shape = RoundedCornerShape(FieldLook.radius)
   val height = FieldLook.height
+  // The field keeps its own caret; text set from outside (a history entry, a cleared field) puts
+  // the
+  // caret at the end, as Swing's setText does.
+  var fieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+  if (fieldValue.text != value) fieldValue = TextFieldValue(value, TextRange(value.length))
   BasicTextField(
-    value = value,
-    onValueChange = onValueChange,
+    value = fieldValue,
+    onValueChange = { edited ->
+      fieldValue = edited
+      if (edited.text != value) onValueChange(edited.text)
+    },
     enabled = enabled,
     singleLine = singleLine,
     textStyle = fonts.label(if (enabled) IslandsDark.text else IslandsDark.textDisabled),
