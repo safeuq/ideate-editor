@@ -10,6 +10,7 @@ any backend reachable over SSH, including a Mac backend shown on the phone:
 
 Status, 2026-11-17:
 - **Step 1, done:** the SSH layer in `compose/.../ssh/` (`SshSession`, `SshKeys`, the `RemoteHost` interface).
+- **Step 2, done:** `RemoteHost` in two implementations, `WorkerHost` and `ShellHost`, picked by `RemoteHosts`.
 - **Step 3, done:** saved hosts, secrets, known hosts and the log-in methods.
 - **Everything else** is planned. The findings below come from JetBrains Gateway 2026.3
 (`GW-263.7307.184`), read statically (decompiled `lib/intellij.gateway.core.jar` and `lib/intellij.gateway.ssh.jar`,
@@ -216,6 +217,68 @@ IDEATE_SSH_TEST_HOST=127.0.0.1 IDEATE_SSH_TEST_PORT=2222 IDEATE_SSH_TEST_USER=de
   IDEATE_SSH_TEST_PASSWORD=<password> IDEATE_SSH_TEST_KEY=<path to id_ed25519> ./gradlew :compose:jvmTest --tests '*SshSessionTest*'
 ```
 
+## Step 2: commands on the host (done)
+
+`RemoteHosts.forSession(session)` gives the `RemoteHost` for one connected host, usable for the session's life.
+It looks in `<RemoteDev>/remote-dev-worker/` (newest first, `ls -t`) for a worker that is executable and passes
+`worker-check`, and uses `WorkerHost` with it, else `ShellHost`. Both run every command through
+`SshSession.execInLoginShell`. They read the same files, so they give the same answers. The integration test
+checks that on the phone.
+
+| Call | `WorkerHost` | `ShellHost` |
+|---|---|---|
+| `os()` | through the shell: `uname -sm` | `uname -sm` |
+| `remoteDevDir()` | through the shell | Linux `${XDG_CACHE_HOME:-$HOME/.cache}/JetBrains/RemoteDev`, macOS `$HOME/Library/Caches/JetBrains/RemoteDev` |
+| `installedIdes()` | `installed-ides` | `ShellHost.INSTALLED_IDES`: each `dist/*` and `userProvidedDist/*`, resolved with `pwd -P`, that has `bin/remote-dev-server.sh`; `product-info.json` from the IDE folder or `Resources/` (macOS) |
+| `recentProjects()` | `recent-projects-data` (`rawStatuses`, `alivePids`) plus `active-projects` | `ShellHost.RECENT_STATUSES`: every file in `recent/` and `active/`, alive when `kill -0` reaches the pid in its name |
+| `status()` | `host-status`; exit 14 (starting) gives null | `<ide>/bin/remote-dev-server.sh status <project>`, the JSON after `STATUS:` |
+| `launch()` | `get-logs-dir`, then `host-launch` with `<logs>/stdout.log` and `stderr.log` | `mkdir -p <logs> && nohup <ide>/bin/remote-dev-server.sh run <project> >> <logs>/stdout.log 2>> <logs>/stderr.log < /dev/null &` |
+| `listFolders()` | through the shell (the worker's `list-files` has no project or has-folders flags) | `Termux.LIST_FOLDERS` |
+| `removeRecent()` | `remove-recent-project` | removes the `recent/` files whose one project is that path and whose `appVersion` starts with the product code |
+
+Shared rules (`HostData`):
+- **Recent projects:** Gateway's `fromStatus`. Only statuses with exactly one project, dated by `dateLastOpened`;
+  dropped without it. A project several backends served is listed once, with the newest date, running when any
+  of their pids is alive. Newest first.
+- **IDEs:** product codes outside Gateway's list are dropped. The name comes from the product code (`IU` →
+  "IntelliJ IDEA"), because the worker's `installed-ides` sends a shortened `product-info` without `name`. The
+  integration test found that difference.
+- **Logs folder:** Gateway's `get-logs-dir`: `<cache>/JetBrains/RemoteDev-<code>/<project path, '/' as '_'>/log`.
+  Example: `/data/data/com.termux/files/home/.cache/JetBrains/RemoteDev-IU/_data_data_com.termux_files_home_intellij_smoke/log`.
+  It is the RemoteDev folder's path with `-<code>` added. The worker answers it in plain text, not JSON.
+- **Ready:** `HostStatus.isReady` is `unattendedMode`, not `backendUnresponsive`, and a link or projects. With no
+  backend running, `host-status` and `status` still answer: it's the status command's own process, with
+  `unattendedMode: false` and no link, so it isn't ready.
+- **Errors:** a worker `error` reply, a missing reply, or a shell command's non-zero exit throw
+  `RemoteHostException` with the message.
+
+What the phone's worker (`remote-dev-worker_37fb36…`, linux-arm64) showed on 2026-11-17:
+
+| Command | Seen |
+|---|---|
+| `worker-check` | `HELLO_STDOUT` and `{"type":"error","errorCode":"CommandError","data":"ERROR_TEST Nothing to worry about"}` on stdout, `HELLO_STDERR` on stderr, **exit 1**. `WorkerHost.passesCheck` looks at the output only |
+| a missing flag | a Go `panic: Flag 'product-code' not found.` on stderr, no JSON |
+| `get-logs-dir` | needs `--product-code` and `--project-path` |
+| `get-common-logs-dir` | needs `--ide-path`; gives `~/.cache/JetBrains/IntelliJIdea2026.3/log` |
+| `list-files --root=/nonexistent` | `{"type":"error","errorCode":"CommandError","data":"open /nonexistent: no such file or directory"}`, exit 0 |
+| `recent-projects-data` | 3 files in `recent/`, 2 `rawStatuses`: the file without projects (`30916`) is left out |
+| `--help` | the command list (exists, pid-alive, host-status, host-launch, list-files, get-logs-dir, worker-check, …) and an `UnknownCommand` error |
+
+Tests:
+
+| Test | What | Result, 2026-11-17 |
+|---|---|---|
+| `RemoteHostTest` (9) | parsing with replies shaped like the phone's; `RemoteHosts` picks the worker and calls it Gateway's way; falls back to the shell; status null on exit 14 | pass |
+| `ShellHostTest` (3) | the real scripts with the Mac's `/bin/sh` in a temporary `HOME`: IDEs through a `userProvidedDist` link, recent and active files, `removeRecent`, `status` and `launch` with a fake `remote-dev-server.sh`, folders | pass |
+| `RemoteHostSshTest` (read only, skipped without `IDEATE_SSH_TEST_HOST`) | `RemoteHosts.forSession` against a real host; `WorkerHost` and `ShellHost` must agree; folders; `status` of the newest recent project | phone (Termux): `WorkerHost`, one IDE (`idea-IU-263.7307.200`), two recent projects (xtool, smoke), not ready (nothing ran). Linux container: `ShellHost`, no IDEs, no recents |
+| macOS, by hand | `ShellHost.INSTALLED_IDES` with `sh` on the Mac's RemoteDev folder | `/Users/safeuq/Applications/IntelliJ IDEA.app/Contents` through `userProvidedDist/_Users_safeuq_Applications_IntelliJ IDEA.app_Contents`, `product-info.json` from `Contents/Resources` |
+
+Not tested yet:
+- `launch` on a real host. The phone needs the user's go; the Mac needs Remote Login.
+- `status` and `launch` on the Mac over SSH. A plain `remote-dev-server.sh` there hands its command to the
+  user's running desktop IntelliJ (see `split-protocol.md`, "Running a backend on the Mac for client work"). So a
+  Mac host may need its own config folders, or no desktop IntelliJ running. Check this when Remote Login is on.
+
 ## Step 3: hosts, secrets, known hosts, log-in (done)
 
 | Piece | What it does | Example |
@@ -243,7 +306,7 @@ trusted, the second is `KNOWN`.
 | # | Step | Who | Depends on |
 |---|---|---|---|
 | 1 | Spike: SSHJ on Android and desktop; key and password log-in; exec; local forward; APK size. **Done**. Agent log-in moves to step 3 | intellij-android-ui | |
-| 2 | `RemoteHost` with `ShellHost` and `WorkerHost`, tested against the Mac, Termux on the phone and a Linux container | intellij-android | 1 (interface first, so 2 and 3 can run in parallel) |
+| 2 | `RemoteHost` with `ShellHost` and `WorkerHost`, tested against the Mac, Termux on the phone and a Linux container. **Done** (launch and the Mac over SSH still untested, see step 2) | intellij-android | 1 (interface first, so 2 and 3 can run in parallel) |
 | 3 | Saved hosts, `SecretStore` (Android Keystore, desktop), `KnownHosts`, log-in methods. **Done** | intellij-android-ui | 1 |
 | 4 | SSH page, new-connection dialog, host groups, refresh | intellij-android-ui | 2, 3 |
 | 5 | Open project: IDE pick, folder browser over SSH, start, forward, history entry, reconnect after a backend restart | split between the sessions | 4 |

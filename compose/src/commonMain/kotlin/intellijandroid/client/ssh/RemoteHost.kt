@@ -127,5 +127,14 @@ data class HostStatus(
       unattendedMode && !backendUnresponsive && (!joinLink.isNullOrEmpty() || projects.isNotEmpty())
 }
 
-/** A sub-folder; [isProject] when it holds `.idea`, [hasFolders] when it can be expanded. */
-data class RemoteFolder(val name: String, val isProject: Boolean, val hasFolders: Boolean)
+/**
+ * A sub-folder; [isProject] when it holds `.idea`. [hasFolders] and [hasHiddenFolders]: whether it
+ * holds sub-folders whose names don't or do start with `.`, so a folder browser can show an expand
+ * arrow before listing it, like `Termux.Folder`.
+ */
+data class RemoteFolder(
+  val name: String,
+  val isProject: Boolean,
+  val hasFolders: Boolean,
+  val hasHiddenFolders: Boolean,
+)
