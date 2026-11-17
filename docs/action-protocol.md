@@ -145,6 +145,37 @@ Usages, Go To ▸, Folding ▸, Analyze ▸, Rename…, Refactor ▸, Generate�
 IntelliJ's Code menu, to try actions that edit the document (Comment with Line Comment, Comment
 with Block Comment, Auto-Indent Lines, Rearrange Code).
 
+## 4. By touch
+
+Tested on the Pixel 3a emulator (API 34, phone portrait) against a Mac backend at bb3bc92,
+2026-11-17. Touch needed nothing beyond what ContextMenuArea already does (docs/intellij-look.md,
+section 13); no fix came out of the test.
+
+| Where | Long press on | Menu | What ran |
+|---|---|---|---|
+| Project | `Main`, `Other` | ProjectViewPopupMenu, 3 to 6 requests, 164 to 449 ms | Copy Path/Reference… ▸ Absolute Path: Android's clipboard toast showed `/private/tmp/…/smoke/src/demo/Main.java`; Reload from Disk: `SynchronizeCurrentFile ran` |
+| Structure | `main(String[]): void` | StructureViewPopupMenu, 5 requests, 92 ms | nothing (Back) |
+| Editor | `greeting` on line 6 | EditorPopupMenu, 7 requests, 254 ms | nothing (Back) |
+
+What held in each case:
+- The row (Project, Structure) or the caret (editor) moves to the pressed spot before the menu
+  asks the backend, so the menu is for what was pressed. In the editor the caret landed in
+  `greeting` (its usages lit up) with no selection, and the pager stayed on the editor page.
+- The menu opens centred over the tool-window page, 40 dp rows, and scrolls by dragging when it
+  is taller than the screen (the Project menu is: Reload from Disk is below the fold).
+- Submenus (Copy Path/Reference… ▸) open in place, centred too.
+- Back closes the menu only; the page under it stays.
+- A dialog group's submenu (Go To ▸, Folding ▸, Analyze ▸) opens, its items are grey.
+
+Not tested: Comment with Line Comment through `CLIENT_EDITOR_MENU_GROUP`, since an environment
+variable can't be set for an Android app. The desktop app covers that path.
+
+Test-tool notes:
+- Two `adb shell input tap` calls are too slow for a double tap (each starts a JVM), so a
+  double tap on a Project row doesn't open the file. Select the row, then `input keyevent
+  KEYCODE_ENTER` (ProjectTreeView opens a leaf on Enter).
+- A long press is `input swipe X Y X Y 1200`.
+
 ## Not done
 
 - Backend dialogs over Lux (`luxModel.components`: `LxDialog`, `LxFrame`), which would enable the
