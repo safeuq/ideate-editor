@@ -190,7 +190,14 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
     }
 
     Column(Modifier.fillMaxSize()) {
-      MainToolbar(state.projectName, unsupported, onProjectIconCenter = { gradientCenter = it })
+      MainToolbar(
+        state.projectName,
+        unsupported,
+        onProjectIconCenter = { gradientCenter = it },
+        islandsStart =
+          if (layout == ScreenLayout.LANDSCAPE) IslandsDark.stripeThickness
+          else IslandsDark.islandGap,
+      )
       when (layout) {
         ScreenLayout.PHONE_PORTRAIT -> {
           SwipePager(

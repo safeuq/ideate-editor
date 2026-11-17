@@ -632,3 +632,17 @@ painted on the window background behind the islands, so it tints the toolbar and
 | Down | fades to `#26282C` over 300 dp (`.height` 300) |
 | Project colour | `RecentProject.ColorN.MainToolbarGradientStart`, same index as the avatar: `#664832`, `#5E4724`, `#45522F`, `#335661` (`smoke`), `#394773`, `#613861`, `#503D70`, `#325959`, `#365439` |
 | Inactive window | IntelliJ fades it; IDEate doesn't yet |
+
+## 16. Toolbar dropdowns, toolbar start and selection band, measured (2026-11-17)
+
+From the user's screenshots of Gateway and IDEate (with and without JBR's title bar), 2x pixels:
+
+| Item | Gateway | IDEate before | Now |
+|---|---|---|---|
+| Project widget | a box 25 dp high (the toolbar button's 26 in compact), 10 dp before the avatar, ~8 after the chevron; `toolbar-bg-hovered` `#FFFFFF17` under the pointer | no box: the avatar right after the row's 6 dp padding | `ToolbarDropdown`: `MainToolbar.Dropdown.borderInsets` new UI 5,10,5,6, `toolbarButton` high, radius 4 (`MainToolbar.Button.arc.compact` 8), hover fill. "Current File" uses it too |
+| Toolbar start, own title bar, landscape | the row under the title bar starts at the islands' left edge (71 px = the tool window bar) | 6 dp from the window edge | the project widget's box starts at the islands' left edge: `stripeThickness` in landscape, `islandGap` otherwise; after JBR's left inset when the traffic lights share the row |
+| Tree selection band, left | 18 px (9 dp) inside the island, so 6 dp before the root's chevron glyph | 24 px (12 dp): no space before the chevron | 9 dp (`treeChevronInset`); the right inset stays 12 |
+
+The traffic lights in Gateway's screenshot are spaced wider (46 px apart, ours 41): JBR spaces them by the title
+bar height, so Gateway's bar may be taller than our 32 dp. The crop cut the window's top, so its height couldn't
+be measured; IntelliJ's own rule is 40, compact 32 (`CustomWindowHeaderUtil.getPreferredWindowHeaderHeight`).

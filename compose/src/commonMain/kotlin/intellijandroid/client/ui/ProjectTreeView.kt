@@ -257,22 +257,22 @@ private fun TreeRow(
         detectTapGestures(onPress = { onPress() }, onDoubleTap = { onDoubleClick() })
       },
   ) {
-    // Selection and hover: a rounded rectangle inset 12 px from both sides, not indented with the
-    // node.
+    // Selection and hover: a rounded rectangle inset 9 from the left (the root chevron's inset,
+    // measured against Gateway) and 12 from the right, not indented with the node.
     if (highlight != null) {
-      // Inset 12 from both sides; when the row is scrolled sideways, its left side follows the
-      // content out of view and the row's edge cuts it square, as the viewport clips IntelliJ's
-      // tree: scroll.x = 40 draws from -28, so no rounded corner shows at the edge. Drawn, not laid
-      // out, so a sideways scroll only redraws it.
+      // When the row is scrolled sideways, its left side follows the content out of view and the
+      // row's edge cuts it square, as the viewport clips IntelliJ's tree: scroll.x = 40 draws from
+      // -31, so no rounded corner shows at the edge. Drawn, not laid out, so a sideways scroll only
+      // redraws it.
       Box(
         Modifier.fillMaxSize().clipToBounds().drawBehind {
-          val inset = IslandsDark.treeSideInset.toPx()
-          val left = inset - scroll.x
+          val left = IslandsDark.treeChevronInset.toPx() - scroll.x
+          val right = size.width - IslandsDark.treeSideInset.toPx()
           val radius = IslandsDark.treeSelectionRadius.toPx()
           drawRoundRect(
             highlight,
             topLeft = Offset(left, 0f),
-            size = Size(size.width - inset - left, size.height),
+            size = Size(right - left, size.height),
             cornerRadius = CornerRadius(radius, radius),
           )
         },

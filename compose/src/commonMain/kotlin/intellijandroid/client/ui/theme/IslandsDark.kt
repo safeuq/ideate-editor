@@ -104,12 +104,13 @@ object IslandsDark {
   val treeTopInset
     get() = byDensity(4.dp, 2.dp) // Tree.border top 4 (compact 2)
 
-  // The selection's left/right inset: measured 12 on the real client in compact mode, so not
-  // Tree.border's 12 (compact 8).
+  // The selection's right inset: measured 12 on the real client in compact mode, so not
+  // Tree.border's 12 (compact 8). Its left inset is treeChevronInset (Gateway, 2026-11-17).
   val treeSideInset = 12.dp
 
-  // Where a top-level row's chevron box starts: measured 9 in compact against Gateway
-  // (2026-11-17), Tree.border's 8 plus 1; normal is inferred the same way (12 + 1).
+  // Where a top-level row's chevron box starts, and the selection's left edge: measured 9 in
+  // compact against Gateway (2026-11-17), Tree.border's 8 plus 1; normal is inferred the same way
+  // (12 + 1).
   val treeChevronInset
     get() = byDensity(13.dp, 9.dp)
 
@@ -117,6 +118,7 @@ object IslandsDark {
   val treeIconTextGap = 2.dp // chevron box end to icon: measured
   val treeTextGap = 3.dp // icon to text: measured against Gateway (2026-11-17)
   val treeHover = Color(0x10FFFFFF) // selection-bg-hovered
+  val toolbarHover = Color(0x17FFFFFF) // toolbar-bg-hovered = transparent-white-20
 
   val tabRowHeight = 32.dp // measured: editor tabs row
   val tabHeight = 24.dp
@@ -127,6 +129,15 @@ object IslandsDark {
 
   // Main toolbar: MainToolbar.Button.size 30 (code default; compact 26), iconSize 20 (compact
   // 16), Icon.insets 6,5,4,5 (compact 3,4,3,4): height = button + top + bottom inset.
+  // MainToolbar.Button.arc.compact 8 (an arc diameter); normal uses the toolbar buttons' 12.
+  val toolbarButtonRadius
+    get() = byDensity(6.dp, 4.dp)
+
+  // A toolbar dropdown's (project widget, run configurations) padding: MainToolbar.Dropdown
+  // .borderInsets, new UI 5,10,5,6 (top, left, bottom, right); its height is the toolbar button's.
+  val toolbarDropdownStart = 10.dp
+  val toolbarDropdownEnd = 6.dp
+
   val toolbarButton
     get() = byDensity(30.dp, 26.dp)
 

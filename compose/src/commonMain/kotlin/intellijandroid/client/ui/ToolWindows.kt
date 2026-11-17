@@ -4,6 +4,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -35,6 +39,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -341,6 +346,37 @@ private fun StripeButton(
 }
 
 /**
+ * A main toolbar dropdown (`ToolbarComboButton`): the project widget, the run configurations. A box
+ * of the toolbar button's height with MainToolbar.Dropdown's padding, filled with
+ * `toolbar-bg-hovered` under the pointer (Gateway's widget measured 25 dp high, 10 dp before the
+ * avatar).
+ */
+@Composable
+private fun ToolbarDropdown(
+  control: Modifier,
+  modifier: Modifier = Modifier,
+  onClick: (() -> Unit)? = null,
+  content: @Composable () -> Unit,
+) {
+  val interaction = remember { MutableInteractionSource() }
+  val hovered by interaction.collectIsHoveredAsState()
+  val shape = RoundedCornerShape(IslandsDark.toolbarButtonRadius)
+  Row(
+    modifier
+      .then(control)
+      .height(IslandsDark.toolbarButton)
+      .clip(shape)
+      .background(if (hovered) IslandsDark.toolbarHover else Color.Transparent)
+      .hoverable(interaction)
+      .then(onClick?.let { Modifier.clickable(onClick = it) } ?: Modifier)
+      .padding(start = IslandsDark.toolbarDropdownStart, end = IslandsDark.toolbarDropdownEnd),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    content()
+  }
+}
+
+/**
  * IntelliJ's main toolbar, reduced: the project widget on the left; the run widget, Build, Run,
  * Debug and More on the right. Only the project name is live; the rest reports "not supported yet"
  * through [onUnsupported].
@@ -352,6 +388,11 @@ fun MainToolbar(
   modifier: Modifier = Modifier,
   /** The project widget's icon centre in the window, in px: where the project gradient peaks. */
   onProjectIconCenter: (Float) -> Unit = {},
+  /**
+   * Where the islands start, so the project widget's box lines up with them when the window has its
+   * own title bar: after the tool window bar in landscape, as Gateway's second row does.
+   */
+  islandsStart: Dp = IslandsDark.islandGap,
 ) {
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
@@ -364,15 +405,16 @@ fun MainToolbar(
     modifier
       .fillMaxWidth()
       .height(maxOf(IslandsDark.toolbarHeight, titleBar?.height ?: 0.dp))
-      .padding(start = titleBar?.start ?: 0.dp, end = titleBar?.end ?: 0.dp)
-      .padding(horizontal = 6.dp),
+      // After the window's buttons when they are in this row (macOS); else lined up with the
+      // islands.
+      .padding(
+        start = titleBar?.start?.takeIf { it > 0.dp } ?: islandsStart,
+        end = (titleBar?.end ?: 0.dp) + 6.dp,
+      ),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     val name = projectName ?: "…"
-    Row(
-      Modifier.weight(1f, fill = false).padding(end = 8.dp).then(control),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
+    ToolbarDropdown(control, Modifier.weight(1f, fill = false).padding(end = 8.dp)) {
       // The project widget's avatar as AvatarUtils.generateColoredAvatar draws it: sized like the
       // toolbar icons (RecentProject.Avatar.iconSize falls back to MainToolbar.Button.iconSize),
       // corners of arcRatio 0.4 (an arc diameter, so a radius of 0.2 × size), the initials in
@@ -409,12 +451,7 @@ fun MainToolbar(
       }
     }
     Spacer(Modifier.weight(1f))
-    Row(
-      control
-        .clickable { onUnsupported("Run configurations") }
-        .padding(horizontal = 6.dp, vertical = 4.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
+    ToolbarDropdown(control, onClick = { onUnsupported("Run configurations") }) {
       BasicText("Current File", style = text, maxLines = 1)
       icons.painter("expui/general/chevronDown.svg")?.let {
         Image(it, null, Modifier.padding(start = 2.dp).size(16.dp))
