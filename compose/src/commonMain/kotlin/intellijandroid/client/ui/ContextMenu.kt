@@ -9,10 +9,10 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -89,7 +89,7 @@ fun ContextMenuArea(
   entries: () -> List<MenuEntry>?,
   modifier: Modifier = Modifier,
   onOpen: (Offset) -> Unit = {},
-  content: @Composable () -> Unit,
+  content: @Composable BoxScope.() -> Unit,
 ) {
   var open by remember { mutableStateOf<OpenMenu?>(null) }
   var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -309,8 +309,11 @@ private fun MenuRow(
         onClick = onClick,
       ),
   ) {
+    // The label takes the room the menu has (its width comes from the widest row,
+    // IntrinsicSize.Max);
+    // the shortcut and the submenu chevron sit at the right end.
     Row(
-      Modifier.align(Alignment.CenterStart).padding(horizontal = Menus.itemInset),
+      Modifier.fillMaxWidth().align(Alignment.CenterStart).padding(horizontal = Menus.itemInset),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       // IntelliJ keeps an icon column (Menu.maxGutterIconWidth 18) so labels line up.
@@ -322,12 +325,12 @@ private fun MenuRow(
         style = text.copy(color = if (enabled) IslandsDark.text else Menus.disabled),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f, fill = false),
+        modifier = Modifier.weight(1f),
       )
-      Spacer(Modifier.weight(1f).widthIn(min = Menus.shortcutGap))
       shortcut?.let {
         BasicText(
           it,
+          modifier = Modifier.padding(start = Menus.shortcutGap),
           style = text.copy(color = if (enabled) Menus.shortcut else Menus.disabled),
           maxLines = 1,
         )
@@ -367,3 +370,11 @@ private object Menus {
   val maxWidth = 360.dp
   val maxHeight = 560.dp
 }
+
+/**
+ * A shortcut as IntelliJ's default keymap shows it: macOS symbols on a Mac (`⌘C`), `Ctrl+C`
+ * elsewhere. [mac] and [other] are the two spellings, e.g. `shortcut("⌘C", "Ctrl+C")`.
+ */
+fun shortcut(mac: String, other: String): String = if (IS_MAC) mac else other
+
+private val IS_MAC = System.getProperty("os.name").orEmpty().lowercase().startsWith("mac")

@@ -56,6 +56,7 @@ import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -439,7 +440,122 @@ fun EditorView(
     return offset
   }
 
-  Box(modifier.onSizeChanged { viewport = it }) {
+  // IntelliJ's editor context menu (EditorPopupMenu), what IDEate can do enabled, the rest greyed
+  // out (docs/intellij-look.md, section 13).
+  val clipboard = LocalClipboardManager.current
+
+  /** The selection, or the caret's whole line with its line break: what IntelliJ copies. */
+  fun copyRange(): Pair<Int, Int> {
+    val current = currentFile
+    if (current.selectionStart != current.selectionEnd)
+      return minOf(current.selectionStart, current.selectionEnd) to
+        maxOf(current.selectionStart, current.selectionEnd)
+    val line = currentLines.lineOf(current.caret)
+    val end =
+      if (line + 1 < currentLines.count) currentLines.starts[line + 1] else current.text.length
+    return currentLines.starts[line] to end
+  }
+
+  fun copy() {
+    val (start, end) = copyRange()
+    clipboard.setText(AnnotatedString(currentFile.text.substring(start, end)))
+  }
+
+  fun cut() {
+    val (start, end) = copyRange()
+    if (start == end) return
+    copy()
+    actions.moveCaret(end, start)
+    actions.key(EditorKey.BACKSPACE)
+  }
+
+  fun menu(): List<MenuEntry> {
+    val current = currentFile
+    val hasSelection = current.selectionStart != current.selectionEnd
+    return listOf(
+      MenuItem(
+        "Show Context Actions",
+        shortcut("⌥⏎", "Alt+Enter"),
+        enabled = false,
+        iconPath = "expui/codeInsight/intentionBulb.svg",
+      ),
+      SubMenu(
+        "Copy / Paste Special",
+        listOf(
+          MenuItem("Copy Absolute Path", shortcut("⇧⌘C", "Ctrl+Shift+C")) {
+            clipboard.setText(AnnotatedString(current.path))
+          },
+          MenuItem("Copy File Name") { clipboard.setText(AnnotatedString(current.name)) },
+          MenuItem("Copy Reference", shortcut("⌥⇧⌘C", "Ctrl+Alt+Shift+C"), enabled = false),
+          MenuSeparator,
+          MenuItem("Copy as Plain Text", enabled = hasSelection) { copy() },
+          MenuItem("Copy as Rich Text", enabled = false),
+          MenuSeparator,
+          MenuItem("Paste from History…", shortcut("⇧⌘V", "Ctrl+Shift+V"), enabled = false),
+          MenuItem("Paste as Plain Text", shortcut("⌥⇧⌘V", "Ctrl+Alt+Shift+V"), enabled = false),
+        ),
+      ),
+      MenuItem(
+        "Cut",
+        shortcut("⌘X", "Ctrl+X"),
+        enabled = current.editable,
+        iconPath = "expui/general/cut.svg",
+        onClick = ::cut,
+      ),
+      MenuItem(
+        "Copy",
+        shortcut("⌘C", "Ctrl+C"),
+        iconPath = "expui/general/copy.svg",
+        onClick = ::copy,
+      ),
+      MenuItem(
+        "Paste",
+        shortcut("⌘V", "Ctrl+V"),
+        enabled = false,
+        iconPath = "expui/general/paste.svg",
+      ),
+      MenuItem("Column Selection Mode", shortcut("⇧⌘8", "Alt+Shift+Insert"), enabled = false),
+      MenuSeparator,
+      MenuItem("Find Usages", shortcut("⌥F7", "Alt+F7"), enabled = false),
+      SubMenu("Go To", emptyList(), enabled = false),
+      SubMenu("Folding", emptyList(), enabled = false),
+      SubMenu("Refactor", emptyList(), enabled = false),
+      MenuItem("Generate…", shortcut("⌘N", "Alt+Insert"), enabled = false),
+      MenuSeparator,
+      MenuItem(
+        "Run…",
+        shortcut("⌃⇧R", "Ctrl+Shift+F10"),
+        enabled = false,
+        iconPath = "expui/run/run.svg",
+      ),
+      MenuItem(
+        "Debug…",
+        shortcut("⌃⇧D", "Ctrl+Shift+F9"),
+        enabled = false,
+        iconPath = "expui/run/debug.svg",
+      ),
+      SubMenu("More Run/Debug", emptyList(), enabled = false),
+      MenuSeparator,
+      SubMenu("Open In", emptyList(), enabled = false),
+      SubMenu("Local History", emptyList(), enabled = false),
+      SubMenu("Git", emptyList(), enabled = false),
+      MenuSeparator,
+      MenuItem("Compare with Clipboard", enabled = false),
+    )
+  }
+
+  ContextMenuArea(
+    entries = ::menu,
+    modifier = modifier.onSizeChanged { viewport = it },
+    // Like IntelliJ: a right click outside the selection moves the caret there first.
+    onOpen = { position ->
+      val offset = offsetAt(position)
+      val current = currentFile
+      val start = minOf(current.selectionStart, current.selectionEnd)
+      val end = maxOf(current.selectionStart, current.selectionEnd)
+      if (start == end || offset !in start..end) moveTo(offset, extend = false)
+    },
+  ) {
     LazyColumn(
       state = listState,
       modifier =

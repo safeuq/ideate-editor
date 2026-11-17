@@ -42,8 +42,10 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -426,6 +428,43 @@ private fun EditorTabs(state: SessionState, session: ClientSession) {
   if (state.editors.isEmpty()) return
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
+  val clipboard = LocalClipboardManager.current
+
+  // IntelliJ's tab context menu (EditorTabPopupMenu); what IDEate can't do yet is greyed out.
+  fun tabMenu(path: String, name: String): List<MenuEntry> {
+    val paths = state.editors.map { it.path }
+    val index = paths.indexOf(path)
+    fun close(targets: List<String>) = targets.forEach(session::closeEditor)
+    return listOf(
+      MenuItem("Close", shortcut("⌘W", "Ctrl+F4")) { session.closeEditor(path) },
+      MenuItem("Close Other Tabs", enabled = paths.size > 1) {
+        session.selectEditor(path)
+        close(paths - path)
+      },
+      MenuItem("Close All Tabs") { close(paths) },
+      MenuItem("Close Tabs to the Left", enabled = index > 0) { close(paths.take(index)) },
+      MenuItem("Close Tabs to the Right", enabled = index < paths.size - 1) {
+        close(paths.drop(index + 1))
+      },
+      MenuSeparator,
+      MenuItem("Pin Tab", enabled = false, iconPath = "expui/general/pin.svg"),
+      MenuSeparator,
+      MenuItem("Split Right", enabled = false, iconPath = "expui/general/splitVertically.svg"),
+      MenuItem("Split Down", enabled = false, iconPath = "expui/general/splitHorizontally.svg"),
+      MenuItem("Split and Move Right", enabled = false),
+      MenuItem("Split and Move Down", enabled = false),
+      MenuSeparator,
+      MenuItem("Copy Absolute Path", shortcut("⇧⌘C", "Ctrl+Shift+C")) {
+        clipboard.setText(AnnotatedString(path))
+      },
+      MenuItem("Copy File Name") { clipboard.setText(AnnotatedString(name)) },
+      MenuItem("Select In…", shortcut("⌥F1", "Alt+F1"), enabled = false),
+      SubMenu("Open In", emptyList(), enabled = false),
+      MenuSeparator,
+      MenuItem("Configure Editor Tabs…", enabled = false),
+    )
+  }
+
   Row(
     Modifier.fillMaxWidth().height(IslandsDark.tabRowHeight).padding(start = 4.dp),
     verticalAlignment = Alignment.CenterVertically,
@@ -436,32 +475,34 @@ private fun EditorTabs(state: SessionState, session: ClientSession) {
         state.tree.nodes.values.firstOrNull { it.path == editor.path }?.iconPaths?.firstOrNull()
           ?: "expui/fileTypes/text.svg"
       val pill = RoundedCornerShape(IslandsDark.tabRadius)
-      Box(
-        Modifier.height(IslandsDark.tabHeight)
-          .clip(pill)
-          .then(
-            if (selected)
-              Modifier.background(IslandsDark.tabSelectedBackground)
-                .border(1.dp, IslandsDark.tabSelectedBorder, pill)
-            else Modifier,
-          )
-          .clickable { session.selectEditor(editor.path) }
-          .padding(start = 8.dp, end = 4.dp),
-      ) {
-        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
-          icons.painter(iconPath)?.let { Image(it, null, Modifier.size(16.dp)) }
-          Spacer(Modifier.width(6.dp))
-          BasicText(
-            editor.name,
-            style =
-              TextStyle(
-                color = IslandsDark.text,
-                fontFamily = fonts.ui,
-                fontSize = IslandsDark.UI_FONT_SIZE.sp,
-              ),
-          )
-          Spacer(Modifier.width(2.dp))
-          TabCloseButton(editor.name) { session.closeEditor(editor.path) }
+      ContextMenuArea(entries = { tabMenu(editor.path, editor.name) }) {
+        Box(
+          Modifier.height(IslandsDark.tabHeight)
+            .clip(pill)
+            .then(
+              if (selected)
+                Modifier.background(IslandsDark.tabSelectedBackground)
+                  .border(1.dp, IslandsDark.tabSelectedBorder, pill)
+              else Modifier,
+            )
+            .clickable { session.selectEditor(editor.path) }
+            .padding(start = 8.dp, end = 4.dp),
+        ) {
+          Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
+            icons.painter(iconPath)?.let { Image(it, null, Modifier.size(16.dp)) }
+            Spacer(Modifier.width(6.dp))
+            BasicText(
+              editor.name,
+              style =
+                TextStyle(
+                  color = IslandsDark.text,
+                  fontFamily = fonts.ui,
+                  fontSize = IslandsDark.UI_FONT_SIZE.sp,
+                ),
+            )
+            Spacer(Modifier.width(2.dp))
+            TabCloseButton(editor.name) { session.closeEditor(editor.path) }
+          }
         }
       }
     }

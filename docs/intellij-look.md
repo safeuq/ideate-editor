@@ -483,3 +483,37 @@ Submenus open in place of the menu, with a row at the top to go back. IntelliJ o
 in place also works with a finger and in a centred menu. Items are plain data (`MenuItem`, `SubMenu`,
 `MenuSeparator`), so they can come from the backend later. `entries` is read while the menu shows, and null shows
 "Loading…".
+
+**The editor's menu** (IntelliJ's `EditorPopupMenu`, New UI order). A right click or long press first moves the
+caret to that point, unless it is inside the selection, as IntelliJ does.
+
+| Item | In IDEate |
+|---|---|
+| Cut ⌘X | works: copies the selection, or the caret's whole line with its line break, then deletes it (the backend's `EditorBackSpace`) |
+| Copy ⌘C | works: the selection, or the whole line with its line break, to the system clipboard |
+| Copy / Paste Special ▸ Copy Absolute Path, Copy File Name, Copy as Plain Text | work |
+| Paste ⌘V, Paste from History…, Paste as Plain Text | greyed out: pasting goes through the backend's clipboard (`ClipboardModel`, `ClipboardHandlerRequest` in the rd model) and its `EditorPaste`, not done yet |
+| Show Context Actions, Copy Reference, Copy as Rich Text, Column Selection Mode, Find Usages, Go To ▸, Folding ▸, Refactor ▸, Generate…, Run…, Debug…, More Run/Debug ▸, Open In ▸, Local History ▸, Git ▸, Compare with Clipboard | greyed out: they need the backend's actions (see below) |
+
+**The editor tab's menu** (`EditorTabPopupMenu`):
+
+| Item | In IDEate |
+|---|---|
+| Close ⌘W, Close Other Tabs, Close All Tabs, Close Tabs to the Left, Close Tabs to the Right | work (each tab closes as with its close button); greyed out when there is no such tab |
+| Copy Absolute Path, Copy File Name | work |
+| Pin Tab, Split Right, Split Down, Split and Move Right, Split and Move Down, Select In…, Open In ▸, Configure Editor Tabs… | greyed out: no pinned tabs, split editors or settings in IDEate yet |
+
+JetBrains Client probably fills these menus from the backend: the rd model has an actions protocol
+(`ActionPopupSession`, `ActionPopupContent`, `ActionExecuteRequest`, …). That would bring every greyed item at
+once. The menu takes its items as data, so backend items can replace the local lists.
+
+Checked 2026-11-17 against the Mac backend (port 5992):
+- **Desktop:** a right click on `greeting` (line 6) opened the menu at the pointer and moved the caret there.
+  Copy put `String greeting = "just a simple greeting";` and its line break on the clipboard. A right click on
+  the `Main.java` tab opened the tab menu; with one tab, the Close Other/Left/Right items are greyed. Copy File
+  Name gave `Main.java`.
+- **Emulator (Pixel 3a):** a long press on line 8 opened the editor menu in the middle of the screen with
+  40 dp rows and moved the caret to line 8. "Copy / Paste Special" opened in place with its back row.
+- **Labels:** on the first version, labels shared the row's free space with the gap before the shortcut, so a
+  long label was cut at half the width ("Remove from Recent Pr…", seen by the UI session). Now the label takes
+  the room the menu has, and the shortcut sits at the right end.
