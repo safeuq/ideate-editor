@@ -3,6 +3,7 @@ package intellijandroid.client.session
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
 import com.jetbrains.ide.model.uiautomation.BeBehaviorControl
 import com.jetbrains.ide.model.uiautomation.BeControl
 import com.jetbrains.ide.model.uiautomation.BeControlContainer
@@ -10,6 +11,7 @@ import com.jetbrains.ide.model.uiautomation.BeEmptyData
 import com.jetbrains.ide.model.uiautomation.BeGrid
 import com.jetbrains.ide.model.uiautomation.BeIcon
 import com.jetbrains.ide.model.uiautomation.BeLabel
+import com.jetbrains.ide.model.uiautomation.BeRichText
 import com.jetbrains.ide.model.uiautomation.BeShortcutListener
 import com.jetbrains.ide.model.uiautomation.BeSpacer
 import com.jetbrains.ide.model.uiautomation.BeTextBox
@@ -22,11 +24,13 @@ import com.jetbrains.ide.model.uiautomation.uIAutomationInteractionModel
 import com.jetbrains.rd.framework.IProtocol
 import com.jetbrains.rd.ide.model.BeAbstractPopup
 import com.jetbrains.rd.ide.model.DefaultPopupContent
+import com.jetbrains.rd.ide.model.FontStyle
 import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.LxPanel
 import com.jetbrains.rd.ide.model.LxPoint
 import com.jetbrains.rd.ide.model.luxModel
 import com.jetbrains.rd.util.lifetime.Lifetime
+import intellijandroid.client.ui.lux.resolveLuxColor
 
 /**
  * One line of a backend popup, flattened from its `BeControl` tree: a label, or a text box the user
@@ -166,20 +170,8 @@ internal class BackendPopups(
         val list =
           PopupList(
             lines.map { line ->
-              var icon: String? = null
-              var text = ""
-              // Each row is BeStyleControl → BeGrid [BeIcon, BeLabel].
-              fun look(each: BeControl) {
-                when (each) {
-                  is BeIcon -> if (icon == null) icon = each.icon.valueOrNull?.let(iconPath)
-                  is BeLabel -> if (text.isEmpty()) text = each.text.value
-                  is BeGrid -> each.items.valueOrNull.orEmpty().forEach { look(it.content) }
-                  is BeControlContainer -> look(each.content)
-                  else -> Unit
-                }
-              }
-              line.columnElements.forEach(::look)
-              PopupRow(icon, text, line)
+              val row = BeRow.of(line, iconPath)
+              PopupRow(row.icon, row.text, line)
             },
           )
         lines.forEachIndexed { index, line ->
@@ -286,5 +278,48 @@ internal class BackendPopups(
           each.model.result.set(DialogResult.CLOSE)
         }
       }
+  }
+}
+
+/**
+ * The icon and text of a [BeTreeGridLine], e.g. a New ▸ Java Class kind (BeStyleControl → BeGrid
+ * [BeIcon, BeLabel]) or a Packages pane row (BeGrid [BeIcon, BeRichText], the rich text in parts
+ * such as `src` and a grey ` smoke`). A row without text is the placeholder IntelliJ puts under a
+ * node until its children load (a BeSpacer).
+ */
+internal class BeRow(val icon: String?, val fragments: List<TextFragment>) {
+  val text
+    get() = fragments.joinToString("") { it.text }
+
+  companion object {
+    fun of(line: BeTreeGridLine, iconPath: (IconModel) -> String?): BeRow {
+      var icon: String? = null
+      val fragments = mutableListOf<TextFragment>()
+      fun look(each: BeControl) {
+        when (each) {
+          is BeIcon -> if (icon == null) icon = each.icon.valueOrNull?.let(iconPath)
+          is BeLabel -> fragments += TextFragment(each.text.value, 0, null)
+          is BeRichText ->
+            each.text.valueOrNull?.parts.orEmpty().forEach { part ->
+              fragments +=
+                TextFragment(
+                  part.text,
+                  when (part.fontStyle) {
+                    FontStyle.Bold -> 1
+                    FontStyle.Italic -> 2
+                    else -> 0
+                  },
+                  // E.g. a NamedColor for the grey path after a Project Files root.
+                  resolveLuxColor(part.foregroundColor)?.toArgb()?.toLong()?.and(0xFFFFFFFFL),
+                )
+            }
+          is BeGrid -> each.items.valueOrNull.orEmpty().forEach { look(it.content) }
+          is BeControlContainer -> look(each.content)
+          else -> Unit
+        }
+      }
+      line.columnElements.forEach(::look)
+      return BeRow(icon, fragments)
+    }
   }
 }

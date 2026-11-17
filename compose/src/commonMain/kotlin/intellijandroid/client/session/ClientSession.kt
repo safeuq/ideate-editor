@@ -79,6 +79,7 @@ import intellijandroid.client.connection.ClientCertificate
 import intellijandroid.client.connection.Connection
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.connection.SplitWire
+import intellijandroid.client.ui.IconJar
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
@@ -131,7 +132,17 @@ class ClientSession(
   private var solution: Solution? = null
   private var vfs: VfsModel? = null
   private var pane: RdProjectViewAsyncPane? = null
+  private val projectViews =
+    ProjectViewPanes({ icon -> iconPaths(icon).firstOrNull() }) { views ->
+      mutableState.update { it.copy(projectViews = views) }
+    }
+  private val toolWindows =
+    BackendToolWindows({ icon -> iconPaths(icon).firstOrNull() }) { windows ->
+      mutableState.update { it.copy(toolWindows = windows) }
+    }
   private val compositeIds = mutableMapOf<String, RdFileEditorCompositeId>()
+  /** Editors the backend opened itself, by `RdFileIdNew.backendId`, until their path is known. */
+  private val unnamedComposites = mutableMapOf<Int, RdFileEditorCompositeId>()
   /**
    * The tabs' order: files in the order they were asked to open, the reopened ones first in their
    * saved order. Tabs appear as their documents arrive, which can be in any order.
@@ -188,6 +199,17 @@ class ClientSession(
     mutableState.update { it.copy(tree = it.tree.copy(selected = nodeId)) }
     pane?.selection?.set(nodeId)
   }
+
+  /** Shows another pane in the Project tool window, e.g. Packages or the Project Files scope. */
+  fun chooseProjectView(option: ProjectViewOption) = onRd { projectViews.choose(option) }
+
+  /** Expands or collapses a row of a pane the backend draws (Packages, Scopes). */
+  fun paneToggle(nodeId: Int) = onRd { projectViews.toggle(nodeId) }
+
+  fun paneSelect(nodeId: Int) = onRd { projectViews.select(nodeId) }
+
+  /** Opens a Packages or Scopes row's file; the backend opens the editor. */
+  fun paneOpen(nodeId: Int) = onRd { projectViews.open(nodeId) }
 
   /** Opens a file of the backend in an editor tab, or switches to its tab if it is already open. */
   fun open(path: String) = onRd {
@@ -634,6 +656,22 @@ class ClientSession(
         compositeId,
         deferred ->
         deferred.model.advise(compositeLifetime) { composite ->
+          // A file the backend opened itself (e.g. from the Packages pane): ask the VFS for its
+          // path.
+          (composite.fileId as? RdFileIdNew)?.let { fileId ->
+            val known = documentPaths[fileId.backendId]
+            if (known != null) compositeIds.putIfAbsent(known, compositeId)
+            else {
+              unnamedComposites[fileId.backendId] = compositeId
+              vfs
+                ?.findFile
+                ?.start(compositeLifetime, RdFindFileParams(fileId, null, false, false))
+                ?.result
+                ?.advise(compositeLifetime) { found ->
+                  found.unwrap()?.properties?.path?.let { nameDocument(fileId.backendId, it) }
+                }
+            }
+          }
           val selected = selectedEditorId?.takeIf { it.compositeId == compositeId }
           composite.visible.set(selected != null)
           // The selection sent when the file opened can come before the backend made this editor,
@@ -649,6 +687,8 @@ class ClientSession(
         }
       }
       createProjectView(solutionLifetime, newSolution)
+      projectViews.bind(solutionLifetime, newSolution.projectViewModel)
+      toolWindows.bind(solutionLifetime, newSolution)
       bindStructure(solutionLifetime, newSolution)
       newSolution.isLoaded.advise(solutionLifetime) { loaded ->
         if (!loaded) return@advise
@@ -1038,6 +1078,22 @@ class ClientSession(
   private fun tabIndex(path: String): Int =
     tabOrder.indexOf(path).let { if (it < 0) Int.MAX_VALUE else it }
 
+  /**
+   * Gives the editor of a file the backend opened itself its [path], e.g. `document-938` becomes
+   * `/…/smoke/src/demo/Other.java`.
+   */
+  private fun nameDocument(backendId: Int, path: String) {
+    documentPaths[backendId] = path
+    unnamedComposites.remove(backendId)?.let { compositeIds[path] = it }
+    val unnamed = "document-$backendId"
+    mutableState.update { state ->
+      state.copy(
+        editors = state.editors.map { if (it.path == unnamed) it.copy(path = path) else it },
+        selectedEditor = if (state.selectedEditor == unnamed) path else state.selectedEditor,
+      )
+    }
+  }
+
   private fun pathOf(documentId: RdDocumentId): String {
     val fileId = (documentId as? RdDocumentIdWithFileId)?.fileId as? RdFileIdNew
     return fileId?.let { documentPaths[it.backendId] }
@@ -1134,7 +1190,16 @@ class ClientSession(
 
     fun iconPaths(icon: IconModel): List<String> =
       when (icon) {
-        is ImageIconModel -> listOf(icon.id.path)
+        is ImageIconModel -> {
+          // A plugin's icon comes with its SVG (the client's icons jar has only the platform's).
+          icon.imageSources?.let { sent ->
+            IconJar.remember(
+              icon.id.path,
+              sent.sources.mapNotNull { source -> source.body?.let { source.path to it } }.toMap(),
+            )
+          }
+          listOf(icon.id.path)
+        }
         is RowIconModel -> icon.subNodes.flatMap(::iconPaths)
         // Layered icon (e.g. the module file): the first layer is the base icon.
         is CompositionIconModel -> icon.subNodes.flatMap(::iconPaths)

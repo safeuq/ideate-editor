@@ -127,7 +127,9 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
     // editor or switches to a tool window.
     val editorScroll = remember { SidewaysScroll() }
     // One per tool window, so each keeps its position; the pager asks the one on screen.
-    val windowScrolls = remember { ToolWindow.entries.associateWith { SidewaysScroll() } }
+    val windowScrolls = remember { mutableMapOf<ToolWindow, SidewaysScroll>() }
+    fun scrollOf(window: ToolWindow) = windowScrolls.getOrPut(window) { SidewaysScroll() }
+    val buttons = remember(state.toolWindows) { toolWindowButtons(state.toolWindows) }
     // Phone portrait starts on the editor; the other layouts start with Project open, like
     // IntelliJ.
     LaunchedEffect(layout) { if (layout == ScreenLayout.PHONE_PORTRAIT) page = Page.EDITOR }
@@ -160,16 +162,32 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
     LaunchedEffect(structureShown) { session.setStructureVisible(structureShown) }
 
     @Composable
-    fun Window(window: ToolWindow, onBack: (() -> Unit)?, modifier: Modifier) =
-      ToolWindowPanel(window, onBack, modifier.island()) {
+    fun Window(window: ToolWindow, onBack: (() -> Unit)?, modifier: Modifier) {
+      // Project's header picks the view: Project, Packages, Project Files, ….
+      val views = state.projectViews.takeIf { window == ToolWindow.PROJECT && it.options.size > 1 }
+      ToolWindowPanel(
+        window,
+        onBack,
+        modifier.island(),
+        title = views?.current?.name ?: window.title,
+        views =
+          views?.options?.map { option ->
+            MenuItem(
+              option.name,
+              iconPath = option.iconPath,
+              onClick = { session.chooseProjectView(option) },
+            )
+          },
+      ) {
         ToolWindowContent(
           window,
           state,
           session,
-          windowScrolls.getValue(window),
+          scrollOf(window),
           onNavigated = { onBack?.invoke() },
         )
       }
+    }
 
     Column(Modifier.fillMaxSize()) {
       MainToolbar(state.projectName, unsupported, onProjectIconCenter = { gradientCenter = it })
@@ -180,9 +198,9 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
             onPage = { page = it },
             canScroll = { onPage, dragX ->
               when (onPage) {
-                Page.LEFT -> windowScrolls.getValue(windows.lastLeft).canScroll(dragX)
+                Page.LEFT -> scrollOf(windows.lastLeft).canScroll(dragX)
                 Page.EDITOR -> editorScroll.canScroll(dragX)
-                Page.RIGHT -> windowScrolls.getValue(windows.lastRight).canScroll(dragX)
+                Page.RIGHT -> scrollOf(windows.lastRight).canScroll(dragX)
               }
             },
             left = {
@@ -195,7 +213,7 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
             modifier =
               Modifier.weight(1f).fillMaxWidth().padding(horizontal = IslandsDark.islandGap),
           )
-          ToolWindowBar(open, ::barClick, vertical = false, Modifier.fillMaxWidth())
+          ToolWindowBar(buttons, open, ::barClick, vertical = false, Modifier.fillMaxWidth())
         }
         ScreenLayout.TABLET_PORTRAIT -> {
           Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = IslandsDark.islandGap)) {
@@ -211,11 +229,11 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
               }
             }
           }
-          ToolWindowBar(open, ::barClick, vertical = false, Modifier.fillMaxWidth())
+          ToolWindowBar(buttons, open, ::barClick, vertical = false, Modifier.fillMaxWidth())
         }
         ScreenLayout.LANDSCAPE ->
           Row(Modifier.weight(1f).fillMaxWidth()) {
-            ToolWindowBar(open, ::barClick, vertical = true, Modifier.fillMaxHeight())
+            ToolWindowBar(buttons, open, ::barClick, vertical = true, Modifier.fillMaxHeight())
             // Open tool windows share one column left of the editor, one above the other.
             if (open.isNotEmpty()) {
               Column(Modifier.width(300.dp).fillMaxHeight()) {
@@ -255,6 +273,9 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
 private fun Modifier.island() =
   clip(RoundedCornerShape(IslandsDark.islandRadius)).background(IslandsDark.islandBackground)
 
+/** `RdProjectViewAsyncPane` "ProjectPane": the Project view, the one with [SessionState.tree]. */
+private const val PROJECT_PANE = "ProjectPane"
+
 @Composable
 private fun ToolWindowContent(
   window: ToolWindow,
@@ -263,8 +284,22 @@ private fun ToolWindowContent(
   scroll: SidewaysScroll,
   onNavigated: () -> Unit,
 ) =
-  when (window) {
-    ToolWindow.PROJECT ->
+  when {
+    // Packages, Scopes: rows the backend draws (a BeTreeGrid); it opens what is double-tapped.
+    window == ToolWindow.PROJECT &&
+      state.projectViews.current.let { it != null && it.paneId != PROJECT_PANE } ->
+      ProjectTreeView(
+        tree = state.projectViews.tree,
+        onToggle = { session.paneToggle(it.id) },
+        onSelect = { session.paneSelect(it.id) },
+        onOpen = { node ->
+          session.paneOpen(node.id)
+          if (!node.hasChildren) onNavigated()
+        },
+        modifier = Modifier.fillMaxSize(),
+        scroll = scroll,
+      )
+    window == ToolWindow.PROJECT ->
       ProjectTreeView(
         tree = state.tree,
         onToggle = { session.toggle(it.id) },
@@ -285,7 +320,7 @@ private fun ToolWindowContent(
         // The scheme's FILESTATUS_<id> colour, e.g. FILESTATUS_IDEA_FILESTATUS_IGNORED D69A6B.
         fileStatusColor = { status -> state.scheme?.color("FILESTATUS_$status")?.let(::Color) },
       )
-    ToolWindow.STRUCTURE ->
+    window == ToolWindow.STRUCTURE ->
       StructureView(state, session, onNavigated, Modifier.fillMaxSize(), scroll)
     else -> Unit
   }

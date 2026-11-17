@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,9 +35,19 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
+import intellijandroid.client.session.BackendToolWindow
 import intellijandroid.client.ui.component.IconButton
+import intellijandroid.client.ui.component.Menu
+import intellijandroid.client.ui.component.Menus
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.label
@@ -48,28 +59,102 @@ enum class Side {
 }
 
 /**
- * The tool windows on IntelliJ's stripes (new UI defaults for a Java project). Only Project and
- * Structure work; the others are shown so the bars look like IntelliJ's, and say "not supported
- * yet" when tapped. Structure sits on the right here (IntelliJ puts it on the left by default), so
- * one window can be open on each side.
+ * A tool window button: one of the backend's tool windows ([BackendToolWindow]) or Project, which
+ * JetBrains Client registers itself. Only Project and Structure work; the others say "not supported
+ * yet" when tapped. Structure sits on the right here (IntelliJ puts it on the left), so one window
+ * can be open on each side. Two are the same window when their [id]s are.
  */
-enum class ToolWindow(
+class ToolWindow(
+  val id: String,
   val title: String,
-  val icon: String,
+  val icon: String?,
   val side: Side,
-  val supported: Boolean = false,
+  /** On the left bar's lower part, where the new UI puts the bottom tool windows. */
   val bottomGroup: Boolean = false,
 ) {
-  PROJECT("Project", "expui/toolwindows/project.svg", Side.LEFT, supported = true),
-  COMMIT("Commit", "expui/toolwindows/commit.svg", Side.LEFT),
-  BOOKMARKS("Bookmarks", "expui/toolwindows/bookmarks.svg", Side.LEFT),
-  SERVICES("Services", "expui/toolwindows/services.svg", Side.LEFT, bottomGroup = true),
-  RUN("Run", "expui/toolwindows/run.svg", Side.LEFT, bottomGroup = true),
-  DEBUG("Debug", "expui/toolwindows/debug.svg", Side.LEFT, bottomGroup = true),
-  PROBLEMS("Problems", "expui/toolwindows/problems.svg", Side.LEFT, bottomGroup = true),
-  GIT("Git", "expui/toolwindows/vcs.svg", Side.LEFT, bottomGroup = true),
-  STRUCTURE("Structure", "expui/toolwindows/structure.svg", Side.RIGHT, supported = true),
-  NOTIFICATIONS("Notifications", "expui/toolwindows/notifications.svg", Side.RIGHT),
+  val supported
+    get() = id == PROJECT.id || id == STRUCTURE.id
+
+  override fun equals(other: Any?) = other is ToolWindow && other.id == id
+
+  override fun hashCode() = id.hashCode()
+
+  companion object {
+    val PROJECT = ToolWindow("Project", "Project", "expui/toolwindows/project.svg", Side.LEFT)
+    val STRUCTURE =
+      ToolWindow("Structure", "Structure", "expui/toolwindows/structure.svg", Side.RIGHT)
+  }
+}
+
+/**
+ * The bar's buttons: [groups] separated by lines (left stripe, its lower part, right stripe), and
+ * the rest of the available windows behind the ⋯ button ([more]).
+ */
+data class ToolWindowButtons(val groups: List<List<ToolWindow>>, val more: List<ToolWindow>)
+
+/**
+ * IntelliJ's new UI default layout (`DefaultToolWindowLayoutBuilderImpl.addPlatformDefaultsV2`):
+ * these get a stripe button, in this order; any other window only when the backend asks for one
+ * ([BackendToolWindow.onStripe]), else it is under ⋯. JetBrains Client keeps the user's own layout
+ * on its side; the backend doesn't send it (docs/tool-windows.md).
+ */
+private val DEFAULT_LAYOUT =
+  listOf(
+    // Left
+    "Project",
+    "Commit",
+    "Structure",
+    // Bottom, which the new UI shows on the left bar's lower part
+    "Version Control",
+    "Problems",
+    "Problems View",
+    "Terminal",
+    "Services",
+    // Right
+    "Notifications",
+    "AIAssistant",
+    "Database",
+    "Gradle",
+    "Maven",
+  )
+
+/**
+ * The buttons for the backend's [windows] plus Project. Example: on a Mac backend with no version
+ * control, left: Project; lower left: Version Control, Problems; right: Structure, AI Chat,
+ * Database, Gradle; under ⋯: Coverage, Database Output, Endpoints, Learn, Profiler, …; Commit is
+ * unavailable, so nowhere.
+ */
+fun toolWindowButtons(windows: List<BackendToolWindow>): ToolWindowButtons {
+  val available =
+    listOf(ToolWindow.PROJECT) +
+      windows
+        .filter { it.available && it.id != ToolWindow.PROJECT.id }
+        .map { window ->
+          ToolWindow(
+            window.id,
+            window.title,
+            window.iconPath,
+            side =
+              if (window.id == ToolWindow.STRUCTURE.id || window.anchor == "RIGHT") Side.RIGHT
+              else Side.LEFT,
+            bottomGroup = window.anchor == "BOTTOM",
+          )
+        }
+  val onStripe = windows.filter { it.onStripe == true }.map { it.id }.toSet()
+  val (stripe, more) = available.partition { it.id in DEFAULT_LAYOUT || it.id in onStripe }
+  val ordered = stripe.sortedBy {
+    DEFAULT_LAYOUT.indexOf(it.id).let { at -> if (at < 0) Int.MAX_VALUE else at }
+  }
+  return ToolWindowButtons(
+    groups =
+      listOf(
+          ordered.filter { it.side == Side.LEFT && !it.bottomGroup },
+          ordered.filter { it.side == Side.LEFT && it.bottomGroup },
+          ordered.filter { it.side == Side.RIGHT },
+        )
+        .filter { it.isNotEmpty() },
+    more = more.sortedBy { it.title.lowercase() },
+  )
 }
 
 /** Which tool window is open on each side; at most one per side, as the portrait spec asks. */
@@ -104,43 +189,43 @@ class ToolWindowState(left: ToolWindow?, right: ToolWindow?) {
 }
 
 /**
- * IntelliJ's stripe buttons in one bar: the left stripe's icons, a separator, then the right
- * stripe's.
+ * IntelliJ's stripe buttons in one bar: the left stripe's icons and ⋯ (the windows without a
+ * button), its lower part, then the right stripe's, with separators between.
  */
 @Composable
 fun ToolWindowBar(
+  buttons: ToolWindowButtons,
   open: Set<ToolWindow>,
   onClick: (ToolWindow) -> Unit,
   vertical: Boolean,
   modifier: Modifier = Modifier,
 ) {
-  val groups =
-    listOf(
-      ToolWindow.entries.filter { it.side == Side.LEFT && !it.bottomGroup },
-      ToolWindow.entries.filter { it.side == Side.LEFT && it.bottomGroup },
-      ToolWindow.entries.filter { it.side == Side.RIGHT },
-    )
   @Composable
-  fun Buttons() = groups.forEachIndexed { index, group ->
-    if (index > 0) {
-      // Measured against Gateway (2026-11-17): a 1 dp line as long as the highlight and lined up
-      // with it, 5 dp from the buttons on either side.
-      val length =
-        IslandsDark.stripeButtonWidth -
-          IslandsDark.stripeHighlightStart -
-          IslandsDark.stripeHighlightEnd
-      Box(
-        (if (vertical)
-            Modifier.padding(start = IslandsDark.stripeHighlightStart, top = 5.dp, bottom = 5.dp)
-              .size(length, 1.dp)
-          else
-            Modifier.padding(start = 5.dp, end = 5.dp, bottom = IslandsDark.stripeHighlightStart)
-              .size(1.dp, length))
-          .background(IslandsDark.toolbarSeparator),
-      )
+  fun Buttons() =
+    buttons.groups.forEachIndexed { index, group ->
+      if (index > 0) {
+        // Measured against Gateway (2026-11-17): a 1 dp line as long as the highlight and lined up
+        // with it, 5 dp from the buttons on either side.
+        val length =
+          IslandsDark.stripeButtonWidth -
+            IslandsDark.stripeHighlightStart -
+            IslandsDark.stripeHighlightEnd
+        Box(
+          (if (vertical)
+              Modifier.padding(start = IslandsDark.stripeHighlightStart, top = 5.dp, bottom = 5.dp)
+                .size(length, 1.dp)
+            else
+              Modifier.padding(start = 5.dp, end = 5.dp, bottom = IslandsDark.stripeHighlightStart)
+                .size(1.dp, length))
+            .background(IslandsDark.toolbarSeparator),
+        )
+      }
+      group.forEach { window ->
+        StripeButton(window.icon, window.title, window in open, vertical) { onClick(window) }
+      }
+      // The new UI's "More tool windows" button closes the left stripe's upper part.
+      if (index == 0 && buttons.more.isNotEmpty()) MoreButton(buttons.more, onClick, vertical)
     }
-    group.forEach { window -> StripeButton(window, window in open, vertical) { onClick(window) } }
-  }
   if (vertical) {
     Column(
       modifier.width(IslandsDark.stripeThickness).verticalScroll(rememberScrollState()),
@@ -160,6 +245,63 @@ fun ToolWindowBar(
 }
 
 /**
+ * ⋯: a menu of the tool windows that have no button, by name (IntelliJ's `MoreSquareStripeButton`).
+ */
+@Composable
+private fun MoreButton(
+  windows: List<ToolWindow>,
+  onClick: (ToolWindow) -> Unit,
+  vertical: Boolean,
+) {
+  var shown by remember { mutableStateOf(false) }
+  Box {
+    StripeButton("expui/general/moreHorizontal.svg", "More tool windows", shown, vertical) {
+      shown = true
+    }
+    if (shown)
+      DropDownMenu(
+        entries =
+          windows.map { window ->
+            MenuItem(window.title, iconPath = window.icon, onClick = { onClick(window) })
+          },
+        beside = vertical,
+        onDismiss = { shown = false },
+      )
+  }
+}
+
+/**
+ * A menu under the composable it is placed in (a Box around the button), or [beside] it on the
+ * right; moved up or left when there is no room.
+ */
+@Composable
+internal fun DropDownMenu(entries: List<MenuEntry>, beside: Boolean, onDismiss: () -> Unit) {
+  Popup(
+    popupPositionProvider = DropDownPosition(beside),
+    onDismissRequest = onDismiss,
+    properties = PopupProperties(focusable = true),
+  ) {
+    Menu({ entries }, rowHeight = Menus.touchRowHeight, close = onDismiss)
+  }
+}
+
+private class DropDownPosition(private val beside: Boolean) : PopupPositionProvider {
+  override fun calculatePosition(
+    anchorBounds: IntRect,
+    windowSize: IntSize,
+    layoutDirection: LayoutDirection,
+    popupContentSize: IntSize,
+  ): IntOffset {
+    var x = if (beside) anchorBounds.right else anchorBounds.left
+    var y = if (beside) anchorBounds.top else anchorBounds.bottom
+    if (y + popupContentSize.height > windowSize.height)
+      y = (if (beside) anchorBounds.bottom else anchorBounds.top) - popupContentSize.height
+    if (x + popupContentSize.width > windowSize.width) x = windowSize.width - popupContentSize.width
+    return IntOffset(x.coerceAtLeast(0), y.coerceAtLeast(0))
+  }
+}
+
+/**
  * IntelliJ's `SquareStripeButton`: the whole button takes taps; a shown window's highlight and the
  * icon sit in the button minus the stripe's icon padding. A horizontal bar (under the islands)
  * turns the left stripe's button on its side: the window edge is at the bottom, the islands at the
@@ -167,12 +309,13 @@ fun ToolWindowBar(
  */
 @Composable
 private fun StripeButton(
-  window: ToolWindow,
+  iconPath: String?,
+  description: String,
   selected: Boolean,
   vertical: Boolean,
   onClick: () -> Unit,
 ) {
-  val icon = LocalIcons.current.painter(window.icon)
+  val icon = iconPath?.let { LocalIcons.current.painter(it) }
   val across = IslandsDark.stripeButtonWidth
   val along = IslandsDark.stripeButtonLength
   val top = IslandsDark.stripeHighlightTop
@@ -192,7 +335,7 @@ private fun StripeButton(
     contentAlignment = Alignment.Center,
   ) {
     icon?.let {
-      Image(it, contentDescription = window.title, modifier = Modifier.size(IslandsDark.stripeIcon))
+      Image(it, contentDescription = description, modifier = Modifier.size(IslandsDark.stripeIcon))
     }
   }
 }
@@ -299,13 +442,17 @@ fun MainToolbar(
 
 /**
  * A tool window island: header with the title (and a back chevron on a phone held upright), then
- * [content].
+ * [content]. With [views] the title is a view selector, e.g. "Project ▾" with Project, Packages,
+ * Project Files, …: the [title] and a chevron that open the views as a menu (the new UI's
+ * `ComboContentLayout`).
  */
 @Composable
 fun ToolWindowPanel(
   window: ToolWindow,
   onBack: (() -> Unit)?,
   modifier: Modifier = Modifier,
+  title: String = window.title,
+  views: List<MenuEntry>? = null,
   content: @Composable () -> Unit,
 ) {
   val fonts = LocalClientFonts.current
@@ -328,16 +475,31 @@ fun ToolWindowPanel(
       }
       // Bold in the new UI (ComboContentLayout: BaseLabel(ui, ExperimentalUI.isNewUI())). Inter
       // has no Bold file; IntelliJ draws bold UI text with Inter SemiBold.
-      BasicText(
-        window.title,
-        style =
-          fonts
-            .label()
-            .copy(
-              fontSize = IslandsDark.headerFontSize.sp,
-              fontWeight = FontWeight.SemiBold,
-            ),
-      )
+      var viewsShown by remember { mutableStateOf(false) }
+      Box {
+        Row(
+          if (views == null) Modifier
+          else Modifier.clickable { viewsShown = true }.padding(vertical = 4.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          BasicText(
+            title,
+            style =
+              fonts
+                .label()
+                .copy(
+                  fontSize = IslandsDark.headerFontSize.sp,
+                  fontWeight = FontWeight.SemiBold,
+                ),
+          )
+          if (views != null)
+            LocalIcons.current.painter("expui/general/chevronDown.svg")?.let {
+              Image(it, null, Modifier.padding(start = 2.dp).size(16.dp))
+            }
+        }
+        if (viewsShown && views != null)
+          DropDownMenu(views, beside = false, onDismiss = { viewsShown = false })
+      }
     }
     // On a phone held upright (back chevron shown) the tool window covers the editor; a line under
     // the header, in ToolWindow.Header.borderColor, sets the title apart from the content.

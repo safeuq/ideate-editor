@@ -158,6 +158,10 @@ data class SessionState(
   val luxDialogs: List<LuxDialog> = emptyList(),
   /** The backend's open BeControl popups (BackendPopups), e.g. New ▸ File's name popup. */
   val backendPopups: List<BackendPopup> = emptyList(),
+  /** The tool windows the backend has, in the order it registered them. */
+  val toolWindows: List<BackendToolWindow> = emptyList(),
+  /** The Project tool window's views (Project, Packages, scopes) and the current one. */
+  val projectViews: ProjectViews = ProjectViews(),
 )
 
 /** Context menu number [serial]; [entries] null until the backend has answered ("Loading…"). */

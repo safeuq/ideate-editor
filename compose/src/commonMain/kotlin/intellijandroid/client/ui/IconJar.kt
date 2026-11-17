@@ -17,14 +17,30 @@ class IconJar(file: File) {
   fun svg(path: String): String? {
     val name = path.removePrefix("/")
     val entry =
-      jar.getEntry(name.removeSuffix(".svg") + "_dark.svg") ?: jar.getEntry(name) ?: return null
-    return jar
-      .getInputStream(entry)
-      .use { it.readBytes().decodeToString() }
-      .replace("#CED0D6", "#C3C5CB", ignoreCase = true)
+      jar.getEntry(name.removeSuffix(".svg") + "_dark.svg")
+        ?: jar.getEntry(name)
+        ?: return SENT_ICONS[name]
+    return jar.getInputStream(entry).use { it.readBytes().decodeToString() }.islandsDark()
   }
 
   companion object {
+    /**
+     * Plugin icons the backend sent with their SVG (`ImageIconModel.imageSources`), e.g. the GitHub
+     * plugin's `org/jetbrains/plugins/github/expui/pullRequests.svg`: the client's jar doesn't have
+     * them. Filled by the session before the UI asks for them.
+     */
+    private val SENT_ICONS = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Keeps [path]'s SVG from [sources] (path to SVG bytes), the `_dark` one if sent. */
+    fun remember(path: String, sources: Map<String, ByteArray>) {
+      val name = path.removePrefix("/")
+      if (SENT_ICONS.containsKey(name)) return
+      val body = sources[name.removeSuffix(".svg") + "_dark.svg"] ?: sources[name] ?: return
+      SENT_ICONS[name] = body.decodeToString().islandsDark()
+    }
+
+    private fun String.islandsDark() = replace("#CED0D6", "#C3C5CB", ignoreCase = true)
+
     /**
      * Icons that aren't in JetBrains Client's jars under the path the UI asks for.
      * `markdown/link.svg`: the Markdown plugin's chain link

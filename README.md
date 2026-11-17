@@ -20,6 +20,7 @@ docs/           all documentation (below)
 | [`edit-protocol.md`](docs/edit-protocol.md) | the editing messages in detail |
 | [`completion-protocol.md`](docs/completion-protocol.md) | code completion over Fleet RPC |
 | [`structure-protocol.md`](docs/structure-protocol.md) | the Structure tool window over rd (`CodeStructureTreeModel`), and the Fleet RPC `StructureTreeApi` the Ctrl+F12 popup uses |
+| [`tool-windows.md`](docs/tool-windows.md) | which tool windows the backend has (`ToolWindowModel`), how the bar orders them and what goes under ⋯; the Project view's panes (Project, Packages, scopes) and the BeTreeGrid the backend draws them with |
 | [`action-protocol.md`](docs/action-protocol.md) | context menus from the backend (`AsyncActionsModel.expandGroup`) and running their actions (`RdCallActionRequest`); which items IDEate greys out |
 | [`lux-protocol.md`](docs/lux-protocol.md) | backend Swing dialogs over rd (Lux): a remote canvas of draw operations, how JetBrains Client shows them, why the semantic BeDialog route isn't used, and a plan for IDEate |
 | [`mobile-layout.md`](docs/mobile-layout.md) | the main window on phone and tablet, portrait and landscape: bars, swipes, which layout when |
