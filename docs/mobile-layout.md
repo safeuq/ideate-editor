@@ -61,11 +61,26 @@ the bottom instead of Gateway's sidebar ([`intellij-look.md`](intellij-look.md) 
   pulls it in. The swipe opens the window last used on that side (Project and Structure at first).
 - A drag counts as a swipe once it has moved the touch slop and is at least twice as far sideways as up or down.
   Past a third of the width, or a flick faster than 1000 px/s, it moves one page; otherwise it springs back.
+- **On the editor, a sideways drag scrolls the editor first** (since 2026-11-17, user report "sideways scrolling
+  always switches to tool windows"). The editor scrolls sideways like IntelliJ's: the gutter stays, the text area
+  moves, up to the longest line plus two columns. The pager takes a sideways drag only when the editor is already
+  at that edge: at the left edge a drag to the right opens the left tool window, at the right edge a drag to the
+  left opens the right one. The pager decides once, when the drag passes the touch slop, and keeps that decision
+  for the whole gesture. So one swipe either scrolls or switches: a scroll that reaches the edge stops there, and
+  the next swipe switches (`EditorScroll.canScroll`, `SwipePager`).
+  Checked on the emulator (Pixel 3a, `Big.java` with a 360-character line), 2026-11-17 12:06 IST: a drag left
+  scrolled the text with the gutter fixed. A long drag right that crossed back to the left edge mid-gesture stayed
+  on the editor; the next drag right opened Project. Flinging to the right edge, then one more drag left, opened
+  Structure.
 - One page is the screen width plus the 6 dp island gap, so two islands keep their gap and rounded corners while
   sliding (before, they touched mid-swipe).
 - Opening a file from the Project tool window (double tap) slides back to the editor.
-- The swipe takes the touch events in Compose's `Initial` pass, before the editor sees them. So in this layout
-  **selecting text by dragging sideways doesn't work**; vertical drags still reach the editor.
+- The swipe takes the touch events in Compose's `Initial` pass, before the editor sees them.
+- **Dragging selects text only with a mouse.** On touch a drag scrolls. Before 2026-11-17 the editor also had a
+  touch drag-to-select handler whose start moved the caret; it competed with scrolling for the same drag and,
+  depending on timing, moved the caret to where a scroll began (user report "scroll sometimes registers as a
+  click"). A tap that only stops a fling doesn't move the caret either. Checked: caret placed on line 6, seven
+  vertical flings, caret still on line 6.
 - The editor now moves the caret and takes focus on **tap**, not on press. On press, every swipe that started on
   the editor focused it and opened the keyboard. When a tool window covers the editor, focus is cleared, so the
   keyboard closes.

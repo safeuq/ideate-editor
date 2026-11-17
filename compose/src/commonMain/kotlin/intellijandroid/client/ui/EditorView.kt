@@ -3,9 +3,14 @@ package intellijandroid.client.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.ScrollableState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,7 +19,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -41,7 +49,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -52,6 +62,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -59,6 +70,7 @@ import intellijandroid.client.session.EditorFile
 import intellijandroid.client.session.EditorKey
 import intellijandroid.client.session.EditorScheme
 import intellijandroid.client.session.Highlight
+import intellijandroid.client.session.IndentGuide
 import intellijandroid.client.session.Lookup
 import intellijandroid.client.session.LookupKey
 import intellijandroid.client.session.TextEffect
@@ -98,6 +110,31 @@ private class EditorMetrics(
 )
 
 /**
+ * The editor's sideways scroll position in px. IntelliJ keeps the gutter in place and scrolls the
+ * text area; so does [EditorView]. Hoisted so the phone's swipe pager can ask, when a sideways
+ * swipe starts, whether the editor can still scroll that way (ClientScreen).
+ */
+@Stable
+class EditorScroll {
+  var x by mutableFloatStateOf(0f)
+    internal set
+
+  internal var max by mutableFloatStateOf(0f)
+
+  internal val scrollable = ScrollableState { delta ->
+    val target = (x + delta).coerceIn(0f, max)
+    val consumed = target - x
+    x = target
+    consumed
+  }
+
+  /**
+   * Whether a sideways drag of [dragX] px (positive: the finger moves right) scrolls the editor.
+   */
+  fun canScroll(dragX: Float) = if (dragX > 0) x > 0f else x < max
+}
+
+/**
  * What the editor asks the session to do; the session applies it locally first and syncs it with
  * the backend.
  */
@@ -123,6 +160,7 @@ fun EditorView(
   actions: EditorActions,
   modifier: Modifier = Modifier,
   lookup: Lookup? = null,
+  scroll: EditorScroll = remember { EditorScroll() },
 ) {
   val fonts = LocalClientFonts.current
   val density = LocalDensity.current
@@ -180,21 +218,37 @@ fun EditorView(
         )
       }
     }
-  val highlightsByLine = remember(file, lines) { bucketByLine(file.highlights, lines) }
+  // Keyed on the lists, not the file: a caret move must not rebuild them (every line would redraw).
+  // A line keeps its previous list when its highlights didn't change, so only lines whose
+  // highlighting changed recompose and measure their text again.
+  val previousBuckets = remember(lines) { HashMap<Int, List<Highlight>>() }
+  val highlightsByLine =
+    remember(file.highlights, lines) {
+      bucketByLine(file.highlights, lines)
+        .mapValues { (line, highlights) ->
+          previousBuckets[line]?.takeIf { it == highlights } ?: highlights
+        }
+        .also {
+          previousBuckets.clear()
+          previousBuckets.putAll(it)
+        }
+    }
   val gutterIconsByLine =
-    remember(file, lines) { file.gutterIcons.groupBy { lines.lineOf(it.offset) } }
+    remember(file.gutterIcons, lines) { file.gutterIcons.groupBy { lines.lineOf(it.offset) } }
+  // IndentGuideRenderer: a guide is drawn on the lines after its start line and before its end
+  // line.
   val guidesByLine =
-    remember(file, lines) {
-      val result = HashMap<Int, MutableList<Int>>()
+    remember(file.indentGuides, lines) {
+      val result = HashMap<Int, MutableList<IndentGuide>>()
       for (guide in file.indentGuides) {
-        for (line in lines.lineOf(guide.start) + 1 until lines.lineOf(guide.end)) result.getOrPut(
-          line,
-        ) {
-          mutableListOf()
-        } += guide.indentLevel
+        for (line in guide.startLine + 1 until minOf(guide.endLine, lines.count)) {
+          result.getOrPut(line) { mutableListOf() } += guide
+        }
       }
       result
     }
+  val longestLine =
+    remember(lines) { (0 until lines.count).maxOfOrNull { lines.end(it) - lines.starts[it] } ?: 0 }
 
   // Caret and selection belong to the session (they are synced with the backend); only the column
   // to keep when
@@ -226,7 +280,8 @@ fun EditorView(
   // shorter
   // (on Android the soft keyboard takes the lower half of the screen).
   val caretLine = lines.lineOf(caret)
-  val viewportHeight = listState.layoutInfo.viewportSize.height
+  var viewport by remember { mutableStateOf(IntSize.Zero) }
+  val viewportHeight = viewport.height
   LaunchedEffect(caretLine, viewportHeight, focused) {
     if (!focused || viewportHeight == 0) return@LaunchedEffect
     val layout = listState.layoutInfo
@@ -247,6 +302,41 @@ fun EditorView(
         listState.scrollBy((item.offset + item.size - layout.viewportEndOffset).toFloat())
     }
   }
+
+  LaunchedEffect(longestLine, viewport.width, metrics) {
+    // Room for the widest line plus two columns, like IntelliJ's scrolling past the longest line.
+    scroll.max =
+      maxOf(0f, (longestLine + 2) * metrics.charWidth - (viewport.width - metrics.gutterWidth))
+    scroll.x = scroll.x.coerceIn(0f, scroll.max)
+  }
+  LaunchedEffect(file.path) { scroll.x = 0f }
+  LaunchedEffect(caret, viewport.width, focused) {
+    if (!focused || viewport.width == 0) return@LaunchedEffect
+    val caretX = (caret - lines.starts[caretLine]) * metrics.charWidth
+    val textWidth = viewport.width - metrics.gutterWidth
+    scroll.x =
+      when {
+        caretX < scroll.x -> caretX
+        caretX > scroll.x + textWidth - 2 * metrics.charWidth ->
+          caretX - textWidth + 2 * metrics.charWidth
+        else -> scroll.x
+      }.coerceIn(0f, scroll.max)
+  }
+
+  // IntelliJ's IndentsModel.getCaretIndentGuide plus IndentGuideRenderer.isCaretOnGuide: the guide
+  // at the caret's column whose block holds the caret is drawn in the selected color.
+  val caretGuide =
+    remember(file.indentGuides, caret, lines) {
+      val column = caret - lines.starts[caretLine]
+      file.indentGuides.firstOrNull { guide ->
+        val firstNonSpace =
+          (lines.starts[guide.startLine] until lines.end(guide.startLine)).firstOrNull {
+            file.text[it] != ' ' && file.text[it] != '\t'
+          } ?: lines.starts[guide.startLine]
+        val end = if (guide.endLine < lines.count) lines.starts[guide.endLine] else file.text.length
+        column == guide.indentLevel && caret >= firstNonSpace && caret < end
+      }
+    }
 
   fun moveTo(offset: Int, extend: Boolean, keepColumn: Boolean = false) {
     val now = currentFile
@@ -355,7 +445,9 @@ fun EditorView(
     val item = visible.firstOrNull { position.y >= it.offset && position.y < it.offset + it.size }
     val line = item?.index ?: if (position.y < 0) 0 else currentLines.count - 1
     val column =
-      ((position.x - metrics.gutterWidth) / metrics.charWidth).roundToInt().coerceAtLeast(0)
+      ((position.x - metrics.gutterWidth + scroll.x) / metrics.charWidth)
+        .roundToInt()
+        .coerceAtLeast(0)
     val offset = minOf(currentLines.starts[line] + column, currentLines.end(line))
     if (System.getenv("CLIENT_EDIT_DEBUG") != null)
       println(
@@ -364,11 +456,12 @@ fun EditorView(
     return offset
   }
 
-  Box(modifier) {
+  Box(modifier.onSizeChanged { viewport = it }) {
     LazyColumn(
       state = listState,
       modifier =
         Modifier.fillMaxSize()
+          .scrollable(scroll.scrollable, Orientation.Horizontal, reverseDirection = true)
           .background(Color(scheme.background))
           .focusRequester(focusRequester)
           .onFocusChanged { focused = it.hasFocus }
@@ -377,32 +470,49 @@ fun EditorView(
           .onPreviewKeyEvent { event -> event.type == KeyEventType.KeyDown && onKey(event) }
           .pointerInput(file.path, metrics) {
             // On tap, not on press: a swipe that starts on the editor (phone portrait) must not
-            // focus it and open the keyboard.
+            // focus it and open the keyboard. A tap that only stops a fling doesn't move the caret.
+            var stoppedScroll = false
             detectTapGestures(
+              onPress = {
+                stoppedScroll = listState.isScrollInProgress || scroll.scrollable.isScrollInProgress
+              },
               onTap = { position ->
+                if (stoppedScroll) return@detectTapGestures
                 focusRequester.requestFocus()
                 moveTo(offsetAt(position), extend = false)
               },
             )
           }
           .pointerInput(file.path, metrics) {
-            detectDragGestures(
-              onDragStart = { position ->
-                dragAnchor = offsetAt(position)
-                moveTo(dragAnchor, extend = false)
-              },
-            ) { change, _ ->
-              actions.moveCaret(offsetAt(change.position), dragAnchor)
+            // Drag to select with a mouse only: on touch a drag scrolls, and selecting there moved
+            // the caret to where a scroll started.
+            awaitEachGesture {
+              val down = awaitFirstDown()
+              if (down.type != PointerType.Mouse) return@awaitEachGesture
+              dragAnchor = offsetAt(down.position)
+              drag(down.id) { change ->
+                change.consume()
+                actions.moveCaret(offsetAt(change.position), dragAnchor)
+              }
             }
           },
     ) {
       items(lines.count) { line ->
-        val selection = anchor?.let { minOf(it, caret) until maxOf(it, caret) }
+        // Plain values, and only for the lines they concern: lines whose parameters don't change
+        // are skipped when the caret blinks, moves or the selection changes.
+        val selectionStart = anchor?.let { minOf(it, caret) } ?: -1
+        val selectionEnd = anchor?.let { maxOf(it, caret) } ?: -1
+        val inSelection =
+          selectionStart >= 0 &&
+            selectionStart <= lines.end(line) &&
+            selectionEnd >= lines.starts[line]
+        val lineGuides = guidesByLine[line].orEmpty()
         EditorLine(
           line = line,
           lines = lines,
           highlights = highlightsByLine[line].orEmpty(),
-          guides = guidesByLine[line].orEmpty(),
+          guides = lineGuides,
+          selectedGuideLevel = caretGuide?.takeIf { it in lineGuides }?.indentLevel ?: -1,
           gutterIconPath = gutterIconsByLine[line]?.firstOrNull()?.iconPaths?.firstOrNull(),
           scheme = scheme,
           metrics = metrics,
@@ -410,8 +520,10 @@ fun EditorView(
           textStyle = textStyle,
           lineNumberStyle = lineNumberStyle,
           caretColumn = if (lines.lineOf(caret) == line) caret - lines.starts[line] else null,
-          caretVisible = focused && caretOn,
-          selection = selection,
+          caretVisible = focused && caretOn && line == caretLine,
+          selectionStart = if (inSelection) selectionStart else -1,
+          selectionEnd = if (inSelection) selectionEnd else -1,
+          scroll = scroll,
         )
       }
     }
@@ -425,7 +537,7 @@ fun EditorView(
         val prefixColumn = caret - lines.starts[caretLine] - current.prefix.length
         val textOffset = with(density) { LOOKUP_PREFIX_INSET.toPx() }
         val x =
-          (metrics.gutterWidth + prefixColumn * metrics.charWidth - textOffset)
+          (metrics.gutterWidth + prefixColumn * metrics.charWidth - scroll.x - textOffset)
             .roundToInt()
             .coerceAtLeast(0)
         Popup(offset = IntOffset(x, caretItem.offset + caretItem.size)) {
@@ -440,7 +552,8 @@ private fun EditorLine(
   line: Int,
   lines: Lines,
   highlights: List<Highlight>,
-  guides: List<Int>,
+  guides: List<IndentGuide>,
+  selectedGuideLevel: Int,
   gutterIconPath: String?,
   scheme: EditorScheme,
   metrics: EditorMetrics,
@@ -449,7 +562,9 @@ private fun EditorLine(
   lineNumberStyle: TextStyle,
   caretColumn: Int?,
   caretVisible: Boolean,
-  selection: IntRange?,
+  selectionStart: Int,
+  selectionEnd: Int,
+  scroll: EditorScroll,
 ) {
   val density = LocalDensity.current
   val lineStart = lines.starts[line]
@@ -469,6 +584,8 @@ private fun EditorLine(
     if (isCaretLine) scheme.color("CARET_ROW_COLOR")?.let { drawRect(Color(it)) }
 
     val textLeft = metrics.gutterWidth
+    // Read here, in drawing: scrolling sideways redraws the visible lines without recomposing them.
+    val scrollX = scroll.x
     fun x(column: Int) =
       textLeft +
         layout.getHorizontalPosition(
@@ -476,36 +593,65 @@ private fun EditorLine(
           usePrimaryDirection = true,
         )
 
-    // Selection: to the end of the text on the last line, to the right edge on lines it continues
-    // past.
-    selection?.let { range ->
-      val from = maxOf(range.first, lineStart) - lineStart
-      val lineEnd = lineStart + lineText.length
-      if (range.first <= lineEnd && range.last + 1 >= lineStart && !range.isEmpty()) {
-        val to = if (range.last + 1 > lineEnd) size.width else x(range.last + 1 - lineStart)
-        scheme.color("SELECTION_BACKGROUND")?.let {
-          drawRect(Color(it), Offset(x(from), 0f), Size(to - x(from), size.height))
+    clipRect(left = textLeft) {
+      translate(left = -scrollX) {
+        // Selection: to the end of the text on the last line, to the right edge on lines it
+        // continues
+        // past.
+        if (selectionStart in 0 until selectionEnd) {
+          val from = maxOf(selectionStart, lineStart) - lineStart
+          val lineEnd = lineStart + lineText.length
+          if (selectionStart <= lineEnd && selectionEnd >= lineStart) {
+            val to =
+              if (selectionEnd > lineEnd) size.width + scrollX else x(selectionEnd - lineStart)
+            scheme.color("SELECTION_BACKGROUND")?.let {
+              drawRect(Color(it), Offset(x(from), 0f), Size(to - x(from), size.height))
+            }
+          }
         }
-      }
-    }
-    // Highlight backgrounds (identifier under caret, search results, matched braces, …).
-    for (highlight in highlights) {
-      val background = highlight.style.background ?: continue
-      val from = maxOf(highlight.start - lineStart, 0)
-      val to = minOf(highlight.end - lineStart, lineText.length)
-      if (to > from)
-        drawRect(Color(background), Offset(x(from), 0f), Size(x(to) - x(from), size.height))
-    }
-    // Indent guides: 1 px at the guide's column.
-    scheme.color("INDENT_GUIDE")?.let { guideColor ->
-      for (level in guides) {
-        val guideX = textLeft + level * metrics.charWidth
-        drawLine(
-          Color(guideColor),
-          Offset(guideX, 0f),
-          Offset(guideX, size.height),
-          strokeWidth = 1.dp.toPx(),
+        // Highlight backgrounds (identifier under caret, search results, matched braces, …).
+        for (highlight in highlights) {
+          val background = highlight.style.background ?: continue
+          val from = maxOf(highlight.start - lineStart, 0)
+          val to = minOf(highlight.end - lineStart, lineText.length)
+          if (to > from)
+            drawRect(Color(background), Offset(x(from), 0f), Size(x(to) - x(from), size.height))
+        }
+        // Indent guides (IndentGuideRenderer): 1 px at the guide's column, moved left by
+        // EditorPainter.getIndentGuideShift = -round(5 × fontSize / 13) / 2, which is 2 px at size
+        // 12.
+        for (guide in guides) {
+          val key =
+            if (guide.indentLevel == selectedGuideLevel) "SELECTED_INDENT_GUIDE" else "INDENT_GUIDE"
+          val guideColor = scheme.color(key) ?: continue
+          val shift = (Math.round(5 * IslandsDark.EDITOR_FONT_SIZE / 13f) / 2).dp.toPx()
+          val guideX = textLeft + guide.indentLevel * metrics.charWidth - shift
+          drawLine(
+            Color(guideColor),
+            Offset(guideX, 0f),
+            Offset(guideX, size.height),
+            strokeWidth = 1.dp.toPx(),
+          )
+        }
+
+        drawText(layout, topLeft = Offset(textLeft, metrics.baseline - layout.firstBaseline))
+        for (highlight in highlights) drawEffect(
+          highlight,
+          lineStart,
+          lineText.length,
+          ::x,
+          metrics,
         )
+
+        if (caretColumn != null && caretVisible) {
+          scheme.color("CARET_COLOR")?.let { caretColor ->
+            drawRect(
+              Color(caretColor),
+              Offset(x(caretColumn), metrics.caretTop),
+              Size(2.dp.toPx(), metrics.caretHeight),
+            )
+          }
+        }
       }
     }
 
@@ -531,19 +677,6 @@ private fun EditorLine(
         (size.height - iconSize) / 2,
       ) {
         with(gutterIcon) { draw(Size(iconSize, iconSize)) }
-      }
-    }
-
-    drawText(layout, topLeft = Offset(textLeft, metrics.baseline - layout.firstBaseline))
-    for (highlight in highlights) drawEffect(highlight, lineStart, lineText.length, ::x, metrics)
-
-    if (caretColumn != null && caretVisible) {
-      scheme.color("CARET_COLOR")?.let { caretColor ->
-        drawRect(
-          Color(caretColor),
-          Offset(x(caretColumn), metrics.caretTop),
-          Size(2.dp.toPx(), metrics.caretHeight),
-        )
       }
     }
   }

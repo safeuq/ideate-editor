@@ -65,7 +65,7 @@ Ligatures: **off** by default (`FontPreferencesImpl.myUseLigatures = false`, `Ap
 | Current line number (caret line) | `#A1A3AB` | `LINE_NUMBER_ON_CARET_ROW_COLOR` | Seen |
 | Gutter background | = editor background `#191A1C` | New UI uses `EDITOR_GUTTER_BACKGROUND`; Islands sets it empty -> null -> `editor.getBackgroundColor()` (GH `EditorGutterColor.getEditorGutterBackgroundColor`). Darcula `GUTTER_BACKGROUND 313335` is NOT used in New UI | Seen |
 | Gutter / editor separator | 1 px vertical line at x = gutterWidth - 3 (+1 on Retina), color `INDENT_GUIDE_COLOR` `#323438`; the last 3 px of the gutter are editor background | `EditorGutterComponentImpl.paint` (`isNewUI` branch), `getWhitespaceSeparatorOffset` = width - 3 | Seen (very low contrast, verify against a screenshot) |
-| Indent guide | `#323438`, 1 px solid vertical line at the indent column start; selected (caret inside that block) `#4E5157` | `INDENT_GUIDE`, `SELECTED_INDENT_GUIDE`; `IndentGuideRenderer` | Seen |
+| Indent guide | `#323438`, 1 px solid vertical line at the indent column start, moved 2 px left (`EditorPainter.getIndentGuideShift` = −round(5 × fontSize / 13) / 2); selected (caret on that column inside the block) `#4E5157` | `INDENT_GUIDE`, `SELECTED_INDENT_GUIDE`; `IndentGuideRenderer`, `IndentsModelImpl.getCaretIndentGuide` (Community source 263.7307.200) | Seen |
 | Right margin line | `#323438` | `RIGHT_MARGIN_COLOR` | Seen |
 | Whitespace symbols | `#6F737A` | `WHITESPACES` | Seen |
 | Matched brace | background `#43454A`, bold | `MATCHED_BRACE_ATTRIBUTES` | Seen |

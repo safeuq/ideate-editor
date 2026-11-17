@@ -62,10 +62,11 @@ data class Highlight(
 )
 
 /**
- * An indent guide: a vertical line at [indentLevel] (columns) from the line of [start] to the line
- * of [end].
+ * IntelliJ's `IndentGuideDescriptor`: a block opened on [startLine] whose lines are indented past
+ * [indentLevel] (a column). The guide is drawn at that column on the lines after [startLine] and
+ * before [endLine] (exclusive; equal to the line count when the block runs to the end).
  */
-data class IndentGuide(val start: Int, val end: Int, val indentLevel: Int)
+data class IndentGuide(val indentLevel: Int, val startLine: Int, val endLine: Int)
 
 /**
  * A gutter icon (run marker, override marker, …) on the line of [offset]; [iconPaths] are paths in

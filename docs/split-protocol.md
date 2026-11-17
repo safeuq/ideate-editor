@@ -699,7 +699,62 @@ Gutter icons come in the per-project markup as `GutterMarkHighlighterModel` (the
 
 - Smart typing locally (closing brackets, smart backspace): the backend does it and the client follows, so the text jumps once the answer arrives.
 - Multiple carets, folding, copy and paste. (Soft keyboard: done in [The Android app (step 5)](#the-android-app-step-5).)
-- Indent guides: `IndentGuideHighlighterModel` never arrived in the tests.
+- Folding (the backend sends `FoldingHighlighterModel` ranges; not drawn yet).
+
+### Indent guides come from the client, not the backend
+
+Checked 2026-11-17 against the Mac backend (IntelliJ 263.7307.200) with `CLIENT_HIGHLIGHT_DUMP`, which now also
+writes each highlighter's rd model class. Opening `Main.java` gives 64 highlighters: 36
+`SyntaxHighlighterModel`, 25 `DefaultHighlighterModel`, 2 `GutterMarkHighlighterModel`, 1
+`FoldingHighlighterModel`, and **no `IndentGuideHighlighterModel`**, although the method body should get one guide.
+The keyless layer-0 editor highlighter over the method body (`editor:40 87-257`) is the folding region.
+
+Why: in the backend's jars nothing creates `IndentGuideHighlighterModel`. Only the generated model, the client's
+`intellij.rd.client.jar` and the merged plugin.xml mention it. The backend registers
+`IndentGuidePassFactory` as an ordinary highlighting pass. That pass puts its guides on the editor's markup with a
+`CustomHighlighterRenderer` (`IndentGuides.applyIndents`), which the protocol doesn't send. JetBrains Client has
+the frontend side (`FrontendIndentGuideHighlighterModelSupport`, `FrontendIndentGuideRenderer`,
+`FrontendIndentGuideProtocolMarkupExtension`, which only adds `InvisibleBraceHintProviderModel`), and the same
+platform pass in `intellij.platform.lang.impl.jar`.
+
+So our client computes the guides itself (`session/IndentGuides.kt`). It ports `IndentGuideCalculator.calculate`
+and `IndentGuides.buildDescriptors` from IntelliJ Community 263.7307.200, with three differences because the client
+has no lexer or PSI:
+- comments are recognised from the backend's syntax keys (`DEFAULT_LINE_COMMENT`, `DEFAULT_BLOCK_COMMENT`,
+  `DEFAULT_DOC_COMMENT`);
+- a closing brace is `}`, `)` or `]` (IntelliJ asks the brace matcher);
+- `codeConstructStartLine` is not computed.
+
+`EditorView` draws the guides like `IndentGuideRenderer`:
+- a 1 px line at the guide's column, on the lines after the block's first line and before its end line;
+- shifted left by `EditorPainter.getIndentGuideShift` = −round(5 × 12 / 13) / 2 = 2 px;
+- in `SELECTED_INDENT_GUIDE` when the caret is on that column inside the block (`IndentsModelImpl.getCaretIndentGuide`).
+
+Tab size is IntelliJ's default 4, because the client doesn't get the file's code style. Folded regions don't hide
+guides, since folding isn't drawn yet.
+
+### Markup of a large file arrives one highlighter at a time
+
+With a 4,505-line `Big.java` (500 methods), the backend sent about 15,000 highlighters. They came in batches of
+one (`highlightersAdded` with a single element), still arriving 45 s after opening. Publishing the editor state
+per batch rebuilt it and redrew every visible line about 15 times a second, with no input at all. That was the
+user's "scrolling stutters on large files".
+
+The session now collects markup changes and publishes them once per 32 ms (`publishMarkupLater`). Edits and caret
+moves still publish at once. `EditorView` keeps a line's highlight list when it didn't change, so only lines whose
+highlighting changed recompose and measure their text again.
+
+Measured with `dumpsys gfxinfo`, 12 flings on the emulator during the highlight stream:
+
+| | before | after |
+|---|---|---|
+| median frame | 20 ms | 16 ms |
+| 90th percentile | 29 ms | 21 ms |
+| slow UI-thread frames | 11 | 5 |
+| missed deadlines | 17 | 11 |
+
+The Settings app on the same emulator measures 16 / 18 ms. Once the stream had ended, our editor measured
+17 / 23 ms with 2 slow UI-thread frames out of 493. The rest is drawing on the emulator's GPU.
 
 ## The Android app (step 5)
 

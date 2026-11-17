@@ -30,7 +30,6 @@ import com.jetbrains.rd.ide.model.GutterMarkHighlighterModel
 import com.jetbrains.rd.ide.model.HighlighterElement
 import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.ImageIconModel
-import com.jetbrains.rd.ide.model.IndentGuideHighlighterModel
 import com.jetbrains.rd.ide.model.MarkupDocumentExtension
 import com.jetbrains.rd.ide.model.MarkupTextControlExtension
 import com.jetbrains.rd.ide.model.OriginKind
@@ -75,6 +74,8 @@ import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.connection.SplitWire
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -111,6 +112,11 @@ class ClientSession(
   private val documentHighlights = mutableMapOf<RdDocumentId, MutableMap<String, RawHighlight>>()
   private val loadedChildren = mutableSetOf<Int>()
   private val unhandledChangeKinds = mutableSetOf<String>()
+  /** Documents whose markup changed since the last publish; see [publishMarkupLater]. */
+  private val markupChanged = mutableSetOf<RdDocumentId>()
+  private val markupTimer = Executors.newSingleThreadScheduledExecutor { runnable ->
+    Thread(runnable, "markup-publish").apply { isDaemon = true }
+  }
   private var projectId: RdProjectId? = null
   private var solution: Solution? = null
   private var vfs: VfsModel? = null
@@ -135,7 +141,10 @@ class ClientSession(
     }
   }
 
-  fun stop() = lifetimeDefinition.terminate()
+  fun stop() {
+    markupTimer.shutdownNow()
+    lifetimeDefinition.terminate()
+  }
 
   // ---- Actions from the UI (any thread) ----
 
@@ -593,21 +602,44 @@ class ClientSession(
     val highlights = documentHighlights.getOrPut(documentId) { mutableMapOf() }
     markup.highlightersAdded.advise(markupLifetime) { list ->
       list.elements.forEach { highlights["$source:${it.highlighter.id}"] = it.toRaw() }
-      publishDocument(documentId)
+      publishMarkupLater(documentId)
     }
     markup.highlightersUpdated.advise(markupLifetime) { list ->
       list.elements.forEach { highlights["$source:${it.highlighter.id}"] = it.toRaw() }
-      publishDocument(documentId)
+      publishMarkupLater(documentId)
     }
     markup.highlightersRemoved.advise(markupLifetime) { removed ->
       removed.elements.forEach { highlights.remove("$source:$it") }
-      publishDocument(documentId)
+      publishMarkupLater(documentId)
     }
     markup.highlightersCleared.advise(markupLifetime) {
       highlights.keys.removeAll { it.startsWith("$source:") }
-      publishDocument(documentId)
+      publishMarkupLater(documentId)
     }
     markupLifetime.onTermination { highlights.keys.removeAll { it.startsWith("$source:") } }
+  }
+
+  /**
+   * The backend sends a large file's highlighters in many small batches, for a 4,500-line file one
+   * at a time over more than a minute. Publishing each one rebuilt the editor's state and redrew
+   * every visible line about 15 times a second, which made scrolling stutter. Like Swing's
+   * RepaintManager for IntelliJ's markup, changes are collected and published once per
+   * [MARKUP_DELAY_MS]. Edits and caret moves still publish at once.
+   */
+  private fun publishMarkupLater(documentId: RdDocumentId) {
+    if (!markupChanged.add(documentId) || markupChanged.size > 1) return
+    val rdScheduler = scheduler ?: return publishDocument(documentId)
+    markupTimer.schedule(
+      {
+        rdScheduler.queue {
+          val documents = markupChanged.toList()
+          markupChanged.clear()
+          documents.forEach(::publishDocument)
+        }
+      },
+      MARKUP_DELAY_MS,
+      TimeUnit.MILLISECONDS,
+    )
   }
 
   private fun publishDocument(documentId: RdDocumentId) {
@@ -623,12 +655,25 @@ class ClientSession(
       if (scheme == null) emptyList()
       else
         raw
-          .filter { it.indentLevel == null }
           .map { Highlight(it.id, it.start, it.end, it.layer, scheme.style(it.keyChains)) }
           .sortedWith(compareBy({ it.layer }, { it.start }))
-    val guides = raw.mapNotNull { highlight ->
-      highlight.indentLevel?.let { IndentGuide(highlight.start, highlight.end, it) }
-    }
+    // Comment tokens from the backend's syntax highlighting: comment lines neither open nor close
+    // blocks, like blank lines (IndentGuideCalculator).
+    val comments =
+      raw
+        .filter { highlight ->
+          highlight.keyChains.any { chain -> chain.any { it in COMMENT_KEYS } }
+        }
+        .sortedBy { it.start }
+    val guides =
+      IndentGuides.compute(
+        text,
+        isComment = { offset ->
+          val index =
+            comments.binarySearchBy(offset) { it.start }.let { if (it >= 0) it else -it - 2 }
+          index >= 0 && offset < comments[index].end
+        },
+      )
     val gutterIcons =
       raw
         .filter { it.gutterIconPaths.isNotEmpty() }
@@ -657,7 +702,7 @@ class ClientSession(
             .entries
             .sortedBy { it.value.start }
             .joinToString("\n") { (key, raw) ->
-              "$key ${raw.start}-${raw.end} layer=${raw.layer} guide=${raw.indentLevel} keys=${raw.keyChains.map { it.first() }} '${text.substring(raw.start, raw.end).take(30)}'"
+              "$key ${raw.start}-${raw.end} layer=${raw.layer} model=${raw.modelName} keys=${raw.keyChains.map { it.first() }} '${text.substring(raw.start, raw.end).take(30)}'"
             },
         )
     }
@@ -693,18 +738,16 @@ class ClientSession(
     }
   }
 
-  /**
-   * A highlighter before style resolution, so a scheme change can restyle it. Indent guides carry
-   * [indentLevel].
-   */
+  /** A highlighter before style resolution, so a scheme change can restyle it. */
   private data class RawHighlight(
     val id: Long,
     val start: Int,
     val end: Int,
     val layer: Int,
     val keyChains: List<List<String>>,
-    val indentLevel: Int?,
     val gutterIconPaths: List<String>,
+    /** The rd model's class, e.g. `SyntaxHighlighterModel`; only for CLIENT_HIGHLIGHT_DUMP. */
+    val modelName: String,
   )
 
   private companion object {
@@ -713,6 +756,12 @@ class ClientSession(
     /** The user's IntelliJ uses Islands Dark (its theme and its editor scheme). */
     const val EDITOR_SCHEME = "Islands Dark"
     const val PROJECT_PANE = "ProjectPane"
+
+    /** About two frames at 60 Hz. */
+    const val MARKUP_DELAY_MS = 32L
+
+    /** The default comment keys every language's comment colors fall back to. */
+    val COMMENT_KEYS = setOf("DEFAULT_LINE_COMMENT", "DEFAULT_BLOCK_COMMENT", "DEFAULT_DOC_COMMENT")
 
     fun HighlighterElement.toRaw(): RawHighlight {
       val model = highlighter
@@ -727,8 +776,8 @@ class ClientSession(
         model.end,
         model.layer,
         keys.map(EditorScheme::keyChain),
-        (model as? IndentGuideHighlighterModel)?.indentLevel,
         gutterIcon,
+        model.javaClass.simpleName,
       )
     }
 

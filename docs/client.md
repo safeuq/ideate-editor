@@ -61,7 +61,7 @@ Debug aids, all off by default:
 | Variable | Effect |
 |---|---|
 | `CLIENT_SNAPSHOT=/tmp/client.png` | renders the window off-screen into that PNG every 3 s (works with a locked or hidden screen) |
-| `CLIENT_HIGHLIGHT_DUMP=/tmp/highlights.txt` | writes every highlight of the open file: range, layer, attribute keys, covered text |
+| `CLIENT_HIGHLIGHT_DUMP=/tmp/highlights.txt` | writes every highlight of the open file: range, layer, rd model class (`SyntaxHighlighterModel`, `FoldingHighlighterModel`, …), attribute keys, covered text |
 | `CLIENT_EDIT_DEBUG=1` | prints every edit request, the backend's answer and whether it matched the local edit (`[edit] …` lines) |
 
 The join link is the one the backend prints, with `0.0.0.0` replaced by its address. The join token in it works for one client only: the history entry (same identity) can use it again, any other client needs a restarted backend. Starting a backend on the Mac without disturbing a running IntelliJ: `split-protocol.md`, "Running a backend on the Mac for client work".

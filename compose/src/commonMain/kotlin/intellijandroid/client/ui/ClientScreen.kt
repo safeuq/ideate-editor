@@ -101,6 +101,9 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
     val layout = screenLayout(maxWidth.value, maxHeight.value)
     val windows = remember { ToolWindowState(left = ToolWindow.PROJECT, right = null) }
     var page by remember { mutableStateOf(Page.EDITOR) }
+    // One per screen, shared by the layouts: the pager asks it whether a sideways swipe scrolls the
+    // editor or switches to a tool window.
+    val editorScroll = remember { EditorScroll() }
     // Phone portrait starts on the editor; the other layouts start with Project open, like
     // IntelliJ.
     LaunchedEffect(layout) { if (layout == ScreenLayout.PHONE_PORTRAIT) page = Page.EDITOR }
@@ -143,10 +146,11 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
           SwipePager(
             page = page,
             onPage = { page = it },
+            editorCanScroll = editorScroll::canScroll,
             left = {
               Window(windows.lastLeft, onBack = { page = Page.EDITOR }, Modifier.fillMaxSize())
             },
-            editor = { EditorIsland(state, session, Modifier.fillMaxSize()) },
+            editor = { EditorIsland(state, session, editorScroll, Modifier.fillMaxSize()) },
             right = {
               Window(windows.lastRight, onBack = { page = Page.EDITOR }, Modifier.fillMaxSize())
             },
@@ -157,7 +161,7 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
         }
         ScreenLayout.TABLET_PORTRAIT -> {
           Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = IslandsDark.islandGap)) {
-            EditorIsland(state, session, Modifier.weight(1f).fillMaxWidth())
+            EditorIsland(state, session, editorScroll, Modifier.weight(1f).fillMaxWidth())
             // Open tool windows share one area under the editor, side by side.
             if (open.isNotEmpty()) {
               Spacer(Modifier.height(IslandsDark.islandGap))
@@ -187,6 +191,7 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
             EditorIsland(
               state,
               session,
+              editorScroll,
               Modifier.weight(1f).fillMaxHeight().padding(end = IslandsDark.islandGap),
             )
           }
@@ -252,6 +257,8 @@ private fun ToolWindowContent(
 private fun SwipePager(
   page: Page,
   onPage: (Page) -> Unit,
+  /** Whether a sideways drag of this many px would scroll the editor (EditorScroll.canScroll). */
+  editorCanScroll: (Float) -> Boolean,
   left: @Composable () -> Unit,
   editor: @Composable () -> Unit,
   right: @Composable () -> Unit,
@@ -296,6 +303,9 @@ private fun SwipePager(
               if (travelled.getDistance() < viewConfiguration.touchSlop) continue
               // Mostly sideways: a swipe. Anything else belongs to the content (scrolling, taps).
               if (abs(travelled.x) < 2 * abs(travelled.y)) return@awaitEachGesture
+              // On the editor, a sideways swipe scrolls the editor unless it is already at that
+              // edge. Decided once here, so one swipe never turns from scrolling into switching.
+              if (page == Page.EDITOR && editorCanScroll(travelled.x)) return@awaitEachGesture
               swiping = true
             }
             change.consume()
@@ -331,7 +341,12 @@ private fun SwipePager(
 }
 
 @Composable
-private fun EditorIsland(state: SessionState, session: ClientSession, modifier: Modifier) {
+private fun EditorIsland(
+  state: SessionState,
+  session: ClientSession,
+  editorScroll: EditorScroll,
+  modifier: Modifier,
+) {
   val fonts = LocalClientFonts.current
   Column(modifier.island()) {
     val selected = state.editors.firstOrNull { it.path == state.selectedEditor }
@@ -357,6 +372,7 @@ private fun EditorIsland(state: SessionState, session: ClientSession, modifier: 
         actions,
         Modifier.fillMaxSize(),
         state.lookup?.takeIf { it.path == selected.path },
+        editorScroll,
       )
     } else {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
