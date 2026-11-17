@@ -136,6 +136,8 @@ class EditorActions(
   val chooseLookupItem: (String) -> Unit = {},
   /** Paste this text (the system clipboard's) through the backend's paste. */
   val paste: (String) -> Unit = {},
+  /** The same through the backend's Paste as Plain Text (`EditorPasteSimple`). */
+  val pasteSimple: (String) -> Unit = {},
   /** Text IDEate just copied, for the backend's clipboard. */
   val copied: (String) -> Unit = {},
 )
@@ -378,6 +380,10 @@ fun EditorView(
     clipboard.getText()?.text?.takeIf { it.isNotEmpty() }?.let(actions.paste)
   }
 
+  fun pasteSimple() {
+    clipboard.getText()?.text?.takeIf { it.isNotEmpty() }?.let(actions.pasteSimple)
+  }
+
   fun cut() {
     val (start, end) = copyRange()
     if (start == end) return
@@ -514,7 +520,12 @@ fun EditorView(
           MenuItem("Copy as Rich Text", enabled = false),
           MenuSeparator,
           MenuItem("Paste from History…", shortcut("⇧⌘V", "Ctrl+Shift+V"), enabled = false),
-          MenuItem("Paste as Plain Text", shortcut("⌥⇧⌘V", "Ctrl+Alt+Shift+V"), enabled = false),
+          MenuItem(
+            "Paste as Plain Text",
+            shortcut("⌥⇧⌘V", "Ctrl+Alt+Shift+V"),
+            enabled = current.editable,
+            onClick = ::pasteSimple,
+          ),
         ),
       ),
       MenuItem(

@@ -300,6 +300,40 @@ Checked 2026-11-17 against the Mac backend (port 5992), `Main.java`, caret at th
 | `\nif (greeting.isEmpty()) {\nSystem.out.println("empty");\n}` (no indentation), from the menu | the text as it is | the same insertion, then `+'    '` at 254 and `+'      '` at 284 (reformat on paste), caret after the block | the guess is rolled back and the answer applied: the block indented inside `main` |
 | ⌘Z | | | the whole paste, indentation included, undone in one step |
 | `/*pasted*/`, with ⌘V | the text | the same | `same=true`: the guess kept |
+| the unindented block again, with Copy / Paste Special ▸ Paste as Plain Text (`EditorPasteSimple`) | the text as it is | the same, not reindented | `same=true`: pasted as it is |
 
-Not done: pasting from the Android soft keyboard. The editor's input connection is `TYPE_NULL`, so the keyboard
-sends key events, not committed text. The editor's menu and ⌘V/Ctrl+V paste on Android too.
+Paste as Plain Text is the same flow with the action `EditorPasteSimple` (`ClientSession.pasteSimple`). Paste
+from History (`PasteMultiple`) stays greyed out: the backend shows the history in its own popup, which needs the
+actions protocol, not the clipboard model.
+
+### Pasting from the Android soft keyboard (not done)
+
+The editor's menu and ⌘V/Ctrl+V paste on Android too. The keyboard's own paste (Gboard's clipboard bar, or a
+long press in the text field) doesn't reach us, because of how the editor talks to the keyboard today
+(`EditorTextInput.kt`):
+
+| Today | What it means |
+|---|---|
+| `EditorInfo.inputType = TYPE_NULL` | the keyboard treats the editor as a plain key target: no suggestions, no clipboard bar, no composing text |
+| `BaseInputConnection(view, fullEditor = false)` | anything the keyboard commits is turned into key events; the editor types each `KeyEvent`'s character (`typeCharacter`) |
+
+What a keyboard paste would need:
+- **An input connection that accepts text.** A `BaseInputConnection` subclass with `inputType` =
+  `TYPE_CLASS_TEXT | TYPE_TEXT_FLAG_MULTI_LINE`, overriding:
+  - `commitText(text, …)`: one character goes to `type()` as now; longer text (a paste, a suggestion picked from
+    the bar) goes through the paste path above;
+  - `performContextMenuAction(android.R.id.paste)`, which the keyboard's paste button can call;
+  - `deleteSurroundingText(before, after)`, the keyboard's Backspace for text it committed;
+  - `sendKeyEvent` for Enter and Delete.
+- **The text around the caret** for `getTextBeforeCursor`, `getTextAfterCursor` and `getExtractedText`. With
+  `TYPE_CLASS_TEXT` the keyboard asks for them, for suggestions and auto-capitalisation; IDEate has the
+  document's text, so it can answer.
+- **Composing text.** With suggestions on, the keyboard first sends a word as composing text
+  (`setComposingText`) and only commits it later. The editor would have to show that underlined word locally
+  and send it on commit, or turn suggestions off (`TYPE_TEXT_FLAG_NO_SUGGESTIONS`, or `TYPE_TEXT_VARIATION_VISIBLE_PASSWORD`,
+  which many keyboards honour), which also hides the clipboard bar on some keyboards.
+
+What it would change for typing: characters would arrive through `commitText` instead of key events, still one
+`type()` per character, so the typing protocol stays the same. Autocorrect, if left on, would arrive as
+`deleteSurroundingText` plus `commitText`, so as edits the backend sees as a Backspace and a paste rather than as
+typing.

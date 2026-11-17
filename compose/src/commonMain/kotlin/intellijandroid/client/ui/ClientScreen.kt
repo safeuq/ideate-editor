@@ -396,6 +396,7 @@ private fun EditorIsland(
             session::lookupKey,
             session::chooseLookupItem,
             session::paste,
+            session::pasteSimple,
             session::copied,
           )
         }

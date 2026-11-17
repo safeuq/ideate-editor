@@ -243,7 +243,12 @@ class ClientSession(
    * EditorPaste): [text], the system clipboard, goes to `ClipboardModel.content` first, so the
    * backend's paste reads the same text. Line breaks become `\n`, as IntelliJ's paste makes them.
    */
-  fun paste(text: String) = onRd {
+  fun paste(text: String) = paste(text, "EditorPaste")
+
+  /** Paste as Plain Text: the backend's `EditorPasteSimple`, without its paste processing. */
+  fun pasteSimple(text: String) = paste(text, "EditorPasteSimple")
+
+  private fun paste(text: String, actionId: String) = onRd {
     completion?.cancel()
     val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
     clipboard?.let { model ->
@@ -252,7 +257,7 @@ class ClientSession(
         model.content.set(ClipboardContent(normalized, emptyList(), false))
       }
     }
-    selectedEditSession()?.paste(normalized)
+    selectedEditSession()?.paste(normalized, actionId)
   }
 
   /** A copy in IDEate, sent to the backend's clipboard as the client's own (`internal`) copy. */

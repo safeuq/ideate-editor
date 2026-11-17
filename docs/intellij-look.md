@@ -493,7 +493,8 @@ caret to that point, unless it is inside the selection, as IntelliJ does.
 | Copy ⌘C | works: the selection, or the whole line with its line break, to the system clipboard and the backend's `ClipboardModel` |
 | Copy / Paste Special ▸ Copy Absolute Path, Copy File Name, Copy as Plain Text | work |
 | Paste ⌘V | works: the clipboard goes to the backend's `ClipboardModel`, then its `EditorPaste` runs, as in JetBrains Client (docs/edit-protocol.md, "Paste and the clipboard") |
-| Paste from History…, Paste as Plain Text | greyed out: they need the backend's actions (a history popup, `EditorPasteSimple`) |
+| Copy / Paste Special ▸ Paste as Plain Text | works: the same, with `EditorPasteSimple` |
+| Copy / Paste Special ▸ Paste from History… | greyed out: the backend shows the history in its own popup (the actions protocol) |
 | Show Context Actions, Copy Reference, Copy as Rich Text, Column Selection Mode, Find Usages, Go To ▸, Folding ▸, Refactor ▸, Generate…, Run…, Debug…, More Run/Debug ▸, Open In ▸, Local History ▸, Git ▸, Compare with Clipboard | greyed out: they need the backend's actions (see below) |
 
 **The editor tab's menu** (`EditorTabPopupMenu`):
@@ -515,6 +516,11 @@ Checked 2026-11-17 against the Mac backend (port 5992):
   Name gave `Main.java`.
 - **Emulator (Pixel 3a):** a long press on line 8 opened the editor menu in the middle of the screen with
   40 dp rows and moved the caret to line 8. "Copy / Paste Special" opened in place with its back row.
+- **"A right click into an unfocused desktop window doesn't move the caret"** (seen while testing paste) is the
+  test tool, not IDEate. The cmux-cua click arrived at (412, 132) px instead of (994, 300): its first click into a
+  window that isn't in front converts the screenshot point with the Retina scale (÷ 2) instead of the
+  screenshot's 1.307 (1100 ÷ 2 × 1.307 ≈ 719, where the menu opened). IDEate put both the menu and the caret at
+  that wrong point (line 4, `main`), as it should for the position it got. A real click goes to the right place.
 - **Labels:** on the first version, labels shared the row's free space with the gap before the shortcut, so a
   long label was cut at half the width ("Remove from Recent Pr…", seen by the UI session). Now the label takes
   the room the menu has, and the shortcut sits at the right end.
