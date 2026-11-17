@@ -715,13 +715,15 @@ class ConnectController(
 @Composable
 fun IdeateApp(controller: ConnectController, fonts: ClientFonts, modifier: Modifier = Modifier) {
   val current = controller.session
-  // Painted before [modifier]'s insets, so it also fills behind the system bars and a camera
-  // cutout: the connect screen's background, or the IDE window's.
+  // [modifier] keeps the content clear of the system bars and a camera cutout (Android); the
+  // backgrounds fill behind them: the connect screen's here, the IDE screen paints its own (with
+  // the
+  // project tint) and takes [modifier] inside it.
   val background = if (current == null) Gateway.background else IslandsDark.windowBackground
-  Box(Modifier.fillMaxSize().background(background).then(modifier)) {
+  Box(Modifier.fillMaxSize().background(background)) {
     if (current == null) {
       LaunchedEffect(Unit) { controller.refresh() }
-      Column {
+      Column(modifier) {
         // Where the app draws the window's title bar (ui/TitleBar.kt), an empty strip that drags
         // the window, above the connect screen.
         Box(Modifier.fillMaxWidth().background(Gateway.background)) { TitleBarSpacer() }
@@ -736,7 +738,7 @@ fun IdeateApp(controller: ConnectController, fonts: ClientFonts, modifier: Modif
       LaunchedEffect(state.projectName, controller.isAccepted) {
         state.projectName?.let(controller::projectNamed)
       }
-      ClientScreen(state, current)
+      ClientScreen(state, current, insets = modifier)
       controller.reconnecting?.let { attemptNumber ->
         StartProgress(
           "No connection to IDE Backend",

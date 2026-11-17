@@ -87,7 +87,16 @@ private fun Side.page() =
  * docs/mobile-layout.md).
  */
 @Composable
-fun ClientScreen(state: SessionState, session: ClientSession) {
+fun ClientScreen(
+  state: SessionState,
+  session: ClientSession,
+  /**
+   * Keeps the content clear of the system bars (Android), applied inside the background: the window
+   * colour and the project gradient run up behind the status bar from the screen's top, as the
+   * gradient runs behind the merged title bar on macOS.
+   */
+  insets: Modifier = Modifier,
+) {
   val fonts = LocalClientFonts.current
   var notice by remember { mutableStateOf<String?>(null) }
   LaunchedEffect(notice) {
@@ -103,12 +112,15 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
   var gradientCenter by remember { mutableFloatStateOf(Float.NaN) }
   val projectColor = state.projectName?.let(::projectGradientColor)
   BoxWithConstraints(
-    Modifier.fillMaxSize().background(IslandsDark.windowBackground).drawBehind {
-      if (projectColor != null) {
-        val center = if (gradientCenter.isNaN()) 150.dp.toPx() else gradientCenter
-        drawProjectGradient(IslandsDark.windowBackground, projectColor, center)
+    Modifier.fillMaxSize()
+      .background(IslandsDark.windowBackground)
+      .drawBehind {
+        if (projectColor != null) {
+          val center = if (gradientCenter.isNaN()) 150.dp.toPx() else gradientCenter
+          drawProjectGradient(IslandsDark.windowBackground, projectColor, center)
+        }
       }
-    },
+      .then(insets),
   ) {
     // The backend's dialogs (Rename, New, Delete, …): windows of their own (docs/lux-protocol.md).
     intellijandroid.client.ui.lux.LuxDialogs(state.luxDialogs, session)

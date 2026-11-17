@@ -694,5 +694,10 @@ both bars were black; Android 15+ forces drawing behind them, so they showed the
 
 Measured on the API 34 emulator (1080 × 2220): status bar rows 0–65 and navigation bar rows 2154–2219 were
 `#000000`; now `#191A1C` on the connect screen and `#26282C` on the IDE screen. Not checked: a cutout (the
-emulator has none). Still to do: the project tint behind the status bar, drawn from the screen's top as the
-macOS title bar does (needs `ClientScreen` to paint its background and gradient before the insets).
+emulator has none).
+
+The project tint behind the status bar (ideate-editor, same day, after the layout rewrite): `ClientScreen` takes
+the insets (`insets = Modifier.windowInsetsPadding(appInsets())` through `IdeateApp`) and applies them inside its
+background, so the window colour and `drawProjectGradient` start at the screen's top. The gradient's 300 dp fade
+then runs from behind the status bar, as on macOS it runs from behind the merged title bar. The connect screen
+keeps the insets on its own column; the reconnect popup centres on the whole screen.
