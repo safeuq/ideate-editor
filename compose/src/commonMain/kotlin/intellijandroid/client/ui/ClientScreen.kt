@@ -46,13 +46,15 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import intellijandroid.client.session.ClientSession
 import intellijandroid.client.session.SessionState
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
+import intellijandroid.client.ui.theme.label
+import intellijandroid.client.ui.theme.medium
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -221,12 +223,9 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         style =
-          TextStyle(
-            color =
-              if (notice == null && state.failure != null) Color(0xFFFA6675)
-              else IslandsDark.textSecondary,
-            fontFamily = fonts.ui,
-            fontSize = 12.sp,
+          fonts.medium(
+            if (notice == null && state.failure != null) Color(0xFFFA6675)
+            else IslandsDark.textSecondary,
           ),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 3.dp),
       )
@@ -417,12 +416,7 @@ private fun EditorIsland(
         BasicText(
           if (state.tree.nodes.isEmpty()) "Connecting…"
           else "Double-tap a file in the Project tool window to open it",
-          style =
-            TextStyle(
-              color = IslandsDark.textSecondary,
-              fontFamily = fonts.ui,
-              fontSize = IslandsDark.UI_FONT_SIZE.sp,
-            ),
+          style = fonts.label(IslandsDark.textSecondary),
           modifier = Modifier.padding(16.dp),
         )
       }
@@ -505,12 +499,7 @@ private fun EditorTabs(state: SessionState, session: ClientSession) {
             Spacer(Modifier.width(6.dp))
             BasicText(
               editor.name,
-              style =
-                TextStyle(
-                  color = IslandsDark.text,
-                  fontFamily = fonts.ui,
-                  fontSize = IslandsDark.UI_FONT_SIZE.sp,
-                ),
+              style = fonts.label(),
             )
             Spacer(Modifier.width(2.dp))
             TabCloseButton(editor.name) { session.closeEditor(editor.path) }

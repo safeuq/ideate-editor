@@ -79,6 +79,8 @@ import intellijandroid.client.session.IndentGuide
 import intellijandroid.client.session.Lookup
 import intellijandroid.client.session.LookupKey
 import intellijandroid.client.session.TextEffect
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt

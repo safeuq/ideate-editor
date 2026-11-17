@@ -13,9 +13,9 @@ import androidx.compose.ui.Modifier
 import intellijandroid.client.connection.ClientCertificate
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.session.ClientSession
-import intellijandroid.client.ui.ClientFonts
 import intellijandroid.client.ui.ClientScreen
-import intellijandroid.client.ui.IslandsDark
+import intellijandroid.client.ui.theme.ClientFonts
+import intellijandroid.client.ui.theme.IslandsDark
 import kotlin.concurrent.thread
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

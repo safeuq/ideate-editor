@@ -473,10 +473,10 @@ Look, Islands Dark (theme keys from `darcula.theme.json` → `expUI_dark` → `M
 | Background | `#26282C` | `PopupMenu.background` = `popup-bg` |
 | Border | 1 px `#33353B`, radius 8 | `Popup.borderColor` = `popup-border`, `PopupMenu.borderCornerRadius` 8 |
 | Space above and below the items | 6 | `PopupMenu.borderInsets` 6,1,6,1 |
-| Hovered row | a band inset 1 top and bottom and 7 from the sides, radius 4, `#2E436E` (the band color is not measured) | `PopupMenu.Selection.outerInsets` 1,7, `.arc` 8 |
+| Hovered row | a band inset 1 top and bottom and 7 from the sides, radius 4, `#2A4371` (was `#2E436E`, not measured; now the theme's, docs/ui-components.md) | `PopupMenu.Selection.outerInsets` 1,7, `.arc` 8; `*.selectionBackground` = selection-bg-active |
 | Item text | 6 inside the band, after an 18 px icon column; 13 px Inter | `PopupMenu.Selection.innerInsets` 0,6 (New UI), `Menu.maxGutterIconWidth` 18 |
 | Shortcut | right-aligned, `#73767C` | |
-| Disabled item | `#777777` | `MenuItem.disabledForeground` |
+| Disabled item | `#4C4F56` (was `#777777`, Darcula's value, which Islands Dark's `*` wildcard replaces) | `MenuItem.disabledForeground` → `*.disabledForeground` = text-disabled |
 | Separator | 9 high, a 1 px line in the border color, 10 from the sides | `PopupMenuSeparator.height` 9, `.withToEdge` 10 |
 
 Submenus open in place of the menu, with a row at the top to go back. IntelliJ opens them to the side instead;

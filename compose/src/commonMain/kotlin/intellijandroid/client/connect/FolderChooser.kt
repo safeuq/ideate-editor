@@ -41,10 +41,10 @@ import androidx.compose.ui.window.DialogProperties
 import intellijandroid.client.session.ProjectTree
 import intellijandroid.client.session.TextFragment
 import intellijandroid.client.session.TreeNode
-import intellijandroid.client.ui.IslandsDark
-import intellijandroid.client.ui.LocalClientFonts
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.ProjectTreeView
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
 
 /**
  * IntelliJ's folder chooser ("Open File or Project", `FileChooserDialogImpl`), for folders in
@@ -339,14 +339,14 @@ private object Chooser {
   val sideInset = 14.dp // path field: 14.5 pt from the dialog's side
   val fieldHeight = 26.dp // 24 pt plus the focus ring
   val fieldShape = RoundedCornerShape(4.dp)
-  val fieldBorder = Color(0xFF4E5157)
-  val accent = Color(0xFF4670DA) // focused field ring and the OK button
+  val fieldBorder = IslandsDark.controlBorder
+  val accent = IslandsDark.controlBrandBackground // focused field ring and the OK button
   val treeInset = 12.dp // tree panel: 12.5 pt from the dialog's side
   val treeBorder = Color(0xFF2B2D30)
   val buttonWidth = 72.dp
   val buttonHeight = 24.dp
   val buttonShape = RoundedCornerShape(4.dp)
-  val buttonBorder = Color(0xFF414349)
+  val buttonBorder = IslandsDark.controlBorder
   val bottomInset = 11.dp
 }
 

@@ -32,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
@@ -47,10 +46,12 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
+import intellijandroid.client.ui.theme.label
 import kotlin.math.roundToInt
 
 /** One line of a context menu: plain data, so items can also come from the backend later. */
@@ -220,7 +221,7 @@ private fun MenuPanel(
   // Open submenus, innermost last.
   var path by remember { mutableStateOf(emptyList<SubMenu>()) }
   val shape = RoundedCornerShape(Menus.radius)
-  val text = TextStyle(fontFamily = fonts.ui, fontSize = IslandsDark.UI_FONT_SIZE.sp)
+  val text = fonts.label()
   Column(
     Modifier.width(IntrinsicSize.Max)
       .widthIn(min = Menus.minWidth, max = Menus.maxWidth)
@@ -354,11 +355,11 @@ private fun Separator() {
 }
 
 private object Menus {
-  val background = Color(0xFF26282C) // popup-bg
-  val border = Color(0xFF33353B) // popup-border; also Separator.separatorColor
-  val selection = Color(0xFF2E436E) // hovered row, as Gateway's selected sidebar row (not measured)
-  val shortcut = Color(0xFF73767C) // text-secondary
-  val disabled = Color(0xFF777777) // MenuItem.disabledForeground
+  val background = IslandsDark.popupBackground
+  val border = IslandsDark.popupBorder // also Separator.separatorColor
+  val selection = IslandsDark.selectionBackground // MenuItem.selectionBackground
+  val shortcut = IslandsDark.textSecondary // MenuItem.acceleratorForeground = text-secondary
+  val disabled = IslandsDark.textDisabled // MenuItem.disabledForeground
   val radius = 8.dp // PopupMenu.borderCornerRadius
   val verticalInset = 6.dp // PopupMenu.borderInsets 6,1,6,1
   val selectionInset = 7.dp // PopupMenu.Selection.outerInsets 1,7

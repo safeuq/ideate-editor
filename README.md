@@ -23,6 +23,7 @@ docs/           all documentation (below)
 | [`action-protocol.md`](docs/action-protocol.md) | context menus from the backend (`AsyncActionsModel.expandGroup`) and running their actions (`RdCallActionRequest`); which items IDEate greys out |
 | [`mobile-layout.md`](docs/mobile-layout.md) | the main window on phone and tablet, portrait and landscape: bars, swipes, which layout when |
 | [`intellij-look.md`](docs/intellij-look.md) | IntelliJ's Islands Dark look: colors, fonts, metrics, icons |
+| [`ui-components.md`](docs/ui-components.md) | plan: one shared component per IntelliJ widget, laid out like Jewel, styled from Islands Dark theme keys |
 | [`ssh-connections.md`](docs/ssh-connections.md) | plan for the SSH page (Gateway's SSH connections): how Gateway finds IDEs and recent projects on a host, opens a project, and forwards the port |
 
 Every finding goes into the matching doc in the same commit as the work; a new doc gets a row above.

@@ -35,10 +35,15 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import intellijandroid.client.session.Lookup
 import intellijandroid.client.session.LookupItem
 import intellijandroid.client.session.matchedIndices
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
+import intellijandroid.client.ui.theme.UiDensity
+import intellijandroid.client.ui.theme.editor
+import intellijandroid.client.ui.theme.label
+import intellijandroid.client.ui.theme.medium
 
 /**
  * IntelliJ's completion popup: rows of icon, item text with the typed letters in blue, grey tail,
@@ -52,25 +57,9 @@ internal fun LookupPopup(lookup: Lookup, onChoose: (String) -> Unit) {
   val icons = LocalIcons.current
   val density = LocalDensity.current
   val measurer = rememberTextMeasurer()
-  val itemStyle =
-    TextStyle(
-      fontFamily = fonts.editor,
-      fontSize = IslandsDark.EDITOR_FONT_SIZE.sp,
-      color = Lookups.foreground,
-    )
-  val footerStyle =
-    TextStyle(
-      fontFamily = fonts.ui,
-      fontSize = (IslandsDark.UI_FONT_SIZE - 1).sp,
-      color = Lookups.secondary,
-    )
-  val headerStyle =
-    TextStyle(
-      fontFamily = fonts.ui,
-      fontSize = IslandsDark.UI_FONT_SIZE.sp,
-      fontWeight = FontWeight.SemiBold,
-      color = Lookups.secondary,
-    )
+  val itemStyle = fonts.editor(Lookups.foreground)
+  val footerStyle = fonts.medium(Lookups.secondary)
+  val headerStyle = fonts.label(Lookups.secondary).copy(fontWeight = FontWeight.SemiBold)
 
   // One entry per row; a group's first item gets a separator and the group's header before it.
   val entries =
@@ -267,13 +256,13 @@ internal val LOOKUP_PREFIX_INSET
 
 /** Popup metrics (measured on JetBrains Client 263.7307.200, Islands Dark) and colours. */
 private object Lookups {
-  val background = Color(0xFF26282C) // Popup.background = popup-bg = layer-1-bg
-  val border = Color(0xFF33353B) // Popup.borderColor = layer-1-border; also the group separator
+  val background = IslandsDark.popupBackground
+  val border = IslandsDark.popupBorder // also the group separator
   val foreground = Color(0xFFBCBEC4) // CompletionPopup.foreground = editor-text
   val match = Color(0xFF538AF9) // CompletionPopup.matchForeground
-  val selection = Color(0xFF2A4371) // selection-bg-active: after the user moved the selection
-  val selectionUnfocused = Color(0xFF33353B) // measured #33353A: autopopup before any arrow key
-  val secondary = Color(0xFF73767C) // text-secondary: tail, type, group header, footer
+  val selection = IslandsDark.selectionBackground // after the user moved the selection
+  val selectionUnfocused = IslandsDark.selectionInactiveBackground // autopopup, no arrow key yet
+  val secondary = IslandsDark.textSecondary // tail, type, group header, footer
   val rowHeight
     get() = if (IslandsDark.density == UiDensity.COMPACT) 22.dp else 24.dp // List.rowHeight
 

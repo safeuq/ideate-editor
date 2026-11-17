@@ -28,14 +28,13 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import intellijandroid.client.ui.ClientFonts
-import intellijandroid.client.ui.IslandsDark
+import intellijandroid.client.ui.theme.ClientFonts
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.label
 
 /**
  * Gateway's "Starting the remote IDE Backend" popup (from a 2x screenshot of Gateway 2026.3, in dp
@@ -44,12 +43,7 @@ import intellijandroid.client.ui.IslandsDark
  */
 @Composable
 fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: () -> Unit) {
-  val text =
-    TextStyle(
-      color = IslandsDark.text,
-      fontFamily = fonts.ui,
-      fontSize = IslandsDark.UI_FONT_SIZE.sp,
-    )
+  val text = fonts.label()
   val segment by
     rememberInfiniteTransition(label = "start-progress")
       .animateFloat(
@@ -109,11 +103,11 @@ fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: (
 private object Popup {
   val width = 459.dp
   val inset = 11.dp
-  val background = Color(0xFF26282B)
-  val border = Color(0xFF393B40)
+  val background = IslandsDark.popupBackground
+  val border = IslandsDark.popupBorder
   val barHeight = 4.dp
-  val track = Color(0xFF45474D)
-  val fill = Color(0xFF4A7CF6)
+  val track = Color(0xFF40434A) // ProgressBar.trackColor = control-bg-small = gray-50
+  val fill = IslandsDark.controlBrandBackground // ProgressBar.progressColor = control-brand-bg
   /** Part of the bar the moving segment covers. */
   const val segment = 0.3f
   val buttonWidth = 74.dp

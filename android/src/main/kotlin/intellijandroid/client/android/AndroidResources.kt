@@ -12,9 +12,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.caverock.androidsvg.RenderOptions
 import com.caverock.androidsvg.SVG
-import intellijandroid.client.ui.ClientFonts
 import intellijandroid.client.ui.IconJar
 import intellijandroid.client.ui.IconProvider
+import intellijandroid.client.ui.theme.ClientFonts
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil

@@ -19,9 +19,9 @@ import intellijandroid.client.desktop.FileSecretStore
 import intellijandroid.client.desktop.Snapshots
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.ClientScreen
-import intellijandroid.client.ui.IslandsDark
-import intellijandroid.client.ui.LocalClientFonts
 import intellijandroid.client.ui.LocalIcons
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions

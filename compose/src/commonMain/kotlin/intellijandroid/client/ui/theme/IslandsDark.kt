@@ -1,10 +1,6 @@
-package intellijandroid.client.ui
+package intellijandroid.client.ui.theme
 
-import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -40,6 +36,10 @@ enum class UiDensity {
  * (values and sources: docs/intellij-look.md, section 11 for the density pairs). Editor text colors
  * don't live here: they come from the backend's color scheme. Sizes that differ between the
  * densities are getters reading [density].
+ *
+ * Each color names the theme key it comes from and how the name resolves in
+ * `ManyIslandsDark.theme.json`'s `colors` map, e.g. `Component.borderColor = control-border =
+ * gray-50`. A theme value wins over one measured on a screenshot (docs/ui-components.md).
  */
 object IslandsDark {
   /**
@@ -48,8 +48,7 @@ object IslandsDark {
    */
   @Volatile var density = UiDensity.COMPACT
 
-  private fun byDensity(normal: Dp, compact: Dp) =
-    if (density == UiDensity.COMPACT) compact else normal
+  fun byDensity(normal: Dp, compact: Dp) = if (density == UiDensity.COMPACT) compact else normal
 
   private fun byDensity(normal: Float, compact: Float) =
     if (density == UiDensity.COMPACT) compact else normal
@@ -62,9 +61,27 @@ object IslandsDark {
   val islandGap
     get() = byDensity(6.dp, 4.dp) // Island.borderWidth 6 (compact 4)
 
-  val text = Color(0xFFD1D3D9) // text-default
-  val textSecondary = Color(0xFF73767C) // grayed (e.g. path after the module name)
+  val text = Color(0xFFD1D3D9) // *.foreground = text-default = gray-130
+  val textSecondary = Color(0xFF73767C) // *.infoForeground = text-secondary = gray-80
+  val textDisabled = Color(0xFF4C4F56) // *.disabledForeground = text-disabled = gray-60
+  val textOverAccent = Color(0xFFFFFFFF) // Button.default.foreground = text-over-accent = white
   val link = Color(0xFF538AF9) // measured: completion match highlight, the theme's blue for links
+
+  // Component.borderColor, Button.startBorderColor = control-border = gray-50
+  val controlBorder = Color(0xFF40434A)
+  // Button.default.startBackground = control-brand-bg = blue-80
+  val controlBrandBackground = Color(0xFF3871E1)
+  val focusBorder = Color(0xFF3871E1) // Component.focusColor = control-brand-border = blue-80
+
+  // Popup.background, PopupMenu.background = popup-bg = gray-30
+  val popupBackground = Color(0xFF26282C)
+  // Popup.borderColor, Separator.separatorColor = popup-border = gray-40
+  val popupBorder = Color(0xFF33353B)
+
+  // *.selectionBackground = selection-bg-active = blue-50
+  val selectionBackground = Color(0xFF2A4371)
+  // *.selectionInactiveBackground = selection-bg-inactive = gray-40
+  val selectionInactiveBackground = Color(0xFF33353B)
 
   val headerHeight
     get() = byDensity(41.dp, 31.dp) // ToolWindow.Header.height (code default 41, compact 31)
@@ -84,8 +101,6 @@ object IslandsDark {
   val treeSideInset = 12.dp // also the selection's left/right inset
   val treeIndent = 19.dp // leftChildIndent 7 → 8 + rightChildIndent 11
   val treeIconTextGap = 2.dp
-  val treeSelectionFocused = Color(0xFF2A4371) // selection-bg-active
-  val treeSelectionUnfocused = Color(0xFF33353B) // selection-bg-inactive
   val treeHover = Color(0x10FFFFFF) // selection-bg-hovered
 
   val tabRowHeight = 32.dp // measured: editor tabs row
@@ -129,27 +144,3 @@ object IslandsDark {
   const val LINE_NUMBER_FONT_SIZE = 11f // editor size - 1
   const val LINE_SPACING = 1.2f // default editor line spacing
 }
-
-/**
- * Fonts the screens use; the platform supplies them (desktop: files in the JetBrains Client's JBR).
- */
-data class ClientFonts(val editor: FontFamily, val ui: FontFamily)
-
-/**
- * Loads IntelliJ icons by their path in the icons jar, e.g. `expui/nodes/folder.svg`; the platform
- * supplies it.
- */
-fun interface IconProvider {
-  fun painter(path: String): Painter?
-}
-
-val LocalClientFonts = staticCompositionLocalOf {
-  ClientFonts(FontFamily.Monospace, FontFamily.SansSerif)
-}
-val LocalIcons = staticCompositionLocalOf { IconProvider { null } }
-
-/**
- * Added to the editor so the platform's text input can reach it (Android: opens the soft keyboard).
- * Desktop: nothing.
- */
-val LocalEditorTextInput = staticCompositionLocalOf<Modifier> { Modifier }

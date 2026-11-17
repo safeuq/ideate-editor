@@ -9,15 +9,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import intellijandroid.client.session.ClientSession
 import intellijandroid.client.session.ProjectTree
 import intellijandroid.client.session.SessionState
 import intellijandroid.client.session.StructureTree
 import intellijandroid.client.session.TextFragment
 import intellijandroid.client.session.TreeNode
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
+import intellijandroid.client.ui.theme.label
 
 /**
  * The Structure tool window: the backend's tree for the selected file, drawn with the Project
@@ -43,12 +44,7 @@ fun StructureView(
     Box(modifier.padding(12.dp)) {
       BasicText(
         if (state.selectedEditor == null) "No file is open" else "Loading…",
-        style =
-          TextStyle(
-            color = IslandsDark.textSecondary,
-            fontFamily = fonts.ui,
-            fontSize = IslandsDark.UI_FONT_SIZE.sp,
-          ),
+        style = fonts.label(IslandsDark.textSecondary),
       )
     }
     return

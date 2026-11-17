@@ -26,11 +26,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
+import intellijandroid.client.ui.theme.label
 
 enum class Side {
   LEFT,
@@ -166,12 +168,7 @@ fun MainToolbar(
 ) {
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
-  val text =
-    TextStyle(
-      color = IslandsDark.text,
-      fontFamily = fonts.ui,
-      fontSize = IslandsDark.toolbarFontSize.sp,
-    )
+  val text = fonts.label().copy(fontSize = IslandsDark.toolbarFontSize.sp)
   Row(
     modifier.fillMaxWidth().height(IslandsDark.toolbarHeight).padding(horizontal = 6.dp),
     verticalAlignment = Alignment.CenterVertically,
@@ -273,12 +270,7 @@ fun ToolWindowPanel(
       }
       BasicText(
         window.title,
-        style =
-          TextStyle(
-            color = IslandsDark.text,
-            fontFamily = fonts.ui,
-            fontSize = IslandsDark.headerFontSize.sp,
-          ),
+        style = fonts.label().copy(fontSize = IslandsDark.headerFontSize.sp),
       )
     }
     // On a phone held upright (back chevron shown) the tool window covers the editor; a line under

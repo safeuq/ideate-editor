@@ -1,4 +1,4 @@
-package intellijandroid.client.ui
+package intellijandroid.client.ui.theme
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

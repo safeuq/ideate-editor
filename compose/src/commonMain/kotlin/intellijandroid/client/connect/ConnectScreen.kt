@@ -40,12 +40,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import intellijandroid.client.ui.ClientFonts
 import intellijandroid.client.ui.ContextMenuArea
-import intellijandroid.client.ui.IslandsDark
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.MenuItem
 import intellijandroid.client.ui.MessageKind
+import intellijandroid.client.ui.theme.ClientFonts
+import intellijandroid.client.ui.theme.IslandsDark
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -795,10 +795,10 @@ internal class ConnectStyles(fonts: ClientFonts, val twoLineRows: Boolean) {
 internal object Gateway {
   val background = Color(0xFF1C1D20)
   val divider = Color(0xFF2B2D30)
-  val selection = Color(0xFF2E436E) // selected sidebar row, full width, square
+  val selection = IslandsDark.selectionBackground // selected sidebar row, full width, square
   val running = Color(0xFF6AAB73)
   val error = Color(0xFFDB5C5C) // Label.errorForeground: Red7, "Host unreachable"
-  val disabledText = Color(0xFF5A5D63) // disabledText: Gray6, an unreachable host's paths
+  val disabledText = IslandsDark.textDisabled // an unreachable host's paths
   val sidebarWidth = 224.dp
   val tabBarHeight = 40.dp // portrait: like the main window's tool window bar
   val tabHeight = 32.dp
@@ -818,11 +818,11 @@ internal object Gateway {
   val iconStep = 25.5.dp // trailing icons, one every 25.5 pt
   val iconColumnEndInset = 32.dp // last icon centred 44.5 pt from the right
   val buttonHeight = 27.dp
-  val buttonBorder = Color(0xFF4E5157)
+  val buttonBorder = IslandsDark.controlBorder
   val buttonShape = RoundedCornerShape(4.dp)
   val menuWidth = 237.dp
   val menuRowHeight = 24.dp
-  val menuBackground = Color(0xFF2B2D30)
-  val menuBorder = Color(0xFF43454A)
+  val menuBackground = IslandsDark.popupBackground
+  val menuBorder = IslandsDark.popupBorder
   val menuShape = RoundedCornerShape(8.dp)
 }

@@ -175,6 +175,9 @@ Test-tool notes:
   double tap on a Project row doesn't open the file. Select the row, then `input keyevent
   KEYCODE_ENTER` (ProjectTreeView opens a leaf on Enter).
 - A long press is `input swipe X Y X Y 1200`.
+- Connect only once the backend has finished starting (about a minute after its join link
+  prints). A client that joined 25 s in got no project, and kept the controller seat, so the next
+  try was refused (`USER_DECLINED`) until the backend restarted (2026-11-17).
 
 ## Not done
 

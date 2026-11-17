@@ -7,10 +7,10 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.platform.Font
 import androidx.compose.ui.unit.Density
-import intellijandroid.client.ui.ClientFonts
 import intellijandroid.client.ui.IconJar
 import intellijandroid.client.ui.IconProvider
-import intellijandroid.client.ui.UiDensity
+import intellijandroid.client.ui.theme.ClientFonts
+import intellijandroid.client.ui.theme.UiDensity
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 

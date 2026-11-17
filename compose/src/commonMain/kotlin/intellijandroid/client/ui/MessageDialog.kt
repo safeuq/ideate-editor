@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -35,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
 
 /** The icon at the left of a [MessageDialog], as IntelliJ's `Messages.get…Icon()`. */
 enum class MessageKind(val iconPath: String) {
@@ -148,10 +149,10 @@ fun DialogButton(label: String, style: TextStyle, primary: Boolean, onClick: () 
 }
 
 private object Alert {
-  val background = Color(0xFF26282C) // AlertDialog.background = popup-bg (Islands Dark)
-  val border = Color(0xFF33353B) // popup-border
+  val background = IslandsDark.popupBackground // AlertDialog.background = popup-bg
+  val border = IslandsDark.popupBorder
   val shape = RoundedCornerShape(10.dp)
-  val accent = Color(0xFF4670DA) // Button.default.startBackground, as the folder chooser measured
-  val buttonBorder = Color(0xFF414349)
+  val accent = IslandsDark.controlBrandBackground
+  val buttonBorder = IslandsDark.controlBorder
   val buttonShape = RoundedCornerShape(4.dp)
 }

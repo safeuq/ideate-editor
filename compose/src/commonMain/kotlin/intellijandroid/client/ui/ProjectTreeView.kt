@@ -49,16 +49,17 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import intellijandroid.client.session.ProjectTree
 import intellijandroid.client.session.TreeNode
+import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.LocalClientFonts
+import intellijandroid.client.ui.theme.label
 import kotlin.math.roundToInt
 
 /** The Project tool window: header plus the tree, laid out with IntelliJ's New UI tree metrics. */
@@ -80,12 +81,7 @@ fun ProjectToolWindow(
     ) {
       BasicText(
         "Project",
-        style =
-          TextStyle(
-            color = IslandsDark.text,
-            fontFamily = fonts.ui,
-            fontSize = IslandsDark.UI_FONT_SIZE.sp,
-          ),
+        style = fonts.label(),
       )
     }
     ProjectTreeView(tree, onToggle, onSelect, onOpen, Modifier.fillMaxSize())
@@ -234,7 +230,8 @@ private fun TreeRow(
   val highlight =
     when {
       selected ->
-        if (treeFocused) IslandsDark.treeSelectionFocused else IslandsDark.treeSelectionUnfocused
+        if (treeFocused) IslandsDark.selectionBackground
+        else IslandsDark.selectionInactiveBackground
       hovered -> IslandsDark.treeHover
       else -> null
     }
@@ -323,12 +320,7 @@ private fun TreeRow(
         }
       BasicText(
         label,
-        style =
-          TextStyle(
-            fontFamily = fonts.ui,
-            fontSize = IslandsDark.UI_FONT_SIZE.sp,
-            color = IslandsDark.text,
-          ),
+        style = fonts.label(),
         maxLines = 1,
         softWrap = false,
         modifier =

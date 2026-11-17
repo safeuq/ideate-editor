@@ -4,9 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
-import intellijandroid.client.ui.ClientFonts
-import intellijandroid.client.ui.LocalClientFonts
 import intellijandroid.client.ui.LocalIcons
+import intellijandroid.client.ui.theme.ClientFonts
+import intellijandroid.client.ui.theme.LocalClientFonts
 import java.io.File
 import kotlin.concurrent.thread
 import org.jetbrains.skia.EncodedImageFormat

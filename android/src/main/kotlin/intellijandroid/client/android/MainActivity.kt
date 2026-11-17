@@ -17,9 +17,9 @@ import intellijandroid.client.connect.IdeateApp
 import intellijandroid.client.connect.SshSetup
 import intellijandroid.client.connect.StoredText
 import intellijandroid.client.ssh.RemoteHosts
-import intellijandroid.client.ui.LocalClientFonts
 import intellijandroid.client.ui.LocalEditorTextInput
 import intellijandroid.client.ui.LocalIcons
+import intellijandroid.client.ui.theme.LocalClientFonts
 
 /**
  * The connect screen (link prompt, backends on this phone, history; docs/connections.md), then the

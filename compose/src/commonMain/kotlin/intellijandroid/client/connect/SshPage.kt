@@ -42,12 +42,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import intellijandroid.client.ssh.LoginMethod
-import intellijandroid.client.ui.ClientFonts
 import intellijandroid.client.ui.DialogButton
-import intellijandroid.client.ui.IslandsDark
 import intellijandroid.client.ui.MenuItem
 import intellijandroid.client.ui.MessageDialog
 import intellijandroid.client.ui.MessageOption
+import intellijandroid.client.ui.theme.ClientFonts
+import intellijandroid.client.ui.theme.IslandsDark
 import kotlinx.coroutines.delay
 
 /**
@@ -484,6 +484,6 @@ private object DialogLook {
   val titleHeight = 32.dp
   val fieldHeight = 26.dp
   val fieldShape = RoundedCornerShape(4.dp)
-  val fieldBorder = Color(0xFF4E5157)
-  val accent = Color(0xFF4670DA)
+  val fieldBorder = IslandsDark.controlBorder
+  val accent = IslandsDark.controlBrandBackground
 }
