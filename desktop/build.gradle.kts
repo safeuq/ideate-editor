@@ -37,6 +37,14 @@ kotlin {
 compose.desktop {
   application {
     mainClass = "intellijandroid.client.MainKt"
+    // Run on the JetBrains Runtime of the same JetBrains Client install, whatever JDK Gradle runs
+    // on: the macOS title bar needs JBR's window decorations (MacTitleBar.kt); another runtime
+    // falls back to the native title bar. The install keeps it next to lib: `Contents/jbr/Contents/
+    // Home` on macOS, `jbr` on Linux and Windows.
+    listOf("jbr/Contents/Home", "jbr")
+      .map { file(jetbrainsClientLib).resolveSibling(it) }
+      .firstOrNull { it.resolve("bin/java").exists() || it.resolve("bin/java.exe").exists() }
+      ?.let { javaHome = it.path }
     // Fonts and icons are read from the same JetBrains Client install as the protocol jars.
     jvmArgs("-Djetbrains.client.lib=$jetbrainsClientLib")
   }

@@ -591,6 +591,12 @@ The user asked for Gateway's title bar: no separate title bar, the window's butt
 
 The JBR API comes from `intellij.libraries.jbr.jar` in the same JetBrains Client install as the protocol jars.
 On another Java runtime, `JBR.isWindowDecorationsSupported()` is false and the window keeps its native title bar.
+So `:desktop:run` runs the app on that install's own JetBrains Runtime (`Contents/jbr/Contents/Home` on macOS,
+`jbr` on Linux and Windows; `compose.desktop.application.javaHome`), whatever JDK Gradle runs on. The user ran it
+from Gradle on another JDK and still got the native title bar. A standard JDK can only put the content under a
+transparent title bar (`apple.awt.fullWindowContent`, `apple.awt.transparentTitleBar`): the bar stays 28 pt with
+the traffic lights at their usual place, Java's content view takes the mouse so the window can't be dragged there,
+and there is no hit test for the toolbar's buttons.
 The connect screen has no toolbar, so it gets an empty strip of the toolbar's height that drags the window
 (`TitleBarSpacer`).
 
