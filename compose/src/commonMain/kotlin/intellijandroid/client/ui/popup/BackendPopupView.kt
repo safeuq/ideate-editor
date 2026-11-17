@@ -1,16 +1,21 @@
 package intellijandroid.client.ui.popup
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -41,9 +47,11 @@ import intellijandroid.client.session.BackendPopup
 import intellijandroid.client.session.ClientSession
 import intellijandroid.client.session.LuxDialog
 import intellijandroid.client.session.PopupLabel
+import intellijandroid.client.session.PopupList
 import intellijandroid.client.session.PopupLux
 import intellijandroid.client.session.PopupTextField
 import intellijandroid.client.ui.LocalBackHandler
+import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.component.popupContainer
 import intellijandroid.client.ui.lux.LuxPainter
@@ -99,6 +107,9 @@ private fun BackendPopupView(popup: BackendPopup, session: ClientSession) {
           }
           // Back too: with the keyboard hidden, the focused text field would otherwise take it
           // just to drop its focus.
+          // The backend moves the list's selection (New ▸ Java Class's kinds).
+          Key.DirectionUp -> session.popupKey(popup, "pressed UP")
+          Key.DirectionDown -> session.popupKey(popup, "pressed DOWN")
           Key.Escape,
           Key.Back -> {
             session.popupCancel(popup)
@@ -122,6 +133,7 @@ private fun BackendPopupView(popup: BackendPopup, session: ClientSession) {
       when (item) {
         is PopupLabel -> BasicText(item.text, style = text)
         is PopupLux -> LuxSurface(item.surface, session)
+        is PopupList -> PopupListView(item, session)
         is PopupTextField -> {
           val focus = remember { FocusRequester() }
           TextField(
@@ -156,6 +168,42 @@ private object Look {
   val radius = 8.dp
   val inset = 10.dp
   val gap = 8.dp
+  /** IntelliJ's list row is 24 (pointer); taller so a finger hits one kind, not its neighbour. */
+  val rowHeight = 32.dp
+  val rowInset = 8.dp
+  val iconGap = 6.dp
+  val selectionRadius = 4.dp
+}
+
+/**
+ * A list in a popup, e.g. New ▸ Java Class's kinds: icon and text per row, the selected one in
+ * IntelliJ's list selection color. A tap selects a row; Enter in the name field then uses it.
+ */
+@Composable
+private fun PopupListView(list: PopupList, session: ClientSession) {
+  val text = LocalClientFonts.current.label()
+  val icons = LocalIcons.current
+  Column {
+    list.rows.forEachIndexed { index, row ->
+      Row(
+        Modifier.fillMaxWidth()
+          .height(Look.rowHeight)
+          .background(
+            if (index == list.selected) IslandsDark.selectionBackground else Color.Transparent,
+            RoundedCornerShape(Look.selectionRadius),
+          )
+          .clickable(remember { MutableInteractionSource() }, indication = null) {
+            session.popupSelect(list, row)
+          }
+          .padding(horizontal = Look.rowInset),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Look.iconGap),
+      ) {
+        row.iconPath?.let(icons::painter)?.let { Image(it, null, Modifier.size(16.dp)) }
+        BasicText(row.text, style = text)
+      }
+    }
+  }
 }
 
 /** A Lux panel inside a popup, painted as the backend draws it; display only. */

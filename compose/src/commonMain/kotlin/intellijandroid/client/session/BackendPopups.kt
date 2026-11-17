@@ -8,10 +8,13 @@ import com.jetbrains.ide.model.uiautomation.BeControl
 import com.jetbrains.ide.model.uiautomation.BeControlContainer
 import com.jetbrains.ide.model.uiautomation.BeEmptyData
 import com.jetbrains.ide.model.uiautomation.BeGrid
+import com.jetbrains.ide.model.uiautomation.BeIcon
 import com.jetbrains.ide.model.uiautomation.BeLabel
 import com.jetbrains.ide.model.uiautomation.BeShortcutListener
 import com.jetbrains.ide.model.uiautomation.BeSpacer
 import com.jetbrains.ide.model.uiautomation.BeTextBox
+import com.jetbrains.ide.model.uiautomation.BeTreeGrid
+import com.jetbrains.ide.model.uiautomation.BeTreeGridLine
 import com.jetbrains.ide.model.uiautomation.BeneluxView
 import com.jetbrains.ide.model.uiautomation.DialogResult
 import com.jetbrains.ide.model.uiautomation.ValidationStates
@@ -19,6 +22,7 @@ import com.jetbrains.ide.model.uiautomation.uIAutomationInteractionModel
 import com.jetbrains.rd.framework.IProtocol
 import com.jetbrains.rd.ide.model.BeAbstractPopup
 import com.jetbrains.rd.ide.model.DefaultPopupContent
+import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.LxPanel
 import com.jetbrains.rd.ide.model.LxPoint
 import com.jetbrains.rd.ide.model.luxModel
@@ -38,6 +42,18 @@ class PopupLabel(text: String) : PopupItem {
  * A `BeTextBox`: [text] mirrors the backend's `text` property both ways; [problem] is the backend's
  * validation message (`validationError` or `validationWarning`), null when it passes.
  */
+/**
+ * A `BeTreeGrid` list, e.g. New ▸ Java Class's kinds: `PopupList(rows =
+ * [Class (class.svg), Interface, Enum, Record, Annotation, Exception])`. [selected] follows each
+ * row's `isSelected`, which the backend moves on Up and Down.
+ */
+class PopupList(val rows: List<PopupRow>) : PopupItem {
+  var selected by mutableStateOf(-1)
+}
+
+/** One row of a [PopupList]: its icon (a path in the client's icon jar) and text. */
+class PopupRow(val iconPath: String?, val text: String, internal val line: BeTreeGridLine)
+
 /** A Lux panel the backend paints, e.g. New ▸ File's "already exists" hint. */
 class PopupLux(val surface: LuxDialog) : PopupItem
 
@@ -77,6 +93,8 @@ internal class BackendPopups(
   private val lifetime: Lifetime,
   private val protocol: IProtocol,
   private val log: (String) -> Unit,
+  /** A backend icon's path in the client's icon jar, e.g. `expui/nodes/class.svg`. */
+  private val iconPath: (IconModel) -> String?,
   private val publish: (List<BackendPopup>) -> Unit,
 ) {
   private val shown = linkedMapOf<Int, BackendPopup>()
@@ -143,6 +161,34 @@ internal class BackendPopups(
             control.text.advise(popupLifetime) { label.text = it }
           }
       is BeSpacer -> Unit
+      is BeTreeGrid -> {
+        val lines = control.fakeRoot.children.toList()
+        val list =
+          PopupList(
+            lines.map { line ->
+              var icon: String? = null
+              var text = ""
+              // Each row is BeStyleControl → BeGrid [BeIcon, BeLabel].
+              fun look(each: BeControl) {
+                when (each) {
+                  is BeIcon -> if (icon == null) icon = each.icon.valueOrNull?.let(iconPath)
+                  is BeLabel -> if (text.isEmpty()) text = each.text.value
+                  is BeGrid -> each.items.valueOrNull.orEmpty().forEach { look(it.content) }
+                  is BeControlContainer -> look(each.content)
+                  else -> Unit
+                }
+              }
+              line.columnElements.forEach(::look)
+              PopupRow(icon, text, line)
+            },
+          )
+        lines.forEachIndexed { index, line ->
+          line.isSelected.advise(popupLifetime) { selected ->
+            if (selected) list.selected = index else if (list.selected == index) list.selected = -1
+          }
+        }
+        items += list
+      }
       // New ▸ Java Class: the name field above the list of kinds (Class, Interface, …).
       is BeGrid ->
         control.items.valueOrNull.orEmpty().forEach { element ->
@@ -198,6 +244,17 @@ internal class BackendPopups(
    */
   fun type(field: PopupTextField, text: String) {
     if (field.box.text.value != text) field.box.text.set(text)
+  }
+
+  /** A tap on [row]: it becomes the list's selected row, as a click selects it in IntelliJ. */
+  fun select(list: PopupList, row: PopupRow) {
+    list.rows.forEach { each -> if (each !== row) each.line.isSelected.set(false) }
+    row.line.isSelected.set(true)
+  }
+
+  /** A key the backend listens for, by AWT keystroke text (`pressed UP`): its listeners fire. */
+  fun key(popup: BackendPopup, keystroke: String) {
+    popup.shortcuts[keystroke].orEmpty().forEach { it.reaction.fire(BeEmptyData()) }
   }
 
   /** Enter: the shortcut listeners for it, or, with `closeOnEnter`, accept. */

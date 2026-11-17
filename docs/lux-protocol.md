@@ -467,7 +467,15 @@ activePopups[1] = BeAbstractPopup(
 
 Its colors are `ValidationTooltip.errorBackground` / `errorBorderColor`, which `ThemeKeys` now resolves as Islands Dark does (`#56272B` / `#80383E`; without them the painter used the light fallback, a pale pink). IDEate shows the hint under the name popup, and cancelling the name popup cancels the hint too (the backend doesn't close it on its own).
 
-**New ▸ Java Class** wraps the name field in a `BeGrid` (its `items` are `BeGridElement(content)`), next to a `BeTreeGrid` listing the kinds (Class, Interface, Enum, …). IDEate shows the name field; the kind list isn't drawn yet, so Enter creates the preselected kind, a class (`src/Hello.java` in the test).
+**New ▸ Java Class** wraps the name field in a `BeGrid` (its `items` are `BeGridElement(content)`), next to a `BeTreeGrid` listing the kinds (Class, Interface, Enum, …). IDEate shows both. Each kind is a `BeTreeGridLine` under the grid's `fakeRoot`, made of `BeStyleControl` → `BeGrid` [`BeIcon(expui/nodes/class.svg)`, `BeLabel("Class")`], with an `isSelected` property (Class starts selected).
+
+| Input | What happens |
+|---|---|
+| Up / Down (also Ctrl+P / Ctrl+N) in the name field | the name field has `BeShortcutListener`s for `pressed UP` and `pressed DOWN`; IDEate fires them and the backend moves `isSelected` |
+| a tap on a kind | IDEate sets that line's `isSelected` to true and the others' to false |
+| Enter | the name field's Enter listener creates the selected kind |
+
+Tested: Down moved the selection from Class to Interface; a tap on Enum, then `Kind` and Enter, created `src/Kind.java` with `public enum Kind`.
 
 **Tested** on the emulator against the isolated Mac backend: New ▸ File `notes.txt` and New ▸ Directory `docs` in `empty/` created both; a second `notes.txt` showed "A file with the name 'notes.txt' already exists"; one Back (after the keyboard closed) cancelled both popups. The field takes focus, so the soft keyboard opens.
 

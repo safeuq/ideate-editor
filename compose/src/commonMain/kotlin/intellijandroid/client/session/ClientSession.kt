@@ -341,6 +341,19 @@ class ClientSession(
     onRd { backendPopups?.type(field, text) }
   }
 
+  /** A tap on [row] of [list] in a backend popup. */
+  fun popupSelect(list: PopupList, row: PopupRow) = onRd { backendPopups?.select(list, row) }
+
+  /**
+   * Up or Down ([keystroke] `pressed UP` / `pressed DOWN`) in backend popup [popup], for its list.
+   * True when the popup listens for it (the backend then moves the list's selection).
+   */
+  fun popupKey(popup: BackendPopup, keystroke: String): Boolean {
+    if (keystroke !in popup.shortcuts) return false
+    onRd { backendPopups?.key(popup, keystroke) }
+    return true
+  }
+
   /** Enter in backend popup [popup]. */
   fun popupEnter(popup: BackendPopup) = onRd { backendPopups?.enter(popup) }
 
@@ -458,7 +471,8 @@ class ClientSession(
         }
         .also { it.bind() }
     backendPopups =
-      BackendPopups(lifetime, protocol, ::log) { popups ->
+      BackendPopups(lifetime, protocol, ::log, { icon -> iconPaths(icon).firstOrNull() }) { popups
+          ->
           mutableState.update { it.copy(backendPopups = popups) }
         }
         .also { it.bind() }
