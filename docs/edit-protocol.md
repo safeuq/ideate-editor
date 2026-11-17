@@ -364,6 +364,9 @@ typing.
   per character), `performContextMenuAction` (paste, copy, cut), `getTextBeforeCursor`,
   `getTextAfterCursor` and `getSelectedText`. Key events (Enter, Delete, arrows) still go to the
   editor's key handler.
+- **Keyboard after Back** (emulator, 2026-11-18): Back hides the keyboard but the editor keeps focus, so a tap
+  didn't open it again (only switching panels did; user report). `EditorTextInputNode` now starts a new input
+  session on a tap (press and release within the touch slop) while `rootWindowInsets` says the IME is hidden.
 - **Enter on the soft keyboard** (emulator, Gboard, 2026-11-18): Gboard sends it as `commitText("\n")`, not as a
   key event, so it reaches `EditorTextTarget.enter()` and not the key handler. With the completion popup open it must
   accept the selected item like a hardware Enter (`LookupKey.ACCEPT`); before, it inserted a line break (user report).

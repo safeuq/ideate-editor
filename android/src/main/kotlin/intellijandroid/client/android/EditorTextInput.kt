@@ -2,16 +2,27 @@ package intellijandroid.client.android
 
 import android.text.InputType
 import android.view.View
+import android.view.WindowInsets
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusEventModifierNode
 import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.PointerInputModifierNode
+import androidx.compose.ui.node.currentValueOf
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.establishTextInputSession
+import androidx.compose.ui.unit.IntSize
 import intellijandroid.client.ui.EditorTextTarget
 import intellijandroid.client.ui.KeyboardText
 import kotlinx.coroutines.Job
@@ -42,31 +53,66 @@ private class EditorTextInputElement(private val target: EditorTextTarget) :
 }
 
 private class EditorTextInputNode(var target: EditorTextTarget) :
-  Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode {
+  Modifier.Node(),
+  FocusEventModifierNode,
+  PlatformTextInputModifierNode,
+  PointerInputModifierNode,
+  CompositionLocalConsumerModifierNode {
   private var session: Job? = null
+  private var pressedAt: Offset? = null
 
   override fun onFocusEvent(focusState: FocusState) {
     if (focusState.isFocused == (session != null)) return
     session?.cancel()
     session = null
-    if (focusState.isFocused) {
-      session = coroutineScope.launch {
-        establishTextInputSession {
-          val inputView = view
-          startInputMethod(
-            object : PlatformTextInputMethodRequest {
-              override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
-                outAttributes.inputType =
-                  InputType.TYPE_CLASS_TEXT or
-                    InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                    InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-                outAttributes.imeOptions =
-                  EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI
-                return EditorInputConnection(inputView) { target }
-              }
-            },
-          )
+    if (focusState.isFocused) startSession()
+  }
+
+  /**
+   * A tap on the focused editor brings the keyboard back after Back hid it: focus doesn't change
+   * then, so [onFocusEvent] doesn't run (user report). A new input session shows the keyboard.
+   */
+  override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
+    if (pass != PointerEventPass.Main || session == null) return
+    val change = pointerEvent.changes.firstOrNull() ?: return
+    when (pointerEvent.type) {
+      PointerEventType.Press -> pressedAt = change.position
+      PointerEventType.Release -> {
+        val start = pressedAt ?: return
+        pressedAt = null
+        val tapped =
+          (change.position - start).getDistance() < currentValueOf(LocalViewConfiguration).touchSlop
+        val keyboardShown =
+          currentValueOf(LocalView).rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
+        if (tapped && !keyboardShown) {
+          session?.cancel()
+          startSession()
         }
+      }
+    }
+  }
+
+  override fun onCancelPointerInput() {
+    pressedAt = null
+  }
+
+  private fun startSession() {
+    session = coroutineScope.launch {
+      establishTextInputSession {
+        val inputView = view
+        startInputMethod(
+          object : PlatformTextInputMethodRequest {
+            override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
+              outAttributes.inputType =
+                InputType.TYPE_CLASS_TEXT or
+                  InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                  InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+              outAttributes.imeOptions =
+                EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+              return EditorInputConnection(inputView) { target }
+            }
+          },
+        )
       }
     }
   }
