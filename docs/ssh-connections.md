@@ -444,8 +444,19 @@ Two bugs found and fixed:
   exchange, which waits for the host key answer, at most its transport timeout (30 s), while the question waits up
   to 120 s. `SshSession.open` now allows 130 s for the key exchange and puts 30 s back once connected.
 
-Still to look at: the host key question appears about 8 s after Check Connection on this Mac, though the SSH
-connection is local.
+The host key question seemed to take about 8 s to appear after Check Connection. Measured inside the app
+(timestamps along the real path, the desktop app driven by its own actions), it is drawn **590 ms** after the
+click:
+
+| ms | Stage |
+|---|---|
+| 7 | `SshSession.open` starts (logins resolved) |
+| 390 | host key callback: TCP connect and key exchange on loopback, BouncyCastle's first use about 150 of it |
+| 571 | question in state: `KnownHosts.check` over IDEate's and `~/.ssh/known_hosts` (84 lines) and the fingerprint |
+| 590 | the message dialog drawn |
+
+The 8 s was the test tool: on this Mac, cmux's clicks and window screenshots lag behind the app by seconds.
+Nothing to fix.
 
 How the test kept the user's running IntelliJ out of it: `remote-dev-server.sh run` and `status` with default
 folders would reach the IntelliJ the user has open. The test added a wrapper "IDE" (a folder with
