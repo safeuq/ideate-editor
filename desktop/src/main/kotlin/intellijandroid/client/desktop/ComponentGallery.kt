@@ -24,11 +24,13 @@ import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.MenuItem
 import intellijandroid.client.ui.MenuSeparator
 import intellijandroid.client.ui.SubMenu
+import intellijandroid.client.ui.component.CheckboxRow
 import intellijandroid.client.ui.component.DefaultButton
 import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.component.IndeterminateHorizontalProgressBar
 import intellijandroid.client.ui.component.Menu
 import intellijandroid.client.ui.component.OutlinedButton
+import intellijandroid.client.ui.component.RadioButtonRow
 import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.component.popupContainer
 import intellijandroid.client.ui.theme.ClientFonts
@@ -127,6 +129,29 @@ private fun Gallery() {
         Box(Modifier.width(300.dp).popupContainer(8.dp).padding(12.dp)) {
           IndeterminateHorizontalProgressBar(Modifier.fillMaxWidth())
         }
+      }
+    }
+    Toggles()
+  }
+}
+
+@Composable
+private fun Toggles() {
+  Section("RadioButton.kt, Checkbox.kt: off, on, focused, disabled") {
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+      Column {
+        RadioButtonRow("Password", selected = false) {}
+        RadioButtonRow("IDEate key", selected = true) {}
+        Focused { modifier -> RadioButtonRow("Focused", selected = true, modifier) {} }
+        RadioButtonRow("Disabled", selected = false, enabled = false) {}
+        RadioButtonRow("Disabled on", selected = true, enabled = false) {}
+      }
+      Column {
+        CheckboxRow("Save password", checked = false) {}
+        CheckboxRow("Checked", checked = true) {}
+        Focused { modifier -> CheckboxRow("Focused", checked = false, modifier) {} }
+        CheckboxRow("Disabled", checked = false, enabled = false) {}
+        CheckboxRow("Disabled on", checked = true, enabled = false) {}
       }
     }
   }

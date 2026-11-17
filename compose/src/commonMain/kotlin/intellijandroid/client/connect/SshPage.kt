@@ -2,7 +2,6 @@ package intellijandroid.client.connect
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,10 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
@@ -33,7 +30,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -42,8 +38,10 @@ import intellijandroid.client.ssh.LoginMethod
 import intellijandroid.client.ui.MenuItem
 import intellijandroid.client.ui.MessageDialog
 import intellijandroid.client.ui.MessageOption
+import intellijandroid.client.ui.component.CheckboxRow
 import intellijandroid.client.ui.component.DefaultButton
 import intellijandroid.client.ui.component.OutlinedButton
+import intellijandroid.client.ui.component.RadioButtonRow
 import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
@@ -212,25 +210,24 @@ private fun NewConnectionDialog(
     LabeledField("Host:", form.host, { actions.formChanged(form.copy(host = it)) }, styles)
     LabeledField("Port:", form.port, { actions.formChanged(form.copy(port = it)) }, styles)
     BasicText("Authentication:", style = styles.label)
-    Choice(
+    RadioButtonRow(
       "IDEate key (add it to the host's ~/.ssh/authorized_keys)",
       form.method == LoginMethod.GENERATED_KEY,
-      styles,
     ) {
       actions.formChanged(form.copy(method = LoginMethod.GENERATED_KEY))
     }
     if (form.method == LoginMethod.GENERATED_KEY) {
       dialog.publicKey?.let { publicKey ->
         val clipboard = LocalClipboardManager.current
-        BasicText(publicKey, style = styles.code, modifier = Modifier.padding(start = 24.dp))
-        Box(Modifier.padding(start = 24.dp)) {
+        BasicText(publicKey, style = styles.code, modifier = Modifier.padding(start = 28.dp))
+        Box(Modifier.padding(start = 28.dp)) {
           OutlinedButton("Copy Public Key") {
             clipboard.setText(AnnotatedString(publicKey))
           }
         }
       }
     }
-    Choice("Specify private key", form.method == LoginMethod.KEY_FILE, styles) {
+    RadioButtonRow("Specify private key", form.method == LoginMethod.KEY_FILE) {
       actions.formChanged(form.copy(method = LoginMethod.KEY_FILE))
     }
     if (form.method == LoginMethod.KEY_FILE) {
@@ -249,7 +246,7 @@ private fun NewConnectionDialog(
         secret = true,
       )
     }
-    Choice("Password", form.method == LoginMethod.PASSWORD, styles) {
+    RadioButtonRow("Password", form.method == LoginMethod.PASSWORD) {
       actions.formChanged(form.copy(method = LoginMethod.PASSWORD))
     }
     if (form.method == LoginMethod.PASSWORD) {
@@ -260,15 +257,14 @@ private fun NewConnectionDialog(
         styles,
         secret = true,
       )
-      Choice("Save password", form.savePassword, styles) {
-        actions.formChanged(form.copy(savePassword = !form.savePassword))
+      CheckboxRow("Save password", form.savePassword) { checked ->
+        actions.formChanged(form.copy(savePassword = checked))
       }
     }
     if (offersOpenSsh) {
-      Choice(
+      RadioButtonRow(
         "OpenSSH config and authentication agent",
         form.method == LoginMethod.OPEN_SSH,
-        styles,
       ) {
         actions.formChanged(form.copy(method = LoginMethod.OPEN_SSH))
       }
@@ -299,10 +295,9 @@ private fun ChooseIdeDialog(
     BasicText(dialog.host.name, style = styles.label.copy(color = IslandsDark.textSecondary))
     BasicText("IDE version:", style = styles.label)
     dialog.ides.forEach { ide ->
-      Choice(
+      RadioButtonRow(
         "${ide.name} ${ide.version} (${ide.buildNumber}) installed",
         ide == dialog.ide,
-        styles,
       ) {
         actions.ideChosen(ide)
       }
@@ -408,31 +403,6 @@ private fun LabeledField(
   }
 }
 
-/**
- * A radio button row (or a check box for Save password): IntelliJ's 14 px circle, accent when on.
- */
-@Composable
-private fun Choice(label: String, selected: Boolean, styles: DialogStyles, onClick: () -> Unit) {
-  Row(
-    Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 2.dp),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Box(
-      Modifier.size(14.dp)
-        .border(1.dp, if (selected) DialogLook.accent else DialogLook.fieldBorder, CircleShape)
-        .padding(4.dp)
-        .background(if (selected) DialogLook.accent else Color.Transparent, CircleShape),
-    )
-    BasicText(
-      label,
-      style = styles.label,
-      maxLines = 2,
-      overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.padding(start = 8.dp),
-    )
-  }
-}
-
 /** The values measured on IntelliJ's "Open File or Project" dialog (FolderChooser's Chooser). */
 private object DialogLook {
   val width = 475.dp
@@ -440,6 +410,4 @@ private object DialogLook {
   val shape = RoundedCornerShape(10.dp)
   val outline = Color(0xFF393B40)
   val titleHeight = 32.dp
-  val fieldBorder = IslandsDark.controlBorder
-  val accent = IslandsDark.controlBrandBackground
 }

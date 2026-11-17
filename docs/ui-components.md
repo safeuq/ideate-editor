@@ -156,7 +156,7 @@ the desktop app and the emulator before it's pushed.
 | 1 | `theme/IslandsDark.kt` (moved) with semantic colors, `theme/Typography.kt`; per-file colors switch to theme values | me | done (see below) |
 | 2 | `component/Button.kt`: both `DialogButton`s (now one, in MessageDialog.kt), `OutlinedButton`, StartProgress's Cancel | UI session | done, except StartProgress's Cancel (its file is yours: use `OutlinedButton`) |
 | 3 | `component/TextField.kt`: `InputField`, `Field`, the FolderChooser path field. `LabeledField` becomes `Column { Text(label); TextField() }` at the call site (Kotlin UI DSL `row(label)`) | UI session | done |
-| 4 | `component/RadioButton.kt` + `Checkbox.kt`: `Choice`, with IntelliJ's `radio*.svg`/`checkBox*.svg` (look in the client dist's `lib/*.jar` first; `IconJar` can take a second jar) | UI session | to do |
+| 4 | `component/RadioButton.kt` + `Checkbox.kt`: `Choice`, with IntelliJ's `radio*.svg`/`checkBox*.svg` (look in the client dist's `lib/*.jar` first; `IconJar` can take a second jar) | UI session | done |
 | 5 | `component/IconButton.kt`: `IconButton`; the main toolbar's Build/Run/Debug/More use it. `ToolbarIcon` and ConnectScreen's `IconButton` move onto it with the UI session's files. `TabCloseButton` stays (an `InplaceButton`) | me (ConnectScreen and FolderChooser call sites: UI session) | done |
 | 6 | `component/PopupContainer.kt` + `Menu.kt`: `MenuPanel` out of ContextMenu.kt; `LookupPopup`'s frame and StartProgress on `PopupContainer` | me (`ProjectMenu` call site: UI session) | done |
 | 7 | `component/LinearProgressBar.kt`: StartProgress's bar; StartProgress's Cancel on step 2's `OutlinedButton` | me | done |
@@ -260,6 +260,21 @@ the desktop app and the emulator before it's pushed.
   the emulator (Project menu by long press). Hover and press can't be shown in the gallery's still
   image; the completion popup's frame wasn't opened on screen (background typing doesn't reach the
   window), it uses the same `popupContainer` as the menu.
+### Step 4 (done)
+
+- `ui/component/RadioButton.kt` (`RadioButtonRow(text, selected, modifier, enabled, onClick)`) and
+  `ui/component/Checkbox.kt` (`CheckboxRow(text, checked, modifier, enabled, onCheckedChange)`),
+  after Jewel's `RadioButtonRow` / `CheckboxRow`.
+- The icons are the New UI's own, `themes/expUI/icons/dark/radio*.svg` and `checkBox*.svg` in the
+  client's `intellij.platform.resources.jar` (the old `laf/icons/darcula/` ones are Darcula's).
+  Islands Dark's icon palette only remaps `#CED0D6`, so they draw as shipped: background
+  `#2B2D30`, border `#5A5D63`, selected `#3574F0` with a white mark, disabled `#393B40` with a
+  `#6F737A` mark. The Android app carries only the icons jar, so the 12 files are inlined in
+  `IconJar.EXTRA_ICONS` as `laf/radio.svg`, `laf/checkBoxSelectedFocused.svg`, …
+- 24 dp icon (the shape is 16 inside it, `RadioButton.iconSize` 24 with 4 px insets), 4 dp to the
+  text (`RadioButton.iconTextGap`, `CheckBox.textIconGap`).
+- Callers moved: SshPage's `Choice` (Authentication choices, IDE choice, Save password) is gone.
+- IconJar.kt was touched for the extra icons (not in either list in section 5).
 
 ## 5. Split
 

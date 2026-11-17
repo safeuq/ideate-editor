@@ -29,7 +29,9 @@ class IconJar(file: File) {
      * Icons that aren't in JetBrains Client's jars under the path the UI asks for.
      * `markdown/link.svg`: the Markdown plugin's chain link
      * (`icons/expui/editorActions/link_dark.svg`, Apache 2.0, JetBrains), the icon Gateway shows
-     * for Link.
+     * for Link. `laf/radio*.svg`, `laf/checkBox*.svg`: the New UI's radio buttons and check boxes
+     * (`themes/expUI/icons/dark/` in intellij.platform.resources.jar, Apache 2.0, JetBrains), which
+     * the Android app's icons jar doesn't carry.
      */
     val EXTRA_ICONS =
       mapOf(
@@ -44,6 +46,62 @@ class IconJar(file: File) {
           """<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect x="4.5" y="1.5" width="7" height="13" rx="1.5" stroke="#C3C5CB"/>
 <path d="M7 12.5H9" stroke="#C3C5CB" stroke-linecap="round"/>
+</svg>""",
+        "laf/radio.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle id="Checkbox.Background.Default_Checkbox.Border.Default" cx="12" cy="12" r="8" fill="#2B2D30" stroke="#5A5D63"/>
+</svg>""",
+        "laf/radioSelected.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle id="Checkbox.Background.Selected_Checkbox.Border.Selected" cx="12" cy="12" r="8" fill="#3574F0" stroke="#3574F0"/>
+<path id="Checkbox.Foreground.Selected" fill-rule="evenodd" clip-rule="evenodd" d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" fill="white"/>
+</svg>""",
+        "laf/radioFocused.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle id="Checkbox.Background.Default_Checkbox.Border.Selected" cx="12" cy="12" r="8.5" fill="#2B2D30" stroke="#3574F0" stroke-width="2"/>
+</svg>""",
+        "laf/radioSelectedFocused.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle id="Checkbox.Background.Selected_Checkbox.Border.Selected" cx="12" cy="12" r="8" fill="#3574F0" stroke="#3574F0"/>
+<circle id="Checkbox.Focus.Wide" cx="12" cy="12" r="11" stroke="#3574F0" stroke-width="2"/>
+<path id="Checkbox.Foreground.Selected" fill-rule="evenodd" clip-rule="evenodd" d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" fill="white"/>
+</svg>""",
+        "laf/radioDisabled.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle id="Checkbox.Background.Disabled_Checkbox.Border.Disabled" cx="12" cy="12" r="8" fill="#393B40" stroke="#5A5D63"/>
+</svg>""",
+        "laf/radioSelectedDisabled.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle id="Checkbox.Background.Disabled_Checkbox.Border.Disabled" cx="12" cy="12" r="8" fill="#393B40" stroke="#5A5D63"/>
+<path id="Checkbox.Foreground.Disabled" fill-rule="evenodd" clip-rule="evenodd" d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" fill="#6F737A"/>
+</svg>""",
+        "laf/checkBox.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect id="Checkbox.Background.Default_Checkbox.Border.Default" x="4.5" y="4.5" width="15" height="15" rx="2.5" fill="#2B2D30" stroke="#5A5D63"/>
+</svg>""",
+        "laf/checkBoxSelected.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect id="Checkbox.Background.Selected_Checkbox.Border.Selected" x="4.5" y="4.5" width="15" height="15" rx="2.5" fill="#3574F0" stroke="#3574F0"/>
+<path id="Checkbox.Foreground.Selected" d="M8 12.5L11 15.5L16.5 9" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>""",
+        "laf/checkBoxFocused.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect id="Checkbox.Background.Default_Checkbox.Border.Selected" x="4" y="4" width="16" height="16" rx="3" fill="#2B2D30" stroke="#3574F0" stroke-width="2"/>
+</svg>""",
+        "laf/checkBoxSelectedFocused.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect id="Checkbox.Background.Selected_Checkbox.Border.Selected" x="4.5" y="4.5" width="15" height="15" rx="2.5" fill="#3574F0" stroke="#3574F0"/>
+<rect id="Checkbox.Focus.Wide" x="2" y="2" width="20" height="20" rx="4.5" stroke="#3574F0" stroke-width="2"/>
+<path id="Checkbox.Foreground.Selected" d="M8 12.5L11 15.5L16.5 9" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>""",
+        "laf/checkBoxDisabled.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect id="Checkbox.Background.Disabled_Checkbox.Border.Disabled" x="4.5" y="4.5" width="15" height="15" rx="2.5" fill="#393B40" stroke="#5A5D63"/>
+</svg>""",
+        "laf/checkBoxSelectedDisabled.svg" to
+          """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect id="Checkbox.Background.Disabled_Checkbox.Border.Disabled" x="4.5" y="4.5" width="15" height="15" rx="2.5" fill="#393B40" stroke="#5A5D63"/>
+<path id="Checkbox.Foreground.Disabled" d="M8 12.5L11 15.5L16.5 9" stroke="#6F737A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>""",
       )
   }
