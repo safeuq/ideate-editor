@@ -60,8 +60,8 @@ val LocalResizePointers = staticCompositionLocalOf {
  * through [onProportion].
  * - The border takes presses over the island gap and [SplitLook.grabMargin] on each side of it; a
  *   mouse sees the resize pointer there.
- * - A finger's drag shows a pill on the border and widens the gap to [SplitLook.touchGap] around
- *   it; a mouse's drag does neither.
+ * - A finger pressing the border shows a pill on it and widens the gap to [SplitLook.touchGap]
+ *   around it; a mouse's drag does neither.
  * - Each pane keeps at least [SplitLook.leastPane]; a split too small for that doesn't move.
  */
 @Composable
@@ -197,11 +197,15 @@ private fun Border(
           val roomPx = with(density) { currentRoom.toPx() }
           val least = with(density) { SplitLook.leastPane.toPx() }
           val downAt = along(down)
-          val slopped =
-            awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
-              ?: return@awaitEachGesture
+          // A finger sees the pill (and the wider gap) as soon as it presses the border; it goes
+          // again if the finger lifts without dragging or another gesture (the pager) takes over.
           val touch = down.type == PointerType.Touch
           if (touch) touchDrag(true)
+          val slopped = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+          if (slopped == null) {
+            if (touch) touchDrag(false)
+            return@awaitEachGesture
+          }
           report(draggedProportion(start, along(slopped) - downAt, roomPx, least))
           drag(slopped.id) { change ->
             change.consume()
