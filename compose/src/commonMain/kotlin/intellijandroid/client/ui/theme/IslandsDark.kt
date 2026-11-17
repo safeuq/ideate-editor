@@ -67,7 +67,7 @@ object IslandsDark {
   val textError = Color(0xFFF57E84) // Label.errorForeground = text-error
   val textSuccess = Color(0xFF6DB083) // text-success = green-100 (a running backend)
   val textOverAccent = Color(0xFFFFFFFF) // Button.default.foreground = text-over-accent = white
-  val link = Color(0xFF538AF9) // measured: completion match highlight, the theme's blue for links
+  val link = Color(0xFF71A1FE) // Link.activeForeground = text-link = blue-100
 
   // Component.borderColor, Button.startBorderColor = control-border = gray-50
   val controlBorder = Color(0xFF40434A)
@@ -84,6 +84,11 @@ object IslandsDark {
   val selectionBackground = Color(0xFF2A4371)
   // *.selectionInactiveBackground = selection-bg-inactive = gray-40
   val selectionInactiveBackground = Color(0xFF33353B)
+
+  // *.borderColor = tool-window-border = layer-0-border = gray-30: tool window header line,
+  // scroll pane borders
+  val toolWindowBorder = Color(0xFF26282C)
+  val toolbarSeparator = Color(0x21FFFFFF) // ToolBar.separatorColor = toolbar-border
 
   val headerHeight
     get() = byDensity(41.dp, 31.dp) // ToolWindow.Header.height (code default 41, compact 31)

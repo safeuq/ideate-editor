@@ -2,7 +2,6 @@ package intellijandroid.client.connect
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +32,7 @@ import intellijandroid.client.session.TreeNode
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.ProjectTreeView
 import intellijandroid.client.ui.component.IconButton
+import intellijandroid.client.ui.component.Link
 import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.dialog.DialogAction
 import intellijandroid.client.ui.dialog.DialogWrapper
@@ -161,7 +160,10 @@ fun FolderChooser(
     ) {
       IconButton("expui/nodes/homeFolder.svg", "Home", { reveal(home) })
       Box(
-        Modifier.padding(horizontal = 6.dp).width(1.dp).height(20.dp).background(Chooser.separator),
+        Modifier.padding(horizontal = 6.dp)
+          .width(1.dp)
+          .height(20.dp)
+          .background(IslandsDark.toolbarSeparator),
       )
       IconButton(
         "expui/general/refresh.svg",
@@ -180,11 +182,7 @@ fun FolderChooser(
         selected = showHidden,
       )
       Spacer(Modifier.weight(1f))
-      BasicText(
-        if (showPath) "Hide path" else "Show path",
-        style = text.copy(color = IslandsDark.link),
-        modifier = Modifier.clickable { showPath = !showPath },
-      )
+      Link(if (showPath) "Hide path" else "Show path", { showPath = !showPath }, style = text)
     }
     if (showPath) {
       TextField(path, { path = it }, Modifier.padding(horizontal = Chooser.sideInset))
@@ -194,7 +192,7 @@ fun FolderChooser(
         .padding(top = 6.dp)
         .weight(1f)
         .fillMaxWidth()
-        .border(1.dp, Chooser.treeBorder),
+        .border(1.dp, IslandsDark.toolWindowBorder), // the tree's JBScrollPane: *.borderColor
     ) {
       ProjectTreeView(
         tree = tree,
@@ -241,10 +239,8 @@ private object Chooser {
   val maxHeight = 482.dp
   val toolbarHeight = 28.dp
   val toolbarInset = 17.dp // first icon's 16 px box starts 21 pt in; buttons have 2 pt padding
-  val separator = Color(0xFF393B40)
   val sideInset = 14.dp // path field: 14.5 pt from the dialog's side
   val treeInset = 12.dp // tree panel: 12.5 pt from the dialog's side
-  val treeBorder = Color(0xFF2B2D30)
 }
 
 /**

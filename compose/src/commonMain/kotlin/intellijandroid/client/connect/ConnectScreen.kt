@@ -40,6 +40,7 @@ import intellijandroid.client.ui.ContextMenuArea
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.MenuItem
 import intellijandroid.client.ui.component.IconButton
+import intellijandroid.client.ui.component.Link
 import intellijandroid.client.ui.component.Menu
 import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.component.SearchTextField
@@ -552,17 +553,15 @@ internal fun HostGroup(
         modifier = Modifier.weight(1f),
       )
       status?.let {
-        BasicText(
-          it,
-          style = styles.body.copy(color = statusColor),
-          maxLines = 1,
-          modifier =
-            Modifier.padding(end = 8.dp)
-              .then(
-                if (onStatusClick != null) Modifier.clickable(onClick = onStatusClick)
-                else Modifier,
-              ),
-        )
+        if (onStatusClick != null)
+          Link(it, onStatusClick, Modifier.padding(end = 8.dp), style = styles.body)
+        else
+          BasicText(
+            it,
+            style = styles.body.copy(color = statusColor),
+            maxLines = 1,
+            modifier = Modifier.padding(end = 8.dp),
+          )
       }
       icons.forEach { icon -> RowIconButton(icon.path, icon.description, icon.onClick) }
       if (menu.isNotEmpty()) {
@@ -599,14 +598,14 @@ internal fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
       icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(16.dp)) }
       val title =
         @Composable { modifier: Modifier ->
-          BasicText(
+          Link(
             row.title,
-            style =
-              styles.body.copy(color = if (row.enabled) IslandsDark.link else Gateway.disabledText),
-            maxLines = 1,
+            row.onOpen,
+            modifier,
+            enabled = row.enabled,
+            style = styles.body,
             overflow =
               if (row.middleEllipsis) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
-            modifier = if (row.enabled) modifier.clickable(onClick = row.onOpen) else modifier,
           )
         }
       if (styles.twoLineRows) {

@@ -106,19 +106,44 @@ Found by searching connect/, ui/ and ui/dialog for `.border(`, `BasicTextField(`
 
 | What | file:line | IntelliJ counterpart | Status |
 |---|---|---|---|
-| Path and status links in project rows (`row.onOpen`, "Authenticate…", "Host unreachable" when clickable) | connect/ConnectScreen.kt:562, :609 | `ActionLink` (Jewel `Link.kt`); `Link.activeForeground` = text-link = blue-100 `#71A1FE` | to do: a `component/Link.kt`; IDEate's `IslandsDark.link` is `#538AF9` (measured on the completion popup), not the theme's `#71A1FE` |
-| FolderChooser's "Show path" / "Hide path" toggle text | connect/FolderChooser.kt:186 | `ActionLink` | to do with `Link.kt` |
-| Portrait bottom tabs (This phone, SSH, Link): pill `#393B40`, radius 6 | connect/ConnectScreen.kt:222, :748-749 | the tool window stripe's selected button (see the next row) | keep the layout; the color follows whatever the stripe decides |
-| Tool window stripe button, selected `#393B40`; stripe separator `#393B40` | ui/ToolWindows.kt:151, :293-294 | `SquareStripeButton`; `ToolWindow.Button.selectedBackground` = toolbar-selected-bg-active = `#3871E1`; `ToolBar.separatorColor` = toolbar-border = `#FFFFFF21` | open: the theme key gives the blue accent, but the selected stripe button measured gray on the real client, so check it on a screenshot before switching |
+| Path and status links in project rows (`row.onOpen`, "Authenticate…", "Host unreachable" when clickable) | connect/ConnectScreen.kt:562, :609 | `ActionLink` (Jewel `Link.kt`); `Link.activeForeground` = text-link = blue-100 `#71A1FE` | done: `component/Link.kt` (`ActionLink`, underlined on hover); `IslandsDark.link` is now text-link `#71A1FE` |
+| FolderChooser's "Show path" / "Hide path" toggle text | connect/FolderChooser.kt:186 | `ActionLink` | done: `Link` |
+| Portrait bottom tabs (This phone, SSH, Link): pill `#393B40`, radius 6 | connect/ConnectScreen.kt:222, :748-749 | the tool window stripe's selected button (see the next row) | keep: gray like the stripe (next row) |
+| Tool window stripe button, selected `#393B40`; stripe separator `#393B40` | ui/ToolWindows.kt:151, :293-294 | `SquareStripeButton`; `ToolWindow.Button.selectedBackground` = toolbar-selected-bg-active = `#3871E1`; `ToolBar.separatorColor` = toolbar-border = `#FFFFFF21` | keep `#393B40`, checked on the user's IntelliJ: see the note under this table; the separator stays `#393B40` with it |
 | Sidebar rows (Connections list) | connect/ConnectScreen.kt:263 | the welcome screen's tab tree (`TabbedWelcomeScreen`); selection already `selectionBackground` | keep (a list row, like the tree rows) |
 | Main toolbar run widget "Current File ⌄" | ui/ToolWindows.kt:209 | `RunWidget` / `RunConfigurationsComboBoxAction` (a toolbar combo button) | keep until run configurations work; then a combo-box-like button |
-| Main toolbar project badge `#3574F0` | ui/ToolWindows.kt:187, :297 | `RecentProject.Color1..9.Avatar.Start/End` (a gradient picked per project) | to do: take the avatar colors from the theme |
+| Main toolbar project badge `#3574F0` | ui/ToolWindows.kt:187, :297 | `RecentProject.Color1..9.Avatar.Start/End` (a gradient picked per project) | done: `projectAvatarBrush(name)`, the theme's nine gradients, picked as for a non-local project (see the note) |
 | Tool window header back chevron | ui/ToolWindows.kt:260 | none in IntelliJ (IDEate's phone layout); looks like an `ActionButton` | could use `IconButton` (22) instead of a 32-wide clickable |
 | Editor tab pills, selected `#233657` / `#2C4A82` | ui/ClientScreen.kt:483-494 | `JBEditorTabs` (`EditorTabs.underlinedTabBackground` etc.) | keep (measured on the real client, section 7 of intellij-look.md) |
-| Status-bar failure text `#FA6675` | ui/ClientScreen.kt:227 | `Label.errorForeground` = text-error `#F57E84` | to do: use `IslandsDark.textError` |
+| Status-bar failure text `#FA6675` | ui/ClientScreen.kt:227 | `Label.errorForeground` = text-error `#F57E84` | done: `IslandsDark.textError` |
 | Completion rows | ui/LookupPopup.kt:201-202, :256-257 | `LookupCellRenderer`; `CompletionPopup.foreground`/`matchForeground` already named | keep (one popup, already key-commented) |
-| FolderChooser tree border `#2B2D30`, toolbar separator `#393B40` | connect/FolderChooser.kt:197, :244-247 | `FileChooserDialogImpl`'s tree in a `JBScrollPane` (border = `*.borderColor` = tool-window-border `#26282C`); `ToolBar.separatorColor` `#FFFFFF21` | to do: theme values, with the stripe decision above |
+| FolderChooser tree border `#2B2D30`, toolbar separator `#393B40` | connect/FolderChooser.kt:197, :244-247 | `FileChooserDialogImpl`'s tree in a `JBScrollPane` (border = `*.borderColor` = tool-window-border `#26282C`); `ToolBar.separatorColor` `#FFFFFF21` | done: new `IslandsDark.toolWindowBorder` `#26282C` and `toolbarSeparator` `#FFFFFF21` |
 | Dialog frame outline `#393B40`, radius 10 | ui/dialog/DialogWrapper.kt:179-189 | the macOS window | keep (measured; no key) |
+
+Notes on the rows above (2026-11-17):
+
+- **Stripe selected button.** The user's IntelliJ (Islands Dark) draws a visible but unfocused tool
+  window's button `#393B40`: sampled on its Project button, `#393B40`–`#393D42` (the bluish ones
+  pick up the project color tint).
+  - `SquareStripeButtonLook.getState` returns SELECTED only while the tool window is active
+    (`isFocused()` = `toolWindow.isActive`). Only then is `ToolWindow.Button.selectedBackground`
+    (the blue `#3871E1`) used.
+  - A tool window that is open but unfocused is PUSHED and gets the transparent white
+    `ActionButton` background over the stripe's `#26282C`. That blend gives the gray: `#26282C` +
+    `#FFFFFF17` = `#393B3F`.
+  - IDEate doesn't track which tool window has focus, so the gray stays.
+- **Project avatar.** IntelliJ keeps each project's color index in the project's workspace
+  (`ProjectWindowCustomizerService`), which the client can't read. `projectAvatarBrush` uses
+  IntelliJ's rule for non-local projects instead: `abs(name.hashCode() % 9)`. The colors are
+  `RecentProject.ColorN.Avatar.Start`/`End`, from End at the bottom left to Start at the top
+  right (`AvatarUtils.generateColoredAvatar`). So `smoke` is Color4 (`#3B92B8`→`#6183EC`), which
+  may differ from the color the user's IntelliJ picked for it.
+- **Links.** IntelliJ underlines an `ActionLink` under the pointer. The completion popup's typed
+  letters keep `CompletionPopup.matchForeground` `#538AF9` in `LookupPopup`; that is not a link.
+- **Gallery.**
+  - The focused samples (text field, radio button, check box) are rendered one per scene and
+    shown as images, because a scene has one focus.
+  - The page has a Link row with three avatars and is 760 high now.
 
 ## 3. Layout
 

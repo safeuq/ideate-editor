@@ -1,5 +1,6 @@
 package intellijandroid.client.desktop
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,16 +9,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import intellijandroid.client.ui.LocalIcons
@@ -28,6 +34,7 @@ import intellijandroid.client.ui.component.CheckboxRow
 import intellijandroid.client.ui.component.DefaultButton
 import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.component.IndeterminateHorizontalProgressBar
+import intellijandroid.client.ui.component.Link
 import intellijandroid.client.ui.component.Menu
 import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.component.RadioButtonRow
@@ -38,6 +45,7 @@ import intellijandroid.client.ui.dialog.DialogAction
 import intellijandroid.client.ui.dialog.DialogWrapper
 import intellijandroid.client.ui.dialog.MessageDialog
 import intellijandroid.client.ui.dialog.MessageKind
+import intellijandroid.client.ui.projectAvatarBrush
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -52,7 +60,7 @@ import org.jetbrains.skia.EncodedImageFormat
  */
 object ComponentGallery {
   private const val WIDTH = 900
-  private const val HEIGHT = 700
+  private const val HEIGHT = 760
   private const val SCALE = 2f // Retina, as the screenshots of IntelliJ it is compared with
 
   fun render(target: File, clientLib: File, fonts: ClientFonts) {
@@ -74,7 +82,45 @@ object ComponentGallery {
         scene.close()
       }
     }
-    page(target) { Gallery() }
+    // A scene has one focus, so each focused sample renders alone first and the gallery shows it
+    // as an image; requesting focus in three places on one page left only the last one focused.
+    fun shot(
+      widthDp: Int,
+      heightDp: Int,
+      inset: Int,
+      content: @Composable () -> Unit,
+    ): ImageBitmap {
+      val scene =
+        ImageComposeScene((widthDp * SCALE).toInt(), (heightDp * SCALE).toInt(), density) {
+          CompositionLocalProvider(LocalClientFonts provides fonts, LocalIcons provides icons) {
+            Box(Modifier.fillMaxSize().background(IslandsDark.islandBackground).padding(inset.dp)) {
+              content()
+            }
+          }
+        }
+      return try {
+        scene.render(0)
+        scene.render(500_000_000L).toComposeImageBitmap()
+      } finally {
+        scene.close()
+      }
+    }
+    val focused =
+      FocusedShots(
+        textField =
+          shot(202, 30, inset = 1) {
+            Focused { modifier -> TextField("focused", {}, modifier.width(200.dp)) }
+          },
+        radio =
+          shot(110, 24, inset = 0) {
+            Focused { modifier -> RadioButtonRow("Focused", selected = true, modifier) {} }
+          },
+        checkbox =
+          shot(110, 24, inset = 0) {
+            Focused { modifier -> CheckboxRow("Focused", checked = false, modifier) {} }
+          },
+      )
+    page(target) { Gallery(focused) }
     // Dialogs cover the window, so each gets its own page next to the target: out-dialog.png, …
     val base = target.path.removeSuffix(".png")
     page(File("$base-dialog.png")) { Backdrop { SampleDialog() } }
@@ -117,7 +163,7 @@ private fun SampleMessage() {
 }
 
 @Composable
-private fun Gallery() {
+private fun Gallery(focused: FocusedShots) {
   Column(
     Modifier.fillMaxSize().background(IslandsDark.islandBackground).padding(20.dp),
     verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -136,7 +182,7 @@ private fun Gallery() {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
           TextField("", {}, Modifier.width(200.dp))
           TextField("safeuq@127.0.0.1", {}, Modifier.width(200.dp))
-          Focused { modifier -> TextField("focused", {}, modifier.width(200.dp)) }
+          Image(focused.textField, "Focused text field")
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
           TextField("disabled", {}, Modifier.width(200.dp), enabled = false)
@@ -152,6 +198,23 @@ private fun Gallery() {
         SearchTextField("", {}, Modifier.width(200.dp))
         SearchTextField("smoke", {}, Modifier.width(200.dp))
         SearchTextField("", {}, Modifier.width(200.dp), history = true, undecorated = true)
+      }
+    }
+    Section(
+      "Link.kt: link, disabled; main toolbar project avatars for smoke, ideate-editor, xtool",
+    ) {
+      Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Link("~/intellij/smoke", {})
+        Link("Authenticate…", {})
+        Link("unreachable path", {}, enabled = false)
+        listOf("smoke", "ideate-editor", "xtool").forEach { name ->
+          Box(
+            Modifier.size(20.dp).background(projectAvatarBrush(name), RoundedCornerShape(4.dp)),
+          )
+        }
       }
     }
     Section("IconButton.kt: 22 dp, selected (a toggle that is on), main toolbar size") {
@@ -186,25 +249,25 @@ private fun Gallery() {
         }
       }
     }
-    Toggles()
+    Toggles(focused)
   }
 }
 
 @Composable
-private fun Toggles() {
+private fun Toggles(focused: FocusedShots) {
   Section("RadioButton.kt, Checkbox.kt: off, on, focused, disabled") {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
       Column {
         RadioButtonRow("Password", selected = false) {}
         RadioButtonRow("IDEate key", selected = true) {}
-        Focused { modifier -> RadioButtonRow("Focused", selected = true, modifier) {} }
+        Image(focused.radio, "Focused radio button")
         RadioButtonRow("Disabled", selected = false, enabled = false) {}
         RadioButtonRow("Disabled on", selected = true, enabled = false) {}
       }
       Column {
         CheckboxRow("Save password", checked = false) {}
         CheckboxRow("Checked", checked = true) {}
-        Focused { modifier -> CheckboxRow("Focused", checked = false, modifier) {} }
+        Image(focused.checkbox, "Focused check box")
         CheckboxRow("Disabled", checked = false, enabled = false) {}
         CheckboxRow("Disabled on", checked = true, enabled = false) {}
       }
@@ -220,6 +283,13 @@ private fun Section(title: String, content: @Composable () -> Unit) {
     content()
   }
 }
+
+/** The focused samples, each rendered in its own scene (see `render`). */
+private class FocusedShots(
+  val textField: ImageBitmap,
+  val radio: ImageBitmap,
+  val checkbox: ImageBitmap,
+)
 
 /** [content] with focus requested, to show the focused state. */
 @Composable

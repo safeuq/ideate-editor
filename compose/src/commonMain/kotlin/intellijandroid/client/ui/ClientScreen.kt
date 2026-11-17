@@ -37,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -224,7 +223,7 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
         overflow = TextOverflow.Ellipsis,
         style =
           fonts.medium(
-            if (notice == null && state.failure != null) Color(0xFFFA6675)
+            if (notice == null && state.failure != null) IslandsDark.textError
             else IslandsDark.textSecondary,
           ),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 3.dp),

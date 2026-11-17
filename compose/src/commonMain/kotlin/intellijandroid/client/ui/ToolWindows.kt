@@ -25,6 +25,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,6 +36,7 @@ import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.label
+import kotlin.math.abs
 
 enum class Side {
   LEFT,
@@ -184,7 +187,7 @@ fun MainToolbar(
       // MainToolbar.Button.iconSize).
       Box(
         Modifier.size(IslandsDark.toolbarIcon)
-          .background(Bars.projectBadge, RoundedCornerShape(4.dp)),
+          .background(projectAvatarBrush(name), RoundedCornerShape(4.dp)),
         contentAlignment = Alignment.Center,
       ) {
         BasicText(
@@ -286,6 +289,37 @@ internal fun initials(name: String): String {
 }
 
 /**
+ * The project avatar's gradient (`AvatarUtils.generateColoredAvatar`):
+ * `RecentProject.ColorN.Avatar` End at the bottom left to Start at the top right. IntelliJ keeps
+ * each project's color index in the project's workspace, which the client can't read, so this picks
+ * it as IntelliJ does for a non-local project
+ * (`RecentProjectIconHelper.getGeneratedNonLocalProjectIcon`): `abs(id.hashCode() % 9)`, with the
+ * project name as the id. `smoke` → Color4, blue.
+ */
+fun projectAvatarBrush(name: String): Brush {
+  val (start, end) = AVATAR_GRADIENTS[abs(name.hashCode() % AVATAR_GRADIENTS.size)]
+  return Brush.linearGradient(
+    listOf(end, start),
+    start = Offset(0f, Float.POSITIVE_INFINITY),
+    end = Offset(Float.POSITIVE_INFINITY, 0f),
+  )
+}
+
+/** `RecentProject.Color1..9.Avatar.Start/End` in ManyIslandsDark.theme.json. */
+private val AVATAR_GRADIENTS =
+  listOf(
+    Color(0xFFE08855) to Color(0xFFE9806F),
+    Color(0xFFB08B14) to Color(0xFFBB7F19),
+    Color(0xFFA1A359) to Color(0xFF87AA59),
+    Color(0xFF3B92B8) to Color(0xFF6183EC),
+    Color(0xFF3574F0) to Color(0xFF7A64F0),
+    Color(0xFFC84D8F) to Color(0xFFA956CF),
+    Color(0xFF955AE0) to Color(0xFFA84DE0),
+    Color(0xFF24A394) to Color(0xFF279CCD),
+    Color(0xFF5FAD65) to Color(0xFF3D968B),
+  )
+
+/**
  * Colors and fixed sizes of the bars; the sizes that follow the UI density are in [IslandsDark].
  */
 private object Bars {
@@ -293,6 +327,5 @@ private object Bars {
   val selected = Color(0xFF393B40)
   val separator = Color(0xFF393B40)
   val separatorLength = 20.dp
-  val headerBorder = Color(0xFF26282C) // ToolWindow.Header.borderColor = tool-window-border
-  val projectBadge = Color(0xFF3574F0)
+  val headerBorder = IslandsDark.toolWindowBorder // ToolWindow.Header.borderColor
 }
