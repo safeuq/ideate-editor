@@ -174,6 +174,32 @@ class ClientSession(
 
   fun selectEditor(path: String) = onRd { showEditor(path) }
 
+  /**
+   * Closes [path]'s tab the way JetBrains Client does (`FrontendFileEditorHost.removeComposite`):
+   * it removes the file's entry from `fileEditorsModel.backendDeferredComposites`, and the backend
+   * closes the file and drops its document. The tab goes at once; when it was the selected one, the
+   * tab chosen by [tabToSelectAfterClose] becomes selected on both sides.
+   */
+  fun closeEditor(path: String) = onRd {
+    val before = mutableState.value
+    val index = before.editors.indexOfFirst { it.path == path }
+    if (index < 0) return@onRd
+    val next =
+      if (before.selectedEditor == path)
+        tabToSelectAfterClose(before.editors.map { it.path }, index)
+      else before.selectedEditor
+    mutableState.update { state ->
+      state.copy(editors = state.editors.filterNot { it.path == path }, selectedEditor = next)
+    }
+    val compositeId = compositeIds.remove(path)
+    if (compositeId != null) {
+      // The next selection must not name the closed editor as the old one.
+      if (selectedEditorId?.compositeId == compositeId) selectedEditorId = null
+      solution?.fileEditorsModel?.backendDeferredComposites?.remove(compositeId)
+    }
+    if (next != null && next != before.selectedEditor) showEditor(next)
+  }
+
   // Editing the selected file (docs/split-protocol.md, "Typing"). All local first, then confirmed
   // by the backend.
 
@@ -830,3 +856,12 @@ private object ProtocolMarshallers : MarshallersProvider {
     BasicIdeRootMarshallersProvider.getMarshaller(id)
       ?: DefaultSplitMarshallersProvider.getMarshaller(id)
 }
+
+/**
+ * The tab IntelliJ selects after the selected one at [closedIndex] in [paths] closes, with its
+ * default settings (`EditorWindow.computeIndexToSelect`: neither "most recently used" nor "right
+ * neighbour" is on): the left neighbour, or for the first tab the next one. Null when it was the
+ * only tab.
+ */
+internal fun tabToSelectAfterClose(paths: List<String>, closedIndex: Int): String? =
+  paths.getOrNull(closedIndex - 1) ?: paths.getOrNull(closedIndex + 1)

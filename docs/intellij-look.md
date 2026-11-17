@@ -320,6 +320,7 @@ Pixel measurements of the real client (263.7307.200, Islands Dark, default setti
 | Text start | right after the gutter | right after the gutter |
 | Gutter icon (run triangle) | 17 px icon area | 14 px icon centred in the 17 px area |
 | Editor tab | (not covered) | a pill: height 24, fill `#233657`, 1 px border `#2C4A82`, radius 6, in a 32 px row |
+| Editor tab close button (added 2026-11-17, not measured) | `UISettings.showCloseButton` and `closeTabButtonOnTheRight` default true: on every tab, on the right | `expui/general/closeSmall.svg` 16 (`closeSmallHovered.svg` under the pointer) in a 20 box, 2 after the name, 4 to the pill's right edge (`EditorTabs.tabInsets.compact` right 4) |
 | Line height | 21 | 21 (JetBrains Mono 12, char width 7.2) |
 
 Open item 3 of section 6 is answered: rows are 22 and there are no git markers in a non-git project.

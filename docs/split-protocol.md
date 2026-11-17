@@ -661,6 +661,32 @@ Highlighters carry attribute keys, not colors. The backend sends each color sche
 
 Look and metrics (line height 21 px for JetBrains Mono 12 at spacing 1.2, gutter widths, tree row 22 px, indent 19 px, selection radius 4, Islands panels): [`intellij-look.md`](intellij-look.md).
 
+### Closing a file (editor tab close button)
+
+JetBrains Client closes a file by **removing its entry from `fileEditorsModel.backendDeferredComposites`** (`FrontendFileEditorHost.removeComposite`, `intellij.platform.frontend.split.jar`, decompiled 2026-11-17). Nothing else is sent: the backend sees the removal, closes the file, and ends the document and text control, so their lifetimes end on the client too.
+
+| Step | Message | Example |
+|---|---|---|
+| Close | `fileEditorsModel.backendDeferredComposites.remove(compositeId)` | `RdFileEditorCompositeId(fileId = RdFileIdNew(backendId = 936, …), clientId, index = 1, projectId)` for `Util.kt` |
+| Backend | closes the file | idea.log: `BeforeFileOpenLoggerListener - fileClosed Util.kt` |
+| Select the next tab (only when the closed tab was selected) | `selectionChanged(FileEditorManagerEventModel(Frontend, oldEditorId = null, newEditorId = <next tab's text editor>))` and `visible = true` on its composite | after closing `Util.kt` in `Main.java`, `Other.java`, `Util.kt`: `Other.java` |
+
+`fileEditorsModel.closeFileWithCopies(RdFileId)` goes the other way: the backend asks the client to close a file (the client listens to it). We don't handle it yet.
+
+Which tab becomes selected follows IntelliJ's defaults (`EditorWindow.computeIndexToSelect`; `UISettings.activeMruEditorOnClose` and `activeRightEditorOnClose` are both off): the left neighbour, or for the first tab the next one; closing a tab that isn't selected keeps the selection. We send `oldEditorId = null` because the old editor is already gone on the backend.
+
+Tested 2026-11-17 on the desktop against the Mac backend (port 5992), with `Main.java`, `Other.java` and `Util.kt` open:
+
+| Action | Tabs after | Selected | idea.log |
+|---|---|---|---|
+| close `Util.kt` (selected, last) | Main, Other | Other (code analysis colors back, so the backend took the selection) | `fileClosed Util.kt` |
+| close `Main.java` (not selected) | Other | Other | `fileClosed Main.java` |
+| reopen `Main.java` from the tree | Other, Main | Main | `Opening remote editor for file=Main.java` |
+| select `Other.java`, close it (first) | Main | Main | `fileClosed Other.java` |
+| close `Main.java` (only tab) | none | none ("Double-tap a file …" placeholder) | `fileClosed Main.java` |
+
+No errors in the client log or idea.log from the closes.
+
 ### Backend on the Mac: JDK
 
 The copied phone project names its JDK `openjdk-21`; the Mac backend's fresh config has no such JDK, so code analysis marks `String` and `System` as `WRONG_REFERENCES_ATTRIBUTES` (red). Registering `openjdk-21` in the backend's `config/options/jdk.table.xml` (home + one `jrt://<home>!/<module>` class root per module) while the backend is stopped fixes it; the JDK is scanned about 6 s after start (28,689 files). A client that connects before that gets the unresolved results and, so far, no re-analysis (**Unknown** why: real IntelliJ re-analyses after indexing). The client's test runs wait for `Number of scanned files` in the backend log before connecting.

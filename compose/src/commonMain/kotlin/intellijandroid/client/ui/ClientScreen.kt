@@ -7,6 +7,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -393,8 +396,9 @@ private fun EditorIsland(
 }
 
 /**
- * Editor tabs: file icon and name; the selected one is a rounded "pill" like Islands Dark (measured
- * on the real client).
+ * Editor tabs: file icon, name and a close button; the selected one is a rounded "pill" like
+ * Islands Dark (measured on the real client). IntelliJ shows the close button on every tab, on the
+ * right, by default (`UISettings.showCloseButton`, `closeTabButtonOnTheRight`).
  */
 @Composable
 private fun EditorTabs(state: SessionState, session: ClientSession) {
@@ -421,7 +425,7 @@ private fun EditorTabs(state: SessionState, session: ClientSession) {
             else Modifier,
           )
           .clickable { session.selectEditor(editor.path) }
-          .padding(horizontal = 8.dp),
+          .padding(start = 8.dp, end = 4.dp),
       ) {
         Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
           icons.painter(iconPath)?.let { Image(it, null, Modifier.size(16.dp)) }
@@ -435,8 +439,29 @@ private fun EditorTabs(state: SessionState, session: ClientSession) {
                 fontSize = IslandsDark.UI_FONT_SIZE.sp,
               ),
           )
+          Spacer(Modifier.width(2.dp))
+          TabCloseButton(editor.name) { session.closeEditor(editor.path) }
         }
       }
     }
+  }
+}
+
+/** IntelliJ's tab close button: `closeSmall`, `closeSmallHovered` under the pointer. */
+@Composable
+private fun TabCloseButton(fileName: String, onClose: () -> Unit) {
+  val interaction = remember { MutableInteractionSource() }
+  val hovered by interaction.collectIsHoveredAsState()
+  val icon =
+    LocalIcons.current.painter(
+      if (hovered) "expui/general/closeSmallHovered.svg" else "expui/general/closeSmall.svg",
+    ) ?: return
+  Box(
+    Modifier.size(20.dp)
+      .hoverable(interaction)
+      .clickable(interactionSource = interaction, indication = null, onClick = onClose),
+    contentAlignment = Alignment.Center,
+  ) {
+    Image(icon, contentDescription = "Close $fileName", modifier = Modifier.size(16.dp))
   }
 }
