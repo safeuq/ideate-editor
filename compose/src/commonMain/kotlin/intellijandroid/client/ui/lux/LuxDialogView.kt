@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -41,10 +42,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.jetbrains.rd.ide.model.LxEvent
 import com.jetbrains.rd.ide.model.LxKeyEvent
 import com.jetbrains.rd.ide.model.LxKeyEventType
@@ -63,21 +67,102 @@ import intellijandroid.client.ui.theme.label
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** The backend's open dialogs, each in its own window, oldest below. */
+/**
+ * The backend's open windows: each dialog in its own window, oldest below, and the popups (a
+ * combo's list, …) over the top dialog at the place the backend put them, e.g. Rename's Scope list
+ * just under the Scope combo. A popup with no dialog open gets a window of its own.
+ */
 @Composable
 fun LuxDialogs(dialogs: List<LuxDialog>, session: ClientSession) {
-  for (dialog in dialogs) androidx.compose.runtime.key(dialog.id) {
-    LuxDialogWindow(dialog, session)
+  val windows = dialogs.filterNot { it.popup }
+  val popups = dialogs.filter { it.popup }
+  val top = windows.lastOrNull()
+  for (dialog in windows) key(dialog.id) {
+    LuxDialogWindow(dialog, session, if (dialog === top) popups else emptyList())
   }
+  if (top == null)
+    for (popup in popups) key(popup.id) { LuxDialogWindow(popup, session, emptyList()) }
 }
 
 /**
  * One backend dialog: IntelliJ's title row (macOS draws it in the title bar; the backend paints
- * only the content), then the content the backend paints, replayed onto a bitmap. A backend pixel
- * is a dp; a dialog wider than the screen is scaled down to fit, and input scaled back.
+ * only the content), then the content the backend paints, replayed onto a bitmap, with [popups]
+ * over it. A backend pixel is a dp; a dialog wider than the screen is scaled down to fit, and input
+ * scaled back.
  */
 @Composable
-private fun LuxDialogWindow(dialog: LuxDialog, session: ClientSession) {
+private fun LuxDialogWindow(dialog: LuxDialog, session: ClientSession, popups: List<LuxDialog>) {
+  val fonts = LocalClientFonts.current
+  fun send(event: LxEvent) = session.luxEvent(dialog.id, event)
+  Dialog(
+    onDismissRequest = { closeWindow(::send) },
+    properties =
+      DialogProperties(
+        usePlatformDefaultWidth = false,
+        dismissOnClickOutside = dialog.popup || !dialog.modal,
+      ),
+  ) {
+    BoxWithConstraints {
+      val fit = if (dialog.width == 0) 1f else min(1f, (maxWidth.value - 16f) / dialog.width)
+      // As wide as the backend laid the dialog out; the title row mustn't widen it.
+      Column(Modifier.width((dialog.width * fit).dp).dialogFrame()) {
+        if (!dialog.popup && !dialog.undecorated)
+          Box(
+            Modifier.fillMaxWidth()
+              .height(DialogLook.titleHeight)
+              .padding(start = DialogLook.sideInset),
+            contentAlignment = Alignment.CenterStart,
+          ) {
+            BasicText(dialog.title, style = fonts.label().copy(fontWeight = FontWeight.SemiBold))
+          }
+        Box {
+          LuxSurface(dialog, session, fit, ::send, softKeyboard = !dialog.popup)
+          for (popup in popups) key(popup.id) { LuxPopup(popup, dialog, fit, session) }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * [popup] over its [owner] dialog at the backend's offset between the two, scaled as the dialog is.
+ * Example: Rename at (282, 242) and its Scope list at (290, 467) put the list 8 dp right of and 225
+ * dp below the content's top left. It takes no soft keyboard: the combo keeps the focus.
+ */
+@Composable
+private fun LuxPopup(popup: LuxDialog, owner: LuxDialog, fit: Float, session: ClientSession) {
+  val density = LocalDensity.current.density
+  fun send(event: LxEvent) = session.luxEvent(popup.id, event)
+  Popup(
+    offset =
+      IntOffset(
+        ((popup.x - owner.x) * fit * density).roundToInt(),
+        ((popup.y - owner.y) * fit * density).roundToInt(),
+      ),
+    onDismissRequest = { closeWindow(::send) },
+    properties = PopupProperties(focusable = true),
+  ) {
+    Box(Modifier.dialogFrame()) { LuxSurface(popup, session, fit, ::send, softKeyboard = false) }
+  }
+}
+
+/** The window's close button: Swing gets WINDOW_CLOSING and the dialog its Cancel; Escape too. */
+private fun closeWindow(send: (LxEvent) -> Unit) {
+  send(LxWindowEvent(LxWindowEventType.Closing, null))
+  sendKey(send, KEY_ESCAPE, '\u001b', 0)
+}
+
+/**
+ * [dialog]'s content: the backend's draw operations replayed onto a bitmap, and input sent back.
+ */
+@Composable
+private fun LuxSurface(
+  dialog: LuxDialog,
+  session: ClientSession,
+  fit: Float,
+  send: (LxEvent) -> Unit,
+  softKeyboard: Boolean,
+) {
   val images = session.luxImages ?: return
   val density = LocalDensity.current
   val fonts = LocalClientFonts.current
@@ -98,37 +183,7 @@ private fun LuxDialogWindow(dialog: LuxDialog, session: ClientSession) {
     }
     painted++
   }
-  fun send(event: LxEvent) = session.luxEvent(dialog.id, event)
-  val close = {
-    // The window's close button: Swing gets WINDOW_CLOSING and the dialog its Cancel; Escape too.
-    send(LxWindowEvent(LxWindowEventType.Closing, null))
-    sendKey(::send, KEY_ESCAPE, '\u001b', 0)
-  }
-  Dialog(
-    onDismissRequest = close,
-    properties =
-      DialogProperties(
-        usePlatformDefaultWidth = false,
-        dismissOnClickOutside = dialog.popup || !dialog.modal,
-      ),
-  ) {
-    BoxWithConstraints {
-      val fit = if (dialog.width == 0) 1f else min(1f, (maxWidth.value - 16f) / dialog.width)
-      // As wide as the backend laid the dialog out; the title row mustn't widen it.
-      Column(Modifier.width((dialog.width * fit).dp).dialogFrame()) {
-        if (!dialog.popup && !dialog.undecorated)
-          Box(
-            Modifier.fillMaxWidth()
-              .height(DialogLook.titleHeight)
-              .padding(start = DialogLook.sideInset),
-            contentAlignment = Alignment.CenterStart,
-          ) {
-            BasicText(dialog.title, style = fonts.label().copy(fontWeight = FontWeight.SemiBold))
-          }
-        LuxContent(dialog, bitmap, painted, fit, ::send)
-      }
-    }
-  }
+  LuxContent(dialog, bitmap, painted, fit, send, softKeyboard)
 }
 
 @Composable
@@ -138,14 +193,16 @@ private fun LuxContent(
   painted: Int,
   fit: Float,
   send: (LxEvent) -> Unit,
+  softKeyboard: Boolean,
 ) {
   val density = LocalDensity.current
   val focus = remember { FocusRequester() }
   val keyboard = remember(dialog.id) { LuxKeyboard(send) }
+  val textInput = LocalEditorTextInput.current
   Canvas(
     Modifier.size((dialog.width * fit).dp, (dialog.height * fit).dp)
       .focusRequester(focus)
-      .then(LocalEditorTextInput.current(keyboard))
+      .then(if (softKeyboard) textInput(keyboard) else Modifier)
       .focusable()
       .onKeyEvent { event -> keyboard.key(event) }
       .pointerInput(dialog.id, fit) {
@@ -154,6 +211,7 @@ private fun LuxContent(
         var lastPressAt = Offset.Zero
         var clicks = 0
         var downAt = Offset.Zero
+        var inside = false
         awaitPointerEventScope {
           while (true) {
             val event = awaitPointerEvent()
@@ -161,17 +219,47 @@ private fun LuxContent(
             val x = (change.position.x * toBackend).roundToInt()
             val y = (change.position.y * toBackend).roundToInt()
             val touch = change.type == PointerType.Touch
-            fun mouse(type: LxMouseEventType, count: Int, modifiers: Int) =
-              send(LxMouseEvent(type, x, y, x, y, count, touch, BUTTON1, false, modifiers))
+            // xAbs/yAbs: the point on the screen the backend was told about.
+            fun mouse(type: LxMouseEventType, count: Int, modifiers: Int, atX: Int = x) =
+              send(
+                LxMouseEvent(
+                  type,
+                  atX,
+                  y,
+                  dialog.x + atX,
+                  dialog.y + y,
+                  count,
+                  touch,
+                  BUTTON1,
+                  false,
+                  modifiers,
+                ),
+              )
             when (event.type) {
               PointerEventType.Move ->
                 mouse(LxMouseEventType.Moved, 0, if (change.pressed) BUTTON1_DOWN else 0)
-              PointerEventType.Enter -> mouse(LxMouseEventType.Entered, 0, 0)
-              PointerEventType.Exit -> mouse(LxMouseEventType.Exited, 0, 0)
+              PointerEventType.Enter -> {
+                inside = true
+                mouse(LxMouseEventType.Entered, 0, 0)
+              }
+              PointerEventType.Exit -> {
+                inside = false
+                mouse(LxMouseEventType.Exited, 0, 0)
+              }
               PointerEventType.Press -> {
                 runCatching { focus.requestFocus() }
-                // A finger has no hover: move there first, so the button under it is "hovered".
-                if (touch) mouse(LxMouseEventType.Moved, 0, 0)
+                // A finger has no hover: enter the window and move to the point first, as a mouse
+                // would. Swing ignores a press in a window the pointer never entered, and
+                // IntelliJ's
+                // list popups (`ListPopupImpl.isMouseMoved`) take the first move only as a start,
+                // so the move comes twice, 1 px apart along the row: e.g. (52, 140) then (53, 140)
+                // selects the Scope list's item under the finger before the press.
+                if (touch) {
+                  if (!inside) mouse(LxMouseEventType.Entered, 0, 0)
+                  inside = true
+                  mouse(LxMouseEventType.Moved, 0, 0, atX = if (x > 0) x - 1 else x + 1)
+                  mouse(LxMouseEventType.Moved, 0, 0)
+                }
                 val near = (change.position - lastPressAt).getDistance() < 8 * density.density
                 clicks =
                   if (near && change.uptimeMillis - lastPress < DOUBLE_CLICK_MILLIS) clicks + 1
@@ -185,6 +273,11 @@ private fun LuxContent(
                 mouse(LxMouseEventType.Released, clicks, 0)
                 if ((change.position - downAt).getDistance() < 8 * density.density)
                   mouse(LxMouseEventType.Clicked, clicks, 0)
+                // The finger leaves, so nothing stays hovered.
+                if (touch) {
+                  inside = false
+                  mouse(LxMouseEventType.Exited, 0, 0)
+                }
               }
               else -> Unit
             }

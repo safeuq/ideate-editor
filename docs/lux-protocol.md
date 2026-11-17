@@ -393,6 +393,45 @@ platform's `pngDecoder` (set at startup: Skia on the desktop, `BitmapFactory` on
 | emulator | Rename on `smoke.iml` | drawn at density; Gboard typing `xy` gave `xy.iml`; a tap on Cancel closed it |
 | emulator | Safe Delete on `smoke.iml` | drawn; Back closed it, the file kept |
 
-Not done yet: a dialog's own popups (the Scope combo's list, `LxWindow` popups in general, untested), the
-backend clipboard for paste into a dialog field (pasted text is typed key by key), and a soft keyboard that
+Not done yet: ~~a dialog's own popups~~ (done, see section 9), the backend clipboard for paste into a dialog field (pasted text is typed key by key), and a soft keyboard that
 opens only when the dialog has a text field (today it opens for every dialog on Android).
+
+## 9. A dialog's own popups (2026-11-17)
+
+Tested with Rename on the class `Other` (Project tree, long press, Rename…) on the emulator against the
+isolated backend. Its Scope combo opens a list window.
+
+| What arrives | Value |
+| --- | --- |
+| The dialog | `LxDialog`, owner `LxIdeFrameRef`, `position` (282, 242), 459 × 283 |
+| The Scope list | `LxWindow` (`HeavyWeightWindow`), `typePopup = true`, owner `LxNonLuxWindowRef`, `position` (290, 467), 423 × 268, `focusableWindowState = true` |
+
+The backend places windows on the screen IDEate reported. The list's offset from the dialog, here (8, 225),
+puts it just under the combo. JetBrains Client does the same: `LuxFrontendWindowAdapter` moves each window to
+its `position`, and `unwrapLxRef` gives a `LxNonLuxWindowRef` popup the focused window as parent.
+
+Three things kept a tap on a list item from doing anything, found one at a time with the backend's trace log
+(`-Didea.log.trace.categories=#com.jetbrains.rdserver.lux.util.UnattendedHostEventHelper`):
+
+1. **`xAbs` / `yAbs`** were the window-local point. They are now the window's `position` plus the point, e.g.
+   (50, 165) in the list is (340, 632) on the screen.
+2. **No `Entered`.** A finger has no hover, so the backend got `Pressed` in a window the pointer had never
+   entered, and Swing ignored it. A mouse (`adb shell input mouse`) sends `Entered` first, and its drag worked.
+   A touch press now sends `Entered` first, and `Exited` after the release.
+3. **One move is not a move.** IntelliJ's list popups take the first `MOUSE_MOVED` only as a start
+   (`ListPopupImpl.isMouseMoved` records `myLastMouseLocation`), so the item under the finger was never
+   selected, and the release picked nothing. A touch press now sends two moves, 1 px apart along the row, e.g.
+   (52, 140) then (53, 140).
+
+The backend trace for a tap on "Open Files" after the change:
+`MOUSE_ENTERED (53,140)`, `MOUSE_MOVED (52,140)`, `MOUSE_MOVED (53,140)`, `MOUSE_PRESSED`, `MOUSE_RELEASED`,
+`MOUSE_CLICKED`, `MOUSE_EXITED`, then Scope reads "Open Files".
+
+**How IDEate shows a popup:** over the top dialog, inside its window, as a Compose `Popup` at the backend's
+offset from the dialog, scaled like the dialog. A popup with no dialog open still gets a window of its own.
+A popup gets no `Activated` / `GainedFocus` (a real OS leaves the focus with the dialog, so the combo keeps
+handling keys; Down moved the list's selection that way) and opens no soft keyboard. Back or a tap outside
+sends it `Closing` and Escape.
+
+Checked on the emulator: the list opens under the combo; a tap on "Open Files" sets Scope to it; Cancel
+still closes the dialog and nothing is renamed.

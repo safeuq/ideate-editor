@@ -54,6 +54,13 @@ class LuxDialog(
   var title by mutableStateOf(title)
   var width by mutableIntStateOf(width)
   var height by mutableIntStateOf(height)
+  /**
+   * Where the backend put the window on the screen it was told about, e.g. (282, 242) for Rename
+   * and (290, 467) for its Scope list, just under the combo. Mouse events carry it added to their
+   * point (`xAbs`, `yAbs`), and a popup goes at its offset from its dialog.
+   */
+  var x by mutableIntStateOf(0)
+  var y by mutableIntStateOf(0)
   /** Bumped when [batches] gets more; the UI drains the queue then. */
   var version by mutableIntStateOf(0)
   internal val batches = ConcurrentLinkedQueue<List<LxDrawOperation>>()
@@ -106,6 +113,10 @@ internal class LuxDialogs(
           0,
         )
       frame?.title?.advise(componentLifetime) { dialog.title = it }
+      component.position.advise(componentLifetime) { position ->
+        dialog.x = position.x.toInt()
+        dialog.y = position.y.toInt()
+      }
       component.preferredSize.advise(componentLifetime) { preferred ->
         // Like LuxFrontendDialog: the window takes the size the backend laid out, and says so.
         if (component.size.valueOrNull == null) component.size.set(preferred)
@@ -127,9 +138,12 @@ internal class LuxDialogs(
             "Backend ${if (dialog.popup) "popup" else "dialog '${dialog.title}'"} (${dialog.width} × ${dialog.height})",
           )
           publish(dialogs.values.toList())
-          // Without focus the backend's dialog ignores keys and draws no caret (recorded).
-          send(id, LxWindowEvent(LxWindowEventType.Activated, null))
-          send(id, LxWindowEvent(LxWindowEventType.GainedFocus, null))
+          // Without focus the backend's dialog ignores keys and draws no caret (recorded). A popup
+          // leaves the focus with its dialog, as an OS does for a combo's list: the combo keeps it.
+          if (!dialog.popup) {
+            send(id, LxWindowEvent(LxWindowEventType.Activated, null))
+            send(id, LxWindowEvent(LxWindowEventType.GainedFocus, null))
+          }
         } else if (!visible && dialogs.remove(id) != null) publish(dialogs.values.toList())
       }
       componentLifetime.onTermination {

@@ -370,9 +370,10 @@ class ConnectController(
 
   /**
    * Tries [lost]'s link and identity again, after 1 s, 2 s, 4 s, … (at most 10 s apart) for 2
-   * minutes of the app being in the foreground ([inForeground]), while the old session's screen stays under the reconnect popup; the first session the
-   * backend accepts replaces it. The same identity is allowed to use the join token again
-   * (docs/split-protocol.md, "Same join token, same client id").
+   * minutes of the app being in the foreground ([inForeground]), while the old session's screen
+   * stays under the reconnect popup; the first session the backend accepts replaces it. The same
+   * identity is allowed to use the join token again (docs/split-protocol.md, "Same join token, same
+   * client id").
    */
   private fun reconnect(lost: Attempt, identity: String, reason: String) {
     val certificate = runCatching { ClientCertificate.decode(identity) }.getOrNull()
