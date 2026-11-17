@@ -620,6 +620,24 @@ RECV map `…projectViewModel.panes.[0].items` Add :: key = 1 :: value = RdProje
 
 Collapsing is client-only. IntelliJ shows the project root expanded at start; the real client calls `expand(1)` itself.
 
+#### Which folders get an expand arrow
+
+The descriptor has one flag for this, `hasChildren`; there is no separate leaf flag. The backend sets it to `!AsyncTreeModel.isLeaf(node)` (`BackendProjectViewPaneBinding.presentNode` in `plugins/remdev-plugin/lib/modules/intellij.platform.backend.split.jar`). It re-sends a node's descriptor with a new `hasChildren` only when that node's children change (`refreshNodeOnChildrenChange`). The real client draws its arrow from the same flag (`ThinClientProjectViewNode.hasChildren` in `intellij.platform.frontend.split.jar`), and so do we (`TreeNode.hasChildren`).
+
+The value comes from IntelliJ's own Project view rules. `PsiDirectoryNode.isAlwaysShowPlus` (IntelliJ Community 263.7307.200) forces the arrow on when the folder holds any file on disk, ignored files included; otherwise the tree counts the visible children before showing the node. Measured on 2026-11-17 against the Mac backend (263.7307.200, port 5992), values on the first `items` Add:
+
+| Folder | On disk | `hasChildren` | After `expand` |
+|---|---|---|---|
+| `smoke/empty` | nothing | `false` | (no arrow) |
+| `smoke/created-later` | nothing, made while the backend ran | `false` | (no arrow) |
+| `smoke/src/emptypkg` | nothing, inside a source root | `false` | (no arrow) |
+| `smoke/src/outer/inner` | nothing; shown compacted as `outer/inner` | `false` | (no arrow) |
+| `smoke/dirs-only` | only an empty folder `inner` | `true` | shows `inner` |
+| `smoke/hidden-only` | only `.DS_Store` | `true` | no children and no update: the arrow stays, pointing down |
+| `smoke/pycache-only` | only `__pycache__/a.pyc` | `true` | the same |
+
+So an empty folder has no arrow from the start, and a folder whose only contents are ignored files (`.DS_Store`, `__pycache__`, `*.pyc`, `.git`, … from Settings → File Types → Ignored) keeps an arrow that opens on nothing. That last case is IntelliJ's own behaviour, and the real client shows it the same way; we don't change it.
+
 ### Highlighting in the editor
 
 Two markup models carry highlighters for an open file, and the client creates both (with the extensions in `MarkupExtensions.kt`):
