@@ -42,7 +42,7 @@ asyncActionsModel.expandGroup(AsyncActionUpdateRequest(
 |---|---|---|---|
 | Project tool window | `ProjectViewPopupMenu` (the pane's `popupActionGroup`) | `ProjectViewPopup` | project + `ProjectViewTimestampModel("ProjectPane", [node id])` |
 | Structure tool window | `StructureViewPopupMenu` | `StructureViewPopup` | the editor's: `EditorTimestampModel` with the caret, `FileEditorTimestampModel`, … (`EditSession.actionTimestamps()`) |
-| Editor | `EditorPopupMenu` | `EditorPopup` | the editor's, as for Structure (not wired yet) |
+| Editor | `EditorPopupMenu` | `EditorPopup` | the editor's, as for Structure: the caret is moved to the click first (`ClientSession.editorMenu`) |
 
 A Structure node has no timestamp of its own, in JetBrains Client too, so the backend can't know
 which node was right-clicked. IDEate moves the caret to the node first (selecting a node already
@@ -100,8 +100,14 @@ client returns the one it showed. Tested: Copy Path/Reference ▸ Absolute Path 
 answered in 160 ms, and the backend's copy came back over `ClipboardModel` to the Mac clipboard as
 `/…/mac-backend/smoke`.
 
-The success response's `patch` is not applied yet. None of the enabled items changes a
-document yet. Apply it to the open editors when one does.
+**An action's document changes come only in the success response's `patch`**, not on the
+document's `backendPatches`. Seen 2026-11-17 on the Mac backend (port 5992): Comment with Line
+Comment on line 6 of `Main.java` answered `RdSuccessResponse` with
+`[caret(141), change(129, -'//', +''), caret(139), caretChange(187)]`. Before IDEate applied that
+patch, the backend's file had the comment and IDEate's text didn't (its highlighting went off by
+two characters). `ActionMenus` now hands a non-empty success patch to every edit session it
+concerns (`EditSession.concerns`, then `backendPatch`). The text, caret and highlighting then
+match: the comment removed, the caret on the next line, as IntelliJ moves it.
 
 ## 3. What IDEate greys out
 
@@ -118,11 +124,30 @@ thread until it closes. IDEate doesn't show backend dialogs yet (Lux), so these 
 
 The backend already leaves out actions that only run on the client (e.g. `OpenInRightSplit`).
 
+The editor's menu also greys (seen with `CLIENT_MENU_DUMP=1`, 2026-11-17):
+- `ShowIntentionActions` (Show Context Actions opens the Alt+Enter popup) and
+  `CompareClipboardWithSelection` (a diff window);
+- the groups `EditorPopupMenu.GoTo` and `UML.EditorGroup` (popups), `AnalyzeMenu` (tool windows),
+  `RunContextPopupGroup` and `RunContextGroupMore` (Run/Debug 'Main.main()' would run the program
+  with its output in a backend tool window), and `FoldingGroup` (IDEate doesn't draw folds yet).
+
+Kept local in the editor's menu: the backend's `$Cut`, `$Copy`, `$Paste`, `EditorPaste` and
+`EditorPasteSimple` items keep their text and place, but run IDEate's own cut, copy and paste, which
+go through the system clipboard and the clipboard sync (docs/edit-protocol.md). `MenuItem.id` carries
+the action id for this. The backend hides Cut and Copy when nothing is selected, as IntelliJ does.
+
+What the editor's menu showed on `greeting` in `Main.java` (7 requests, 244 ms): Show Context Actions,
+Paste, Copy / Paste Special ▸ (Copy Reference, Paste as Plain Text, Paste from History…), Find
+Usages, Go To ▸, Folding ▸, Analyze ▸, Rename…, Refactor ▸, Generate…, Run 'Main.main()' ▸, Debug
+'Main.main()' ▸, More Run/Debug ▸, Local History ▸, Compare with Clipboard, Diagrams ▸, Create Gist….
+
+`CLIENT_EDITOR_MENU_GROUP=CodeMenu` (a debug aid) shows another group in the editor's place, e.g.
+IntelliJ's Code menu, to try actions that edit the document (Comment with Line Comment, Comment
+with Block Comment, Auto-Indent Lines, Rearrange Code).
+
 ## Not done
 
 - Backend dialogs over Lux (`luxModel.components`: `LxDialog`, `LxFrame`), which would enable the
   greyed items.
-- The editor's menu from the backend (`EditorPopupMenu`, same code; the editor's own menu is local
-  today).
 - `uiAutomationInteractionModel.contextMenu`: a menu the backend pushes, in the same
   `AsyncActionGroupExpandResponse` shape.

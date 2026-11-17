@@ -400,6 +400,7 @@ private fun EditorIsland(
             session::paste,
             session::pasteSimple,
             session::copied,
+            session::editorMenu,
           )
         }
       EditorView(
@@ -409,6 +410,7 @@ private fun EditorIsland(
         Modifier.fillMaxSize(),
         state.lookup?.takeIf { it.path == selected.path },
         editorScroll,
+        backendMenu = { state.contextMenu?.entries },
       )
     } else {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

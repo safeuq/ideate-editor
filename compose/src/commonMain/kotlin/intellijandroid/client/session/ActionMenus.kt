@@ -14,6 +14,7 @@ import com.jetbrains.rd.ide.model.KeyboardShortcutModel
 import com.jetbrains.rd.ide.model.PopupKindModel
 import com.jetbrains.rd.ide.model.PresentationModel
 import com.jetbrains.rd.ide.model.RdCallActionRequest
+import com.jetbrains.rd.ide.model.RdPatch
 import com.jetbrains.rd.ide.model.RdRequest
 import com.jetbrains.rd.ide.model.RdResponse
 import com.jetbrains.rd.ide.model.RdSuccessResponse
@@ -44,6 +45,12 @@ internal class ActionMenus(
   private val log: (String) -> Unit,
   /** The finished menu, for the menu opened as number [serial]. */
   private val publish: (serial: Int, entries: List<MenuEntry>) -> Unit,
+  /**
+   * The document changes an action made (Comment with Line Comment, Reformat Code): they come only
+   * in the success response's patch, not on `backendPatches` (seen 2026-11-17), so the edit
+   * sessions apply them.
+   */
+  private val applyPatch: (RdPatch) -> Unit,
 ) {
   /** Requests of chosen items, to log the backend's answer. */
   private val running = mutableMapOf<Long, String>()
@@ -97,10 +104,10 @@ internal class ActionMenus(
   /** The backend's answer to a chosen item; false when it isn't one. */
   fun response(response: RdResponse): Boolean {
     val actionId = running.remove(response.requestId) ?: return false
-    // ponytail: the success patch isn't applied; no enabled item edits a document yet. Hand it
-    // to the edit sessions (backendPatch) when one does.
-    if (response is RdSuccessResponse) log("$actionId ran")
-    else log("$actionId did not run: $response")
+    if (response is RdSuccessResponse) {
+      log("$actionId ran")
+      response.patch?.takeIf { it.changes.isNotEmpty() }?.let(applyPatch)
+    } else log("$actionId did not run: $response")
     return true
   }
 
@@ -186,6 +193,7 @@ internal class ActionMenus(
                 shortcut = shortcutOf(child),
                 enabled = presentation.isEnabled && !opensDialog,
                 iconPath = presentation.icon?.icon?.let(iconPath),
+                id = child.actionId,
                 onClick = { run(child.actionId, presentation, this) },
               ),
             )
@@ -205,7 +213,20 @@ internal class ActionMenus(
     const val MAX_REQUESTS = 40
 
     /** Groups whose every item opens a dialog: New ▸ Java Class, File, Directory, …. */
-    val DIALOG_GROUPS = setOf("WeighingNewGroup", "NewGroup")
+    val DIALOG_GROUPS =
+      setOf(
+        "WeighingNewGroup",
+        "NewGroup",
+        // The editor's menu: Go To and Diagrams open popups, Analyze fills tool windows, Run and
+        // Debug run the program with its output in a backend tool window, and Folding changes
+        // folds IDEate doesn't draw yet.
+        "EditorPopupMenu.GoTo",
+        "UML.EditorGroup",
+        "AnalyzeMenu",
+        "RunContextPopupGroup",
+        "RunContextGroupMore",
+        "FoldingGroup",
+      )
 
     /**
      * Actions whose text has no "…" but that open a backend dialog, popup or tool window IDEate
@@ -223,6 +244,10 @@ internal class ActionMenus(
         "OpenModuleSettings",
         "MoveModuleToGroup",
         "RecentChanges",
+        // The editor's menu: Show Context Actions opens the Alt+Enter popup, Compare with
+        // Clipboard a diff window.
+        "ShowIntentionActions",
+        "CompareClipboardWithSelection",
       )
 
     // PresentationModel.flags (ActionsKt in intellij.rd.platform.jar).

@@ -140,6 +140,8 @@ class EditorActions(
   val pasteSimple: (String) -> Unit = {},
   /** Text IDEate just copied, for the backend's clipboard. */
   val copied: (String) -> Unit = {},
+  /** Ask the backend for the editor's context menu (the caret is already at the click). */
+  val openMenu: () -> Unit = {},
 )
 
 @Composable
@@ -150,6 +152,11 @@ fun EditorView(
   modifier: Modifier = Modifier,
   lookup: Lookup? = null,
   scroll: SidewaysScroll = remember { SidewaysScroll() },
+  /**
+   * The backend's context menu (`EditorPopupMenu`), read while the menu shows; null entries show
+   * "Loading…". Without it the editor shows its own list.
+   */
+  backendMenu: (() -> List<MenuEntry>?)? = null,
 ) {
   val fonts = LocalClientFonts.current
   val density = LocalDensity.current
@@ -578,8 +585,32 @@ fun EditorView(
     )
   }
 
+  /**
+   * The backend's items, with its Cut, Copy and Paste replaced by IDEate's own: those go through
+   * the system clipboard and the clipboard sync (docs/edit-protocol.md, "Paste and the clipboard").
+   */
+  fun withLocalClipboard(entries: List<MenuEntry>): List<MenuEntry> = entries.map { entry ->
+    when (entry) {
+      is MenuItem ->
+        when (entry.id) {
+          "\$Cut",
+          "EditorCut" -> entry.copy(enabled = currentFile.editable, onClick = ::cut)
+          "\$Copy",
+          "EditorCopy" -> entry.copy(enabled = true, onClick = ::copy)
+          "\$Paste",
+          "EditorPaste" -> entry.copy(enabled = currentFile.editable, onClick = ::paste)
+          "EditorPasteSimple" -> entry.copy(enabled = currentFile.editable, onClick = ::pasteSimple)
+          else -> entry
+        }
+      is SubMenu -> entry.copy(entries = withLocalClipboard(entry.entries))
+      MenuSeparator -> entry
+    }
+  }
+
   ContextMenuArea(
-    entries = ::menu,
+    entries = {
+      if (backendMenu == null) menu() else backendMenu()?.let(::withLocalClipboard)
+    },
     modifier = modifier.onSizeChanged { viewport = it },
     // Like IntelliJ: a right click outside the selection moves the caret there first.
     onOpen = { position ->
@@ -588,6 +619,7 @@ fun EditorView(
       val start = minOf(current.selectionStart, current.selectionEnd)
       val end = maxOf(current.selectionStart, current.selectionEnd)
       if (start == end || offset !in start..end) moveTo(offset, extend = false)
+      actions.openMenu()
     },
   ) {
     LazyColumn(

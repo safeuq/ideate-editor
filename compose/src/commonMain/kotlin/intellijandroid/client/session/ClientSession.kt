@@ -346,6 +346,22 @@ class ClientSession(
     }
   }
 
+  /**
+   * A right click or long press in the editor, after the caret moved there: the backend's
+   * `EditorPopupMenu` in the editor's context, as JetBrains Client asks for it.
+   */
+  fun editorMenu() {
+    val serial = startMenu()
+    onRd {
+      val session = selectedEditSession() ?: return@onRd log("No editor; no menu")
+      // CLIENT_EDITOR_MENU_GROUP: a debug aid, another group in the editor's place, e.g.
+      // `CodeMenu` (Comment with Line Comment, Reformat Code) to try actions that edit the
+      // document.
+      val group = System.getenv("CLIENT_EDITOR_MENU_GROUP") ?: "EditorPopupMenu"
+      actionMenus?.show(serial, group, "EditorPopup", session.actionTimestamps())
+    }
+  }
+
   /** Clears the last menu at once, so the new one shows "Loading…" until the backend answers. */
   private fun startMenu(): Int {
     val serial = menuSerials.incrementAndGet()
@@ -435,12 +451,17 @@ class ClientSession(
         ::onRd,
         { icon -> iconPaths(icon).firstOrNull() },
         ::log,
-      ) { serial, entries ->
-        mutableState.update {
-          if (it.contextMenu?.serial == serial) it.copy(contextMenu = BackendMenu(serial, entries))
-          else it
-        }
-      }
+        publish = { serial, entries ->
+          mutableState.update {
+            if (it.contextMenu?.serial == serial)
+              it.copy(contextMenu = BackendMenu(serial, entries))
+            else it
+          }
+        },
+        applyPatch = { patch ->
+          editSessions.values.filter { it.concerns(patch) }.forEach { it.backendPatch(patch) }
+        },
+      )
     requestResponseModel.responsesWithTime.advise(lifetime) { responses ->
       for (response in responses.responses) {
         if (actionMenus?.response(response) == true) continue

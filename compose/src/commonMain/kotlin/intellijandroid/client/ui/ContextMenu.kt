@@ -65,6 +65,8 @@ data class MenuItem(
   val shortcut: String? = null,
   val enabled: Boolean = true,
   val iconPath: String? = null,
+  /** The backend's action id for items from the backend, e.g. `$Copy`; null for local items. */
+  val id: String? = null,
   val onClick: () -> Unit = {},
 ) : MenuEntry
 
