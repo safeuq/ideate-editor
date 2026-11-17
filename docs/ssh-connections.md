@@ -8,7 +8,8 @@ any backend reachable over SSH, including a Mac backend shown on the phone:
 3. The host appears in the SSH page with its recent projects under it, also ones opened from Gateway or another
    client. Tapping one opens it, starting the backend when it isn't running.
 
-Status: **plan, nothing built yet** (2026-11-17). The findings below come from JetBrains Gateway 2026.3
+Status: step 1 done (2026-11-17): the SSH layer (`compose/.../ssh/`: `SshSession`, `SshKeys`, the
+`RemoteHost` interface). Everything after it is planned. The findings below come from JetBrains Gateway 2026.3
 (`GW-263.7307.184`), read statically (decompiled `lib/intellij.gateway.core.jar` and `lib/intellij.gateway.ssh.jar`,
 symbol and string tables of the Go worker in `lib/remote-dev-workers/`), from Gateway's log and settings, and from
 the files on the phone and the Mac. **Seen** = read in code, binaries, logs or files. **Inferred** = reasoned
@@ -174,11 +175,50 @@ phone page gets a device icon instead.
 client identity. A tap resumes with the saved identity, and when that's refused it asks the host for a fresh link,
 the way Termux entries do now.
 
+## Step 1: the SSH layer (done)
+
+`SshSession` (SSHJ 0.41.2) opens a connection with a password or an OpenSSH private key. It asks a
+`HostKeyCheck` about every host key, giving the type and OpenSSH's SHA-256 fingerprint. It runs commands
+directly, or through the login shell with Gateway's marker line, and forwards a local port Gateway's way.
+`SshKeys.generateEd25519` makes the key pair IDEate offers: the OpenSSH private key and an `authorized_keys`
+line.
+
+Checked on 2026-11-17 against a Linux test host, `lscr.io/linuxserver/openssh-server` in Docker on the Mac:
+
+| Check | Desktop (`SshSessionTest`) | Android (emulator, Pixel 3a API 34) |
+|---|---|---|
+| Password log-in, `uname -sm` in the login shell | `Linux aarch64` | `Linux aarch64` |
+| Login-shell output after the marker, quoting | `echo one; echo 'it'\''s'` gives `one`, `it's` | |
+| Existing key file log-in | ok | |
+| Log-in with a key IDEate generated, after adding it to `authorized_keys` | ok | ok |
+| Forward to the host's loopback (its own SSH port) | banner `SSH-2.0-OpenSSH_10.3` | local 2222, same banner |
+| Host key fingerprint | | `SHA256:sXrwbXg8SMoVJG1Nyj3CNK+CqAeD5MnUk8KYDOq33dY`, the same as `ssh-keyscan … \| ssh-keygen -lf -` |
+
+Found on the way:
+- **BouncyCastle on Android.** SSHJ asks the JCA for provider "BC". Android ships a cut-down provider under that
+  name, so `SshSession` swaps in the full BouncyCastle. It's added last, so lookups by algorithm (the TLS
+  connection's) still find the platform's providers first. `ClientCertificate` keeps its own instance.
+  BouncyCastle moves from 1.82 to 1.84, the version SSHJ 0.41.2 is built against.
+- **The forward's local port.** Java's `ServerSocket` sets `SO_REUSEADDR`. On macOS that lets the bind succeed
+  on a port another program already listens on: our 127.0.0.1:2222 shadowed Docker's 2222. With reuse off, a
+  busy port fails the bind and the forward takes a free one, as Gateway's does.
+- **Forwarding needs the server's permission.** The linuxserver image ships with `AllowTcpForwarding no`; the
+  test host sets it to `yes`. Termux's sshd allows forwarding, since Gateway uses it there. A refused tunnel
+  closes the local connection at once, so `SshSession` users must report that clearly.
+- **APK size:** +0.9 MB (46.9 to 47.9 MB) for SSHJ, `bcprov` and SLF4J.
+
+Running the integration test (skipped unless the variables are set):
+
+```sh
+IDEATE_SSH_TEST_HOST=127.0.0.1 IDEATE_SSH_TEST_PORT=2222 IDEATE_SSH_TEST_USER=dev \
+  IDEATE_SSH_TEST_PASSWORD=<password> IDEATE_SSH_TEST_KEY=<path to id_ed25519> ./gradlew :compose:jvmTest --tests '*SshSessionTest*'
+```
+
 ## Steps
 
 | # | Step | Who | Depends on |
 |---|---|---|---|
-| 1 | Spike: SSHJ on Android and desktop; key, password and agent log-in; exec; local forward. Measure the APK size | intellij-android-ui | |
+| 1 | Spike: SSHJ on Android and desktop; key and password log-in; exec; local forward; APK size. **Done**. Agent log-in moves to step 3 | intellij-android-ui | |
 | 2 | `RemoteHost` with `ShellHost` and `WorkerHost`, tested against the Mac, Termux on the phone and a Linux container | intellij-android | 1 (interface first, so 2 and 3 can run in parallel) |
 | 3 | Saved hosts, `KeyStore` (Android Keystore, desktop), `KnownHosts`, `SshConnector` log-in methods | intellij-android-ui | 1 |
 | 4 | SSH page, new-connection dialog, host groups, refresh | intellij-android-ui | 2, 3 |

@@ -30,7 +30,10 @@ kotlin {
   sourceSets {
     commonMain.dependencies {
       compileOnly(files(protocolJarFiles))
-      implementation("org.bouncycastle:bcpkix-jdk18on:1.82")
+      // 1.84: the version SSHJ 0.41.2 is built against (it brings bcprov 1.84 itself).
+      implementation("org.bouncycastle:bcpkix-jdk18on:1.84")
+      // SSH connections (docs/ssh-connections.md): the library JetBrains Gateway uses.
+      implementation("com.hierynomus:sshj:0.41.2")
       implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
       implementation("org.jetbrains.compose.foundation:foundation:1.12.2")
     }
