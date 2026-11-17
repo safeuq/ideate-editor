@@ -508,8 +508,8 @@ class SshController(
     work.execute {
       val result = runCatching {
         val remote = remoteFor(entry)
-        remote.installedIdes() to
-          sessions.getValue(entry.id).execInLoginShell("echo \"\$HOME\"").stdout.trim()
+        // $HOME comes with RemoteHosts' probe: no extra login shell.
+        remote.installedIdes() to remote.home()
       }
       main.launch {
         result.fold(
