@@ -43,8 +43,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import intellijandroid.client.ssh.LoginMethod
 import intellijandroid.client.ui.ClientFonts
+import intellijandroid.client.ui.DialogButton
 import intellijandroid.client.ui.IslandsDark
 import intellijandroid.client.ui.MenuItem
+import intellijandroid.client.ui.MessageDialog
+import intellijandroid.client.ui.MessageOption
 import kotlinx.coroutines.delay
 
 /**
@@ -71,16 +74,6 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
   SearchRow(search, { search = it }, styles)
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
     state.message?.let { Notice(it, styles, color = IslandsDark.text) }
-    state.question?.let { question ->
-      Notice(question.text, styles, color = IslandsDark.text)
-      Row(
-        Modifier.padding(horizontal = Gateway.contentInset),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        OutlinedButton(question.confirm, styles, actions.answerQuestion)
-        OutlinedButton("Cancel", styles, actions.cancelQuestion)
-      }
-    }
     if (state.hosts.isEmpty()) {
       Notice("Work with a project on a machine reachable using SSH", styles)
       Box(Modifier.padding(horizontal = Gateway.contentInset)) {
@@ -180,7 +173,28 @@ internal fun SshOverlays(state: SshPageState, actions: SshActions, fonts: Client
     null -> Unit
   }
   state.progress?.let { StartProgress(it.title, it.detail, fonts, actions.cancelProgress) }
+  // Last, so it is above the Connect to SSH dialog that is waiting for the answer.
+  state.question?.let { question -> QuestionDialog(question, actions) }
 }
+
+/**
+ * A host key question (unknown or changed key) in IntelliJ's message dialog, while the connection
+ * waits. It used to show in the page, under the modal Connect to SSH dialog, where its buttons
+ * couldn't be reached.
+ */
+@Composable
+private fun QuestionDialog(question: Question, actions: SshActions) =
+  MessageDialog(
+    title = "SSH",
+    message = question.text,
+    kind = question.kind,
+    options =
+      listOf(
+        MessageOption(question.confirm, actions.answerQuestion),
+        MessageOption("Cancel", actions.cancelQuestion),
+      ),
+    onCancel = actions.cancelQuestion,
+  )
 
 /**
  * Gateway's "Connect to SSH": Username, Host, Port, how to log in, Check Connection and Continue.
@@ -211,7 +225,7 @@ private fun NewConnectionDialog(
         val clipboard = LocalClipboardManager.current
         BasicText(publicKey, style = styles.code, modifier = Modifier.padding(start = 24.dp))
         Box(Modifier.padding(start = 24.dp)) {
-          DialogButton("Copy Public Key", styles, primary = false) {
+          DialogButton("Copy Public Key", styles.label, primary = false) {
             clipboard.setText(AnnotatedString(publicKey))
           }
         }
@@ -262,11 +276,11 @@ private fun NewConnectionDialog(
     }
     dialog.error?.let { BasicText(it, style = styles.error) }
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-      DialogButton("Cancel", styles, primary = false, onClick = actions.cancelDialog)
+      DialogButton("Cancel", styles.label, primary = false, onClick = actions.cancelDialog)
       Spacer(Modifier.width(8.dp))
       DialogButton(
         if (dialog.checking) "Checking Connection…" else "Check Connection and Continue",
-        styles,
+        styles.label,
         primary = true,
       ) {
         if (!dialog.checking) actions.checkAndContinue()
@@ -302,15 +316,15 @@ private fun ChooseIdeDialog(
         InputField(dialog.projectPath, actions.projectPathChanged, styles)
       }
       Spacer(Modifier.width(6.dp))
-      DialogButton("…", styles, primary = false, onClick = onBrowse)
+      DialogButton("…", styles.label, primary = false, onClick = onBrowse)
     }
     dialog.error?.let { BasicText(it, style = styles.error) }
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-      DialogButton("Cancel", styles, primary = false, onClick = actions.cancelDialog)
+      DialogButton("Cancel", styles.label, primary = false, onClick = actions.cancelDialog)
       Spacer(Modifier.width(8.dp))
       DialogButton(
         "Start IDE and Connect",
-        styles,
+        styles.label,
         primary = true,
         onClick = actions.startAndConnect,
       )
@@ -332,9 +346,9 @@ private fun AuthenticateDialog(
     LabeledField(dialog.prompt, typed, { typed = it }, styles, secret = true)
     dialog.error?.let { BasicText(it, style = styles.error) }
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-      DialogButton("Cancel", styles, primary = false, onClick = actions.cancelDialog)
+      DialogButton("Cancel", styles.label, primary = false, onClick = actions.cancelDialog)
       Spacer(Modifier.width(8.dp))
-      DialogButton("Authenticate", styles, primary = true) { actions.authenticate(typed) }
+      DialogButton("Authenticate", styles.label, primary = true) { actions.authenticate(typed) }
     }
   }
 }
@@ -461,28 +475,6 @@ private fun Choice(label: String, selected: Boolean, styles: DialogStyles, onCli
   }
 }
 
-/** IntelliJ's dialog buttons: the default one filled with the accent, the others outlined. */
-@Composable
-private fun DialogButton(
-  label: String,
-  styles: DialogStyles,
-  primary: Boolean,
-  onClick: () -> Unit,
-) {
-  Box(
-    Modifier.height(DialogLook.buttonHeight)
-      .then(
-        if (primary) Modifier.background(DialogLook.accent, DialogLook.buttonShape)
-        else Modifier.border(1.dp, DialogLook.buttonBorder, DialogLook.buttonShape),
-      )
-      .clickable(onClick = onClick)
-      .padding(horizontal = 14.dp),
-    contentAlignment = Alignment.Center,
-  ) {
-    BasicText(label, style = styles.label)
-  }
-}
-
 /** The values measured on IntelliJ's "Open File or Project" dialog (FolderChooser's Chooser). */
 private object DialogLook {
   val width = 475.dp
@@ -494,7 +486,4 @@ private object DialogLook {
   val fieldShape = RoundedCornerShape(4.dp)
   val fieldBorder = Color(0xFF4E5157)
   val accent = Color(0xFF4670DA)
-  val buttonHeight = 24.dp
-  val buttonShape = RoundedCornerShape(4.dp)
-  val buttonBorder = Color(0xFF414349)
 }

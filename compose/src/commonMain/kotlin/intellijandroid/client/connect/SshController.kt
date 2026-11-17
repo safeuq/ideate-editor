@@ -19,6 +19,7 @@ import intellijandroid.client.ssh.SshHostEntry
 import intellijandroid.client.ssh.SshHosts
 import intellijandroid.client.ssh.SshLogins
 import intellijandroid.client.ssh.SshSession
+import intellijandroid.client.ui.MessageKind
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -338,6 +339,7 @@ class SshController(
         ask(
             "Warning: remote host identification has changed! IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY! Someone could be eavesdropping on you right now (man-in-the-middle attack)! It is also possible that the host key has just been changed. The fingerprint for the $type key sent by the remote host is $fingerprint.\n\nDo you want to update the key in IDEate's known hosts and resume connecting?",
             "Update and Connect",
+            MessageKind.WARNING,
           )
           .also { trusted ->
             if (trusted) {
@@ -351,10 +353,14 @@ class SshController(
   /**
    * Shows [text] with [confirm] and Cancel; blocks the SSH thread until answered (Gateway: 30 s).
    */
-  private fun ask(text: String, confirm: String): Boolean {
+  private fun ask(
+    text: String,
+    confirm: String,
+    kind: MessageKind = MessageKind.QUESTION,
+  ): Boolean {
     val answer = CompletableFuture<Boolean>()
     pendingAnswer = answer
-    main.launch { state = state.copy(question = Question(text, confirm) { answer(true) }) }
+    main.launch { state = state.copy(question = Question(text, confirm, kind) { answer(true) }) }
     return runCatching { answer.get(QUESTION_TIMEOUT_SECONDS, TimeUnit.SECONDS) }
       .getOrDefault(false)
       .also {

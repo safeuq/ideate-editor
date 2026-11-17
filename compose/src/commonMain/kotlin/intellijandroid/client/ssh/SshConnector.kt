@@ -131,6 +131,12 @@ private constructor(private val client: SSHClient, val host: String, val port: I
     /** Gateway's connection check timeout (`gateway.ssh.connection.check.timeout`). */
     const val CONNECT_TIMEOUT_MILLIS = 5_000
 
+    /** SSHJ's own transport timeout, used once connected. */
+    private const val TRANSPORT_TIMEOUT_MILLIS = 30_000
+
+    /** Longer than the host key question waits for an answer (SshController: 120 s). */
+    private const val HOST_KEY_ANSWER_MILLIS = 130_000
+
     /** Connects and logs in with [login]; fails with the server's or SSHJ's message. */
     fun open(host: String, port: Int, user: String, login: SshLogin, hostKeys: HostKeyCheck) =
       open(host, port, user, listOf(login), hostKeys)
@@ -162,7 +168,11 @@ private constructor(private val client: SSHClient, val host: String, val port: I
         },
       )
       try {
+        // The key exchange waits for [hostKeys], which may ask the user (up to 2 minutes); SSHJ's
+        // 30 s transport timeout failed the connection while the question was still open.
+        client.transport.timeoutMs = HOST_KEY_ANSWER_MILLIS
         client.connect(host, port)
+        client.transport.timeoutMs = TRANSPORT_TIMEOUT_MILLIS
         val methods = logins.flatMap { login ->
           when (login) {
             is SshLogin.Password ->

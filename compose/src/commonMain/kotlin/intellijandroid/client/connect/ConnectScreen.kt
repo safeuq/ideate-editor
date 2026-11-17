@@ -45,6 +45,7 @@ import intellijandroid.client.ui.ContextMenuArea
 import intellijandroid.client.ui.IslandsDark
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.MenuItem
+import intellijandroid.client.ui.MessageKind
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -92,7 +93,13 @@ enum class TermuxAccess {
   READY,
 }
 
-class Question(val text: String, val confirm: String, val onConfirm: () -> Unit)
+class Question(
+  val text: String,
+  val confirm: String,
+  /** The message dialog's icon: a question, or a warning for a changed host key. */
+  val kind: MessageKind = MessageKind.QUESTION,
+  val onConfirm: () -> Unit,
+)
 
 class ConnectActions(
   val pageChanged: (ConnectPage) -> Unit,

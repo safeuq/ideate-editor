@@ -421,6 +421,39 @@ Test hosts:
 - **Termux on the phone:** SSH on 8022. Its address changes with the network: 192.168.0.107 on the home Wi-Fi, 172.22.26.84 when the Mac is on the phone's hotspot (2026-11-17).
 - **A Linux container:** sshd in Docker on the Mac.
 
+## Step 5: opening a project end to end (done, 2026-11-17)
+
+Tested from IDEate desktop against this Mac over its own sshd (Remote Login), `safeuq@127.0.0.1:22`, logging in
+with IDEate's generated key (added to `~/.ssh/authorized_keys`). The flow, as Gateway's:
+
+| Step | What happened |
+|---|---|
+| Connect to SSH | IDEate key `ssh-ed25519 AAAAC3…aCrpG IDEate on Safeuqs-MacBook-Pro-M5`; host key question for `SHA256:1cqIIjvMAkHA74RCulfxLHBTSoesotqO3/xCQus8u4E` (the Mac's `/etc/ssh/ssh_host_ed25519_key.pub`), Continue |
+| Probe | macOS, RemoteDev folder `~/Library/Caches/JetBrains/RemoteDev`, two IDEs from `userProvidedDist/`, recent projects from `recent/` |
+| Start IDE and Connect | `remote-dev-server.sh run <project>` started; status polled until ready; join link `tcp://127.0.0.1:5991#jt=…` |
+| Port forward | 5991 was taken on the client side (the backend runs on the same machine), so the forward took a free port, `127.0.0.1:49401`, as Gateway does |
+| Connected | the project opened; the client's only connections were SSH to `:22` and the local forward |
+
+Two bugs found and fixed:
+
+- **The host key question couldn't be answered.** It showed in the page, under the modal Connect to SSH dialog, so
+  its Continue button couldn't be reached. It is now IntelliJ's message dialog (`ui/MessageDialog.kt`, after
+  `AlertDialog` in `AlertMessagesManager.kt`), drawn above the other dialogs: question icon for an unknown key,
+  warning icon for a changed one.
+- **Answering after 30 s failed the connection** ("Timeout expired: 30000 MILLISECONDS"). SSHJ waits for the key
+  exchange, which waits for the host key answer, at most its transport timeout (30 s), while the question waits up
+  to 120 s. `SshSession.open` now allows 130 s for the key exchange and puts 30 s back once connected.
+
+Still to look at: the host key question appears about 8 s after Check Connection on this Mac, though the SSH
+connection is local.
+
+How the test kept the user's running IntelliJ out of it: `remote-dev-server.sh run` and `status` with default
+folders would reach the IntelliJ the user has open. The test added a wrapper "IDE" (a folder with
+`bin/remote-dev-server.sh` that sets `IJ_JAVA_OPTIONS` to separate config, system, log and plugin folders and
+`--port 5991`, plus a copy of `Resources/product-info.json` with the version marked `2026.3 ISOLATED-TEST`), linked
+for the test only from `userProvidedDist/`. IDEate lists it like any IDE; it was chosen in Choose IDE and Project.
+A recent-project row reuses the IDE path from its status file (the real IntelliJ), so the test didn't open rows.
+
 ## Open questions
 
 - Where the `recents.json` that `remove-recent-project` deletes lives: not under `RemoteDev/` on the phone or the
