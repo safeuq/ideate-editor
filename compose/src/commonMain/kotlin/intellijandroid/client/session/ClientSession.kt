@@ -561,7 +561,10 @@ class ClientSession(
           is RdSuccessResponse -> session.response(response.requestId, response.patch)
           is RdRetryResponse -> {
             log("Request ${response.requestId} to be sent again: ${response.message}")
-            if (!session.retry(response.requestId)) recoverEditors()
+            session.retry(response.requestId)
+            // The backend now drops every request sent with the older timestamp, other editors'
+            // too.
+            editSessions.values.filter { it !== session }.forEach { it.resendPending() }
           }
           else -> {
             log("Request ${response.requestId} not applied: $response")
@@ -929,12 +932,21 @@ class ClientSession(
       EditorIdentity.of(documentId, controlId, compositeIds[pathOf(documentId)])
         ?: return log("Cannot edit $controlId: unknown editor id type")
     val session =
-      EditSession(identity, commands, ::sendRequest) { edit ->
-        edit?.let { shiftHighlights(documentId, it) }
-        publishDocument(documentId)
-        restoreCaret(pathOf(documentId), editSessions[documentId] ?: return@EditSession)
-        saveEditorsSoon()
-      }
+      EditSession(
+        identity,
+        commands,
+        ::sendRequest,
+        changed = { edit ->
+          edit?.let { shiftHighlights(documentId, it) }
+          publishDocument(documentId)
+          editSessions[documentId]?.let { restoreCaret(pathOf(documentId), it) }
+          saveEditorsSoon()
+        },
+        outOfStep = { reason ->
+          log("Out of step with the backend ($reason)")
+          recoverEditors()
+        },
+      )
     editSessions[documentId] = session
     earlyPatches.remove(documentId)?.forEach(session::backendPatch)
     controlLifetime.onTermination {
@@ -953,7 +965,7 @@ class ClientSession(
     val model = requestResponse ?: return
     if (recovering) return
     recovering = true
-    log("Edits keep being refused; taking the backend's editor state")
+    log("Taking the backend's editor state")
     editSessions.values.forEach { it.dropPending() }
     model.dropAllRequests.start(lifetime, Unit).result.advise(lifetime) {
       retryTimestamp = RdRetryTimestamp(0, retryTimestamp.generation + 1)

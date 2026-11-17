@@ -40,6 +40,7 @@ import com.jetbrains.rd.ide.model.RdPatchCmdStart
 import com.jetbrains.rd.ide.model.RdPatchDocumentVersion
 import com.jetbrains.rd.ide.model.RdPatchEditorVersion
 import com.jetbrains.rd.ide.model.RdPatchItem
+import com.jetbrains.rd.ide.model.RdPatchItemVersion
 import com.jetbrains.rd.ide.model.RdProjectId
 import com.jetbrains.rd.ide.model.RdRequest
 import com.jetbrains.rd.ide.model.RdResetDocumentChange
@@ -59,6 +60,7 @@ import com.jetbrains.rd.ide.model.VirtualFileTimestampModel
 
 private val DEBUG = System.getenv("CLIENT_EDIT_DEBUG") != null
 private const val CHOOSE_LOOKUP_ITEM = "#Choose Lookup Item"
+private val EMPTY_PATCH = RdPatch(emptyList(), emptyList(), emptyList(), emptyList())
 
 /**
  * Ids of the client's commands, shared by all editors: negative and counting down, like JetBrains
@@ -122,15 +124,12 @@ class EditorIdentity(
 }
 
 /**
- * Local-first editing of one open editor over IntelliJ's patch engine (docs/split-protocol.md,
- * "Typing"). Each edit is applied here first, sent as the speculative patch of a request, and
- * confirmed by the backend's answer. If an answer differs (the backend auto-closed a brace,
- * indented differently, …), the pending local edits are undone and the backend's patches are
- * applied instead until nothing is pending.
- *
- * ponytail: IntelliJ replays the later pending edits on top of the backend's result; here they are
- * dropped in favour of the backend's answers, and typing is ignored while that catch-up runs
- * (usually a few milliseconds).
+ * Local-first editing of one open editor over IntelliJ's patch engine, the way JetBrains Client's
+ * `FrontendAsyncRequestExecutorNew` does it (docs/edit-protocol-client.md). Each user action is
+ * applied here first and sent with its local result as the speculative patch. When an answer
+ * differs, or the backend changes the document itself, the pending actions are undone, the
+ * backend's change is applied (its versions must match ours before and after), and the pending
+ * actions are run again on the new text. Typing never waits for the backend.
  */
 class EditSession(
   private val identity: EditorIdentity,
@@ -142,6 +141,12 @@ class EditSession(
    * length) if any.
    */
   private val changed: (TextEdit?) -> Unit,
+  /**
+   * Called when the versions here no longer match the backend's (a check before or after applying
+   * one of its patches failed, or an answer came out of order). The caller then takes the backend's
+   * state of every editor ([dropPending], [recovered]).
+   */
+  private val outOfStep: (String) -> Unit = {},
 ) {
   data class TextEdit(val offset: Int, val removedLength: Int, val insertedLength: Int) {
     /**
@@ -170,18 +175,24 @@ class EditSession(
     }
   }
 
+  /** One user action (a key, a caret move, …): what runs again when pending edits are replayed. */
+  private class Action(val run: () -> Unit)
+
   /**
-   * A request the backend hasn't answered yet; [undoState] is the editor state before its local
-   * change.
+   * A request the backend hasn't answered yet. [undoState] is the editor state before its local
+   * change; [action] made it (null for undo and redo, which the backend's answer carries).
    */
   private class Pending(
     var requestId: Long,
-    val request: RdRequest,
-    val speculative: RdPatch,
-    val undoState: Snapshot,
-    val edit: TextEdit?,
+    var request: RdRequest,
+    var speculative: RdPatch,
+    var undoState: Snapshot,
+    var edit: TextEdit?,
+    val action: Action?,
+    /** How many backend patches and answers were applied when it was sent. */
+    var sentAfter: Int,
   ) {
-    /** Whether the backend already asked for this request again (`RdRetryResponse`). */
+    /** Whether the backend already asked for it again (`RdRetryResponse`). */
     var retried = false
   }
 
@@ -212,7 +223,20 @@ class EditSession(
   private var undoSizes = listOf(0, 0)
   private var redoSizes = listOf(0, 0)
   private val pending = ArrayDeque<Pending>()
-  private var followingBackend = false
+  /** The action running now, for the requests it sends. */
+  private var currentAction: Action? = null
+  /**
+   * While an action is replayed: its earlier requests, which the replay updates instead of sending.
+   */
+  private var replayed: ArrayDeque<Pending>? = null
+  /**
+   * While replaying: whether replayed requests go to the backend again (the retry timestamp moved).
+   */
+  private var resendReplayed = false
+  /** Backend patches and answers applied so far (JetBrains Client's `backendChangesCounter`). */
+  private var applied = 0
+  /** Between [dropPending] and [recovered]: typing is ignored, backend patches too. */
+  private var recovering = false
 
   val isReady
     get() = documentVersion.value >= 0
@@ -253,8 +277,7 @@ class EditSession(
 
   // ---- User actions ----
 
-  fun type(character: Char) {
-    if (!canEdit()) return
+  fun type(character: Char) = perform {
     val (offset, removed) = replacedRange()
     edit(
       offset,
@@ -271,8 +294,7 @@ class EditSession(
     sendTransparentMarker()
   }
 
-  fun enter() {
-    if (!canEdit()) return
+  fun enter() = perform {
     val (offset, removed) = replacedRange()
     val lineStart = text.lastIndexOf('\n', offset - 1) + 1
     val indent = text.substring(lineStart, offset).takeWhile { it == ' ' || it == '\t' }
@@ -296,8 +318,8 @@ class EditSession(
    * filled just before; when it also reformats, adds imports or moves the caret, its answer differs
    * and replaces the guess.
    */
-  fun paste(text: String, actionId: String = "EditorPaste") {
-    if (!canEdit() || text.isEmpty()) return
+  fun paste(text: String, actionId: String = "EditorPaste") = perform {
+    if (text.isEmpty()) return@perform
     val (offset, removed) = replacedRange()
     editorAction(
       actionId,
@@ -312,8 +334,7 @@ class EditSession(
     )
   }
 
-  fun backspace() {
-    if (!canEdit()) return
+  fun backspace() = perform {
     if (selectionStart != selectionEnd) {
       editorAction(
         "EditorBackSpace",
@@ -341,8 +362,7 @@ class EditSession(
     }
   }
 
-  fun delete() {
-    if (!canEdit()) return
+  fun delete() = perform {
     if (selectionStart != selectionEnd) {
       editorAction(
         "EditorDelete",
@@ -371,12 +391,11 @@ class EditSession(
   }
 
   /** Moves the caret, with a selection when [anchor] differs from [offset]. */
-  fun moveCaret(offset: Int, anchor: Int = offset) {
-    if (!canEdit()) return
+  fun moveCaret(offset: Int, anchor: Int = offset) = perform {
     val target = offset.coerceIn(0, text.length)
     val from = minOf(anchor.coerceIn(0, text.length), target)
     val to = maxOf(anchor.coerceIn(0, text.length), target)
-    if (target == caret && from == selectionStart && to == selectionEnd) return
+    if (target == caret && from == selectionStart && to == selectionEnd) return@perform
     val before = snapshot()
     val oldState = caretState()
     val editorBefore = editorVersion
@@ -415,8 +434,7 @@ class EditSession(
    * +"eting"). The backend runs the item's insert handler (parentheses, imports) itself; its extra
    * edits arrive as a different answer, followed here.
    */
-  fun chooseLookupItem(prefix: String, lookupString: String) {
-    if (!canEdit()) return
+  fun chooseLookupItem(prefix: String, lookupString: String) = perform {
     val start = caret - prefix.length
     val group = RdStringGroupId("Completion${lookupString.hashCode()}")
     if (lookupString.startsWith(prefix)) {
@@ -446,89 +464,105 @@ class EditSession(
     }
   }
 
+  /**
+   * Undo or redo. Nothing changes here; the backend's answer carries the change (JetBrains Client
+   * undoes locally first, IDEate has no undo history of its own). The stack sizes are the ones
+   * expected after it, as the backend compares them after undoing (docs/edit-protocol-backend.md
+   * 1.6b): undo moves one step from the undo stacks to the redo stacks, redo the other way.
+   */
   fun undo(isUndo: Boolean = true) {
     if (!canEdit()) return
-    // No local change: the backend's answer carries the undo. Pending local edits are rolled back
-    // first so their
-    // answers are applied in order, not on top of the local text.
-    if (pending.isNotEmpty()) rollBackPending()
+    val step = if (isUndo) -1 else 1
+    val expectedUndo = undoSizes.map { maxOf(0, it + step) }
+    val expectedRedo = redoSizes.map { maxOf(0, it - step) }
     val request =
       RdUndoRedoRequest(
         RdFileEditorIdStrict(identity.fileEditorId, false),
         listOf(identity.fileId),
-        undoSizes,
-        redoSizes,
+        expectedUndo,
+        expectedRedo,
         isUndo,
         identity.projectId,
       )
     pending.addLast(
-      Pending(
-        send(request),
-        request,
-        RdPatch(emptyList(), emptyList(), emptyList(), emptyList()),
-        snapshot(),
-        null,
-      ),
+      Pending(send(request), request, EMPTY_PATCH, snapshot(), null, null, applied),
     )
-    followingBackend = true
   }
 
   // ---- From the backend ----
 
   /**
    * A patch the backend sent on its own (`backendPatches`): opening the file, changes made on the
-   * backend, …
+   * backend, … With edits pending it is applied under them (rebase); dropped while recovering.
    */
   fun backendPatch(patch: RdPatch) {
     debug { "backend patch ${describe(patch)} with ${pending.size} pending" }
-    if (pending.isNotEmpty()) rollBackPending()
-    apply(patch)
+    if (recovering) return
+    if (pending.isEmpty()) {
+      if (applyChecked(patch)) applied++ else outOfStep("backend patch ${describe(patch)}")
+    } else rebase(patch, completesHead = false, resend = false)
   }
 
-  /** The answer to request [requestId]. */
+  /** The answer to request [requestId]; [patch] is null for a refused request. */
   fun response(requestId: Long, patch: RdPatch?) {
-    val request =
-      pending.firstOrNull()?.takeIf { it.requestId == requestId }
-        ?: return debug {
-          "answer #$requestId out of order; pending ${pending.map { it.requestId }}"
-        }
-    pending.removeFirst()
+    val head = pending.firstOrNull()
+    if (head?.requestId != requestId) {
+      if (pending.any { it.requestId == requestId })
+        outOfStep("answer #$requestId before #${head?.requestId}")
+      else debug { "answer #$requestId for no pending request" }
+      return
+    }
     debug {
-      "answer #$requestId ${patch?.let(::describe)} same=${patch != null && sameEdit(request.speculative, patch)} following=$followingBackend"
+      "answer #$requestId ${patch?.let(::describe)} same=${patch != null && sameEdit(head.speculative, patch)}"
     }
-    if (!followingBackend && patch != null && sameEdit(request.speculative, patch)) {
-      // Confirmed: the local text is already right; take the backend's versions.
-      takeVersions(patch)
-    } else {
-      if (!followingBackend) {
-        pending.addFirst(request)
-        rollBackPending()
-        pending.removeFirst()
-      }
-      patch?.let(::apply)
-    }
-    if (pending.isEmpty()) followingBackend = false
+    if (patch != null && sameEdit(head.speculative, patch)) {
+      // Confirmed: the local text is already right. Its versions are those after this edit, so
+      // they are ours only when nothing later is pending; otherwise ours already went further.
+      pending.removeFirst()
+      if (pending.isEmpty()) takeVersions(patch)
+      else for (item in patch.changes) if (item is RdStackSizeItem) applyItem(item)
+      applied++
+    } else rebase(patch, completesHead = true, resend = false)
+    runWhenAnswered()
+  }
+
+  private fun runWhenAnswered() {
     if (pending.isEmpty() && whenAnswered.isNotEmpty())
       whenAnswered.toList().also { whenAnswered.clear() }.forEach { it() }
   }
 
   /**
-   * The backend asked for request [requestId] again (`RdRetryResponse`). It ignores, without an
-   * answer, every request sent with an older retry timestamp, so like JetBrains Client this
-   * re-sends it and every later pending request once. Returns false on a second retry: the versions
-   * here no longer match the backend's, and the caller has to fetch its state ([dropPending],
-   * [recovered]).
+   * The backend refused request [requestId] (`RdFailureResponse`, `RdNoEditorFoundResponse`): like
+   * JetBrains Client, an answer without a patch. Its local change is undone, the later ones
+   * replayed.
    */
-  fun retry(requestId: Long): Boolean {
-    val index = pending.indexOfFirst { it.requestId == requestId }
-    if (index < 0) return true
-    val later = pending.drop(index)
-    if (later.any { it.retried }) return false
-    for (request in later) {
-      request.requestId = send(request.request)
-      request.retried = true
+  fun failure(requestId: Long) = response(requestId, null)
+
+  /**
+   * The backend asked for request [requestId] again (`RdRetryResponse`; the caller already took its
+   * new retry timestamp). It drops, without an answer, every request sent with the older timestamp,
+   * so every pending request goes again. A second retry of the same request gives up on it: its
+   * local change is undone and the rest replayed and sent again (`FrontendAsyncRequestExecutorNew.
+   * handleResponse`, docs/edit-protocol-client.md 4.4).
+   */
+  fun retry(requestId: Long) {
+    val head = pending.firstOrNull() ?: return
+    // A stale retry (not the oldest request, or something was applied since it went) only resends.
+    if (head.requestId != requestId || head.sentAfter != applied) return resendPending()
+    if (head.retried) {
+      rebase(null, completesHead = true, resend = true)
+      return runWhenAnswered()
     }
-    return true
+    head.retried = true
+    resendPending()
+  }
+
+  /** Sends every pending request again: the retry timestamp moved (here or for another editor). */
+  fun resendPending() {
+    for (request in pending) {
+      request.requestId = send(request.request)
+      request.sentAfter = applied
+    }
   }
 
   /** The editor's id in the rd protocol, as `getEditorStates` takes it. */
@@ -539,27 +573,103 @@ class EditSession(
   fun dropPending() {
     rollBackPending()
     pending.clear()
-    followingBackend = true
+    recovering = true
   }
 
-  /** The backend's state of every open editor (`getEditorStates`), or null if it didn't come. */
+  /**
+   * The backend's state of every open editor (`getEditorStates`: a reset of the text and the
+   * caret), or null if it didn't come. Taken without checks, starting from its expected versions.
+   */
   fun recovered(state: RdPatch?) {
-    state?.let(::apply)
-    followingBackend = false
-  }
-
-  /** The backend refused request [requestId] (`RdFailureResponse`, `RdNoEditorFoundResponse`). */
-  fun failure(requestId: Long) {
-    if (pending.any { it.requestId == requestId }) {
-      rollBackPending()
-      pending.removeAll { it.requestId == requestId }
-      if (pending.isEmpty()) followingBackend = false
+    if (state != null) {
+      takeVersions(state.expectedItemVersions)
+      for (item in state.changes) applyItem(item)
+      takeVersions(state)
+      changed(null)
     }
+    recovering = false
+    applied++
   }
 
   // ---- Internals ----
 
-  private fun canEdit() = isReady && !followingBackend
+  private fun canEdit() = isReady && !recovering
+
+  /** Runs a user action, remembered for replay with the requests it sends. */
+  private fun perform(body: () -> Unit) {
+    if (!canEdit()) return
+    currentAction = Action(body)
+    try {
+      body()
+    } finally {
+      currentAction = null
+    }
+  }
+
+  /**
+   * JetBrains Client's rebase (`SpeculativeQueueProcessor.rebase`): undo every pending local
+   * change, apply the backend's [patch] (null: a refused request), drop the answered request if
+   * [completesHead], then run the remaining actions again on the new text. [resend]: the retry
+   * timestamp moved, so the replayed requests go to the backend again.
+   */
+  private fun rebase(patch: RdPatch?, completesHead: Boolean, resend: Boolean) {
+    val earlier = pending.toList()
+    rollBackPending()
+    pending.clear()
+    if (patch != null && !applyChecked(patch)) {
+      outOfStep("${if (completesHead) "answer" else "backend patch"} ${describe(patch)}")
+      return
+    }
+    applied++
+    if (completesHead) replay(earlier.drop(1), resend, done = earlier.first().action)
+    else replay(earlier, resend, done = null)
+  }
+
+  /**
+   * Runs the actions of [earlier] again. Requests of the [done] action (the one just answered,
+   * whose result came from the backend) are kept as they are, like the marker sent after a key.
+   */
+  private fun replay(earlier: List<Pending>, resend: Boolean, done: Action?) {
+    var index = 0
+    while (index < earlier.size) {
+      val first = earlier[index]
+      val action = first.action
+      if (action == null || action === done) {
+        // Undo/redo, or the rest of the answered action: nothing local to redo.
+        first.undoState = snapshot()
+        if (resend) {
+          first.requestId = send(first.request)
+          first.sentAfter = applied
+        }
+        pending.addLast(first)
+        index++
+        continue
+      }
+      val group = earlier.drop(index).takeWhile { it.action === action }
+      index += group.size
+      replayed = ArrayDeque(group)
+      resendReplayed = resend
+      currentAction = action
+      try {
+        action.run()
+      } finally {
+        currentAction = null
+      }
+      // Requests the replay didn't make again (Backspace at the start of the text, …): still sent,
+      // so the backend answers them; nothing local is expected of them now.
+      for (left in replayed.orEmpty()) {
+        left.speculative = EMPTY_PATCH
+        left.edit = null
+        left.undoState = snapshot()
+        if (resend) {
+          left.requestId = send(left.request)
+          left.sentAfter = applied
+        }
+        pending.addLast(left)
+      }
+      replayed = null
+    }
+  }
 
   private fun replacedRange(): Pair<Int, String> =
     if (selectionStart != selectionEnd)
@@ -712,14 +822,41 @@ class EditSession(
   }
 
   private fun submit(request: RdRequest, patch: RdPatch, before: Snapshot, edit: TextEdit?) {
+    val again = replayed?.removeFirstOrNull()
+    if (again != null) {
+      again.request = request
+      again.speculative = patch
+      again.undoState = before
+      again.edit = edit
+      if (resendReplayed) {
+        again.requestId = send(request)
+        again.sentAfter = applied
+      }
+      pending.addLast(again)
+      debug { "replayed #${again.requestId} ${describe(patch)}" }
+      return
+    }
     val requestId = send(request)
     debug {
       "send #$requestId ${request::class.simpleName} ${describe(patch)} -> text ${text.length} chars, caret $caret ($selectionStart..$selectionEnd)"
     }
-    pending.addLast(Pending(requestId, request, patch, before, edit))
+    pending.addLast(Pending(requestId, request, patch, before, edit, currentAction, applied))
   }
 
+  /**
+   * A patch for the log: the editor's caret version and the document's value it expects and leaves,
+   * ours now, then its items. Example: `expects [3, 1] leaves [5, 2] ours 7/3 [caret(159), …]`.
+   */
   private fun describe(patch: RdPatch) =
+    "expects ${versionNumbers(patch.expectedItemVersions)} leaves ${versionNumbers(patch.updatedItemVersions)} " +
+      "ours ${editorVersion.caretModelVersion}/${documentVersion.value} ${describeItems(patch)}"
+
+  private fun versionNumbers(versions: List<RdPatchItemVersion>) = versions.mapNotNull {
+    (it as? RdPatchEditorVersion)?.version?.caretModelVersion
+      ?: (it as? RdPatchDocumentVersion)?.version?.value
+  }
+
+  private fun describeItems(patch: RdPatch) =
     patch.changes.mapNotNull { item ->
       when (item) {
         is RdDocumentChange ->
@@ -737,9 +874,7 @@ class EditSession(
     if (DEBUG) println("[edit] ${message()}")
   }
 
-  /**
-   * Undoes all pending local edits (newest first) and follows the backend's answers from here on.
-   */
+  /** Undoes all pending local edits (newest first); [pending] itself is left as it is. */
   private fun rollBackPending() {
     val oldest = pending.firstOrNull() ?: return
     // Tell the highlight bookkeeping how the text moves back, newest edit first.
@@ -747,13 +882,40 @@ class EditSession(
       changed(TextEdit(it.offset, it.insertedLength, it.removedLength))
     }
     restore(oldest.undoState)
-    followingBackend = true
   }
 
-  private fun apply(patch: RdPatch) {
+  /**
+   * Applies a backend patch like JetBrains Client (`applyBackendChangesOnly`): our versions must
+   * equal its expected ones before and its updated ones after, computed here item by item. False
+   * when they don't: IDEate and the backend are out of step.
+   */
+  private fun applyChecked(patch: RdPatch): Boolean {
+    if (!versionsMatch(patch.expectedItemVersions, "expected")) return false
     for (item in patch.changes) applyItem(item)
-    takeVersions(patch)
     changed(null)
+    return versionsMatch(patch.updatedItemVersions, "updated")
+  }
+
+  /**
+   * Whether our document and editor versions are [versions] (only the entries for this editor and
+   * its document). Not checked before the first version came (opening the file).
+   */
+  private fun versionsMatch(versions: List<RdPatchItemVersion>, what: String): Boolean {
+    for (version in versions) {
+      val (ours, theirs) =
+        when {
+          version is RdPatchDocumentVersion && version.id == identity.documentId ->
+            documentVersion.takeIf { it.value >= 0 } to version.version
+          version is RdPatchEditorVersion && version.id == identity.editorId ->
+            editorVersion.takeIf { it.caretModelVersion >= 0 } to version.version
+          else -> null to null
+        }
+      if (ours != null && ours != theirs) {
+        println("[edit] $what version: ours $ours, backend's $theirs")
+        return false
+      }
+    }
+    return true
   }
 
   private fun applyItem(item: RdPatchItem) {
@@ -786,6 +948,14 @@ class EditSession(
             selectionStart = primary.selection.start.offset
             selectionEnd = primary.selection.end.offset
           }
+          // One step per caret item, as both sides count (docs/edit-protocol-backend.md 4.2).
+          if (state != null)
+            editorVersion =
+              RdEditorVersion(
+                editorVersion.caretModelVersion + 1,
+                state.documentVersion.hash,
+                caretHash(),
+              )
         }
       is RdStackSizeItem ->
         if (item.fileId == null) {
@@ -801,7 +971,12 @@ class EditSession(
 
   /** The backend's versions win over our own computation. */
   private fun takeVersions(patch: RdPatch) {
-    for (version in patch.updatedItemVersions) {
+    takeVersions(patch.updatedItemVersions)
+    for (item in patch.changes) if (item is RdStackSizeItem) applyItem(item)
+  }
+
+  private fun takeVersions(versions: List<RdPatchItemVersion>) {
+    for (version in versions) {
       when {
         version is RdPatchEditorVersion && version.id == identity.editorId ->
           editorVersion = version.version
@@ -809,7 +984,6 @@ class EditSession(
           documentVersion = version.version
       }
     }
-    for (item in patch.changes) if (item is RdStackSizeItem) applyItem(item)
   }
 
   /** Same document changes and same final caret: the backend did exactly what we did locally. */

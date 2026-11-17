@@ -4,6 +4,8 @@ Legend: **[Seen]** = read in decompiled client code or verified against `capture
 Code read: `intellij.rd.client.jar` (`com.jetbrains.rdclient.*`), `intellij.rd.platform.jar` (`com.jetbrains.rd.ide.*`, `com.jetbrains.rd.platform.undo.RdCmdModelSupport`), `intellij.libraries.rd.core.jar` (`IncrementalHashKt`), `intellij.rd.ide.model.generated.jar` (field lists). Decompiled sources are not in the repo.
 All hash numbers below were recomputed in Python and match the trace exactly.
 
+> **2026-11-18:** the full code of both sides is now read: [`edit-protocol-client.md`](edit-protocol-client.md) (JetBrains Client, `FrontendAsyncRequestExecutorNew`) and [`edit-protocol-backend.md`](edit-protocol-backend.md) (backend). They correct sections 5 to 9 in 36 places (each listed in their section 8). The main ones: only `RdApplyPatchRequest` (caret moves) is checked against `expectedItemVersions`; typed keys and editor actions run at the backend's own caret, and editor actions check their timestamps instead. A request with an older retry timestamp is dropped without an answer. `RdFailureResponse` does not start a recovery. A retry has a limit of one resend. The initial editor version is `(-1, 0, -1)`, and request ids start at 0. What IDEate does with all this is in section 12.
+
 ## 0. Summary of the model
 
 * Everything goes over one signal: `DocumentsOperationModel.requestResponseModel.requestsWithTime` (client to backend) / `responsesWithTime` (backend to client). Backend-originated changes use `backendPatches`. [Seen]
@@ -406,3 +408,31 @@ Limits:
   pasted the clipboard (`Main.java`) through the backend's paste (2026-11-17). Copy and Cut are wired the same
   way. Select all (`android.R.id.selectAll`) selects the whole document, caret at the end (not tried on a
   device).
+
+## 12. IDEate's edit queue (2026-11-18)
+
+`EditSession` follows JetBrains Client's `FrontendAsyncRequestExecutorNew` and `SpeculativeQueueProcessor` (ideate-editor, after the phone report "every edit refused after a reconnect").
+
+| | JetBrains Client | IDEate before | IDEate now |
+|---|---|---|---|
+| Answer like the guess | complete; record the backend's versions as known, keep the local ones | took the answer's versions as its own, even with later edits pending: **its versions went back a few steps**, and the next caret move or action was refused | the same as JetBrains Client: the answer's versions are taken only when nothing later is pending |
+| Answer unlike the guess | rebase: undo pending edits, apply the answer (versions checked before and after), run the pending actions again | undid pending edits, then took the backend's answers for them one by one and **ignored typing** until they were all in | rebase like JetBrains Client. Each pending request remembers its action (key, Backspace, caret move, …) and runs it again on the new text |
+| Backend patch while edits are pending | rebase | undo pending edits, apply, follow | rebase |
+| Version check | before and after applying any backend patch; a mismatch starts recovery | none | the same; a mismatch calls `ClientSession.recoverEditors` |
+| `RdRetryResponse` | resend **every** pending request once with the new timestamp; a second retry of the same request drops it (rollback, replay the rest, resend them) | resent the refused request and later ones | the same as JetBrains Client. Other editors' pending requests go again too, since the backend drops them as well |
+| `RdFailureResponse` / `RdNoEditorFoundResponse` | an answer without a patch: that edit is undone, the rest replayed | undid all pending edits | the same as JetBrains Client |
+| Recovery | modal progress; fail pending; generation + 1; `dropAllRequests`; `getEditorStates`; apply | (since b886130) on a second retry | on a version mismatch or an answer out of order. Typing is ignored until the state arrives, as in JetBrains Client |
+| Undo | undone locally first (`FrontendUndoManager`); stack sizes after the undo | no local change; sizes before the undo (the backend logged "stack size … not match" every time) | no local change (IDEate has no undo history); sizes as expected after the undo: undo stacks − 1, redo stacks + 1 |
+
+Checked on the emulator against the Mac backend (2026-11-18), typing fast with `adb shell input text`:
+- `int x = (1+(2*3));`, `foo("ab", [1]);`, `if (x>1) {`, with Enter between: 101 answers, 1 unlike the guess, no retry, no recovery.
+- `y=(2);`: `(` came back as `()`, and `2` was replayed inside. `)` came back as a caret step over the closing bracket, and `;` was replayed after it. 51 answers, 2 unlike the guess.
+- After each run, reconnecting gave the same text as IDEate showed.
+
+Not done:
+- Local undo (JetBrains Client's speculative undo).
+- The "equivalent" answer case. JetBrains Client keeps the text and only re-derives versions; IDEate treats it as a different answer and rebases. That takes more work but gives the same text.
+- More than one caret.
+
+Tests: `EditRetryTest`. A small model of the backend builds answers with the backend's version rules (a caret snapshot before and after each change, one editor step per caret item).
+

@@ -18,6 +18,8 @@ docs/           all documentation (below)
 | [`android-app.md`](docs/android-app.md) | build, install and run the Android app |
 | [`split-protocol.md`](docs/split-protocol.md) | how JetBrains Client talks to the backend, and running rd on Android |
 | [`edit-protocol.md`](docs/edit-protocol.md) | the editing messages in detail |
+| [`edit-protocol-client.md`](docs/edit-protocol-client.md) | how JetBrains Client sends edits, guesses their result, rebases on the backend's answers, retries and recovers (decompiled) |
+| [`edit-protocol-backend.md`](docs/edit-protocol-backend.md) | how the backend runs, checks and answers edit requests: version checks, retry and silent-drop rules, offset shifting, response contents (decompiled) |
 | [`completion-protocol.md`](docs/completion-protocol.md) | code completion over Fleet RPC |
 | [`structure-protocol.md`](docs/structure-protocol.md) | the Structure tool window over rd (`CodeStructureTreeModel`), and the Fleet RPC `StructureTreeApi` the Ctrl+F12 popup uses |
 | [`tool-windows.md`](docs/tool-windows.md) | which tool windows the backend has (`ToolWindowModel`), how the bar orders them and what goes under ⋯; the Project view's panes (Project, Packages, scopes) and the BeTreeGrid the backend draws them with |
