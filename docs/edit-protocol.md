@@ -306,7 +306,10 @@ Paste as Plain Text is the same flow with the action `EditorPasteSimple` (`Clien
 from History (`PasteMultiple`) stays greyed out: the backend shows the history in its own popup, which needs the
 actions protocol, not the clipboard model.
 
-### Pasting from the Android soft keyboard (not done)
+### Pasting from the Android soft keyboard
+
+Built 2026-11-17; what was built and what Gboard does is at the end of this section. The design as it was
+planned:
 
 The editor's menu and ⌘V/Ctrl+V paste on Android too. The keyboard's own paste (Gboard's clipboard bar, or a
 long press in the text field) doesn't reach us, because of how the editor talks to the keyboard today
@@ -337,3 +340,50 @@ What it would change for typing: characters would arrive through `commitText` in
 `type()` per character, so the typing protocol stays the same. Autocorrect, if left on, would arrive as
 `deleteSurroundingText` plus `commitText`, so as edits the backend sees as a Backspace and a paste rather than as
 typing.
+
+**Built.** The pieces, with their files:
+
+- **`EditorTextTarget`** (`ui/EditorTextTarget.kt`). `EditorView` implements it with the same edits as its
+  keys and menu: type, Enter, Backspace, Delete, paste a text, paste the clipboard, copy, cut, and the
+  text before and after the caret.
+- **`LocalEditorTextInput`.** It is now `(EditorTextTarget) -> Modifier`: Android supplies `editorTextInput`,
+  the desktop nothing.
+- **The input connection** (`android/…/EditorTextInput.kt`). It asks for
+  `TYPE_CLASS_TEXT | TYPE_TEXT_FLAG_MULTI_LINE | TYPE_TEXT_FLAG_NO_SUGGESTIONS`. It overrides
+  `commitText`, `setComposingText`, `finishComposingText`, `deleteSurroundingText` (Backspace/Delete
+  per character), `performContextMenuAction` (paste, copy, cut), `getTextBeforeCursor`,
+  `getTextAfterCursor` and `getSelectedText`. Key events (Enter, Delete, arrows) still go to the
+  editor's key handler.
+- **`KeyboardText`** (same file as the target, tested in `KeyboardTextTest`). It turns commits and
+  composing text into edits:
+  - one committed character is typed, `\n` is Enter;
+  - longer committed text is pasted;
+  - composing text is typed as it grows and corrected with Backspace;
+  - more than one character added at once is pasted.
+
+**What Gboard does** (Android 14 emulator, a second AVD `Pixel_3a_API_34_runtime`, 2026-11-17, every
+call logged):
+
+- **Composing.** Gboard still composes with `NO_SUGGESTIONS`: `setComposingText("s")`, then `("sy")`. It
+  shows word suggestions too. Typing through composing works: one `type()` per character, and
+  completion pops up as with key events.
+- **Clips.** A clip from the suggestion strip (Gboard offers the last copied text there) does **not**
+  arrive as `commitText`. It arrives as `setComposingText(word + clip)` followed by
+  `finishComposingText()`. That is why "more than one character added at once is pasted" is needed:
+  the clip becomes one paste.
+- **Resumed words.** Gboard resumes the word before the caret without saying so: no `setComposingRegion`.
+  After the editor lost focus and got it back with `sy` before the caret, typing `z` sent
+  `setComposingText("syz")`.
+  - The first build typed all of it again (`sysyz`), and a clip after `a` gave `aaMain.java`.
+  - `KeyboardText` now takes the letters and digits before the caret as already composing when nothing
+    is composing and the new text starts with them. `qwe` + clip gave `qweMain.java`.
+- **Backspace.** Gboard's Backspace on a composing word arrives as a shorter `setComposingText` (a
+  Backspace edit).
+
+Limits:
+- A picked suggestion that changes more than one character is pasted, not typed, so the backend sees it as
+  a paste.
+- The editor doesn't report its caret to the keyboard (`InputMethodManager.updateSelection`). Gboard reads
+  the text before the caret when it needs it.
+- Not tried: other keyboards (SwiftKey, Samsung). Also not tried: a keyboard that sends
+  `performContextMenuAction(paste)`; Gboard's clip went through composing.

@@ -1,6 +1,7 @@
 package intellijandroid.client.android
 
 import android.text.InputType
+import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
@@ -11,28 +12,36 @@ import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.establishTextInputSession
+import intellijandroid.client.ui.EditorTextTarget
+import intellijandroid.client.ui.KeyboardText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
- * Opens the soft keyboard while the editor has focus. The input type is `TYPE_NULL`, so keyboards
- * send plain key events (and [BaseInputConnection] turns committed text into key events), which
- * reach the editor's key handler the same way a hardware keyboard's do. No composing text,
- * suggestions or autocorrect.
+ * Opens the soft keyboard while the editor has focus and connects it to [target] (docs/edit-
+ * protocol.md, "Pasting from the Android soft keyboard"). The editor asks for multi-line text
+ * without suggestions, so keyboards show their clipboard bar and paste button; what they commit
+ * goes through [KeyboardText] (one `type()` per character, longer text pasted). Keys the keyboard
+ * sends as key events (Enter, Delete, arrows) still reach the editor's key handler.
  */
-val editorTextInput: Modifier = Modifier.then(EditorTextInputElement)
+fun editorTextInput(target: EditorTextTarget): Modifier =
+  Modifier.then(EditorTextInputElement(target))
 
-private object EditorTextInputElement : ModifierNodeElement<EditorTextInputNode>() {
-  override fun create() = EditorTextInputNode()
+private class EditorTextInputElement(private val target: EditorTextTarget) :
+  ModifierNodeElement<EditorTextInputNode>() {
+  override fun create() = EditorTextInputNode(target)
 
-  override fun update(node: EditorTextInputNode) = Unit
+  override fun update(node: EditorTextInputNode) {
+    node.target = target
+  }
 
+  // A new target every recomposition is fine: update() hands it to the same node.
   override fun hashCode() = 0
 
-  override fun equals(other: Any?) = other === this
+  override fun equals(other: Any?) = other is EditorTextInputElement
 }
 
-private class EditorTextInputNode :
+private class EditorTextInputNode(var target: EditorTextTarget) :
   Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode {
   private var session: Job? = null
 
@@ -47,10 +56,13 @@ private class EditorTextInputNode :
           startInputMethod(
             object : PlatformTextInputMethodRequest {
               override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
-                outAttributes.inputType = InputType.TYPE_NULL
+                outAttributes.inputType =
+                  InputType.TYPE_CLASS_TEXT or
+                    InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                    InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
                 outAttributes.imeOptions =
                   EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI
-                return BaseInputConnection(inputView, false)
+                return EditorInputConnection(inputView) { target }
               }
             },
           )
@@ -58,4 +70,60 @@ private class EditorTextInputNode :
       }
     }
   }
+}
+
+/**
+ * The keyboard's calls, mapped onto the editor. `fullEditor = false`: the base class keeps no copy
+ * of the text; the text around the caret comes from the editor's document.
+ */
+private class EditorInputConnection(view: View, private val target: () -> EditorTextTarget) :
+  BaseInputConnection(view, false) {
+  private val keyboardText = KeyboardText(target)
+
+  override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
+    keyboardText.commit(text.toString())
+    return true
+  }
+
+  override fun setComposingText(text: CharSequence, newCursorPosition: Int): Boolean {
+    keyboardText.setComposing(text.toString())
+    return true
+  }
+
+  override fun finishComposingText(): Boolean {
+    keyboardText.finishComposing()
+    return true
+  }
+
+  override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+    repeat(beforeLength) { target().backspace() }
+    repeat(afterLength) { target().delete() }
+    return true
+  }
+
+  /** The keyboard's Paste, Copy and Cut buttons (Gboard's clipboard bar, a long press). */
+  override fun performContextMenuAction(id: Int): Boolean =
+    when (id) {
+      android.R.id.paste -> {
+        target().pasteClipboard()
+        true
+      }
+      android.R.id.copy -> {
+        target().copy()
+        true
+      }
+      android.R.id.cut -> {
+        target().cut()
+        true
+      }
+      else -> false
+    }
+
+  override fun getTextBeforeCursor(length: Int, flags: Int): CharSequence =
+    target().textBeforeCaret(length)
+
+  override fun getTextAfterCursor(length: Int, flags: Int): CharSequence =
+    target().textAfterCaret(length)
+
+  override fun getSelectedText(flags: Int): CharSequence? = target().selectedText().ifEmpty { null }
 }

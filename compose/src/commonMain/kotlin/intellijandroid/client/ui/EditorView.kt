@@ -401,6 +401,63 @@ fun EditorView(
     actions.key(EditorKey.BACKSPACE)
   }
 
+  // The soft keyboard's side of the same edits (Android); read at call time, so always current.
+  // The local copy/cut/paste are reached through these, since the object's own members share names.
+  val copySelection = { copy() }
+  val cutSelection = { cut() }
+  val pasteFromClipboard = { paste() }
+  val keyboardTarget =
+    object : EditorTextTarget {
+      override fun type(character: Char) {
+        if (currentFile.editable) actions.type(character)
+      }
+
+      override fun enter() {
+        if (currentFile.editable) actions.key(EditorKey.ENTER)
+      }
+
+      override fun backspace() {
+        if (currentFile.editable) actions.key(EditorKey.BACKSPACE)
+      }
+
+      override fun delete() {
+        if (currentFile.editable) actions.key(EditorKey.DELETE)
+      }
+
+      override fun paste(text: String) {
+        if (currentFile.editable && text.isNotEmpty()) actions.paste(text)
+      }
+
+      override fun pasteClipboard() {
+        if (currentFile.editable) pasteFromClipboard()
+      }
+
+      override fun copy() = copySelection()
+
+      override fun cut() {
+        if (currentFile.editable) cutSelection()
+      }
+
+      override fun textBeforeCaret(count: Int): String {
+        val caretNow = currentFile.caret
+        return currentFile.text.substring(maxOf(0, caretNow - count), caretNow)
+      }
+
+      override fun textAfterCaret(count: Int): String {
+        val caretNow = currentFile.caret
+        return currentFile.text.substring(
+          caretNow,
+          minOf(currentFile.text.length, caretNow + count),
+        )
+      }
+
+      override fun selectedText(): String {
+        val start = minOf(currentFile.selectionStart, currentFile.selectionEnd)
+        val end = maxOf(currentFile.selectionStart, currentFile.selectionEnd)
+        return currentFile.text.substring(start, end)
+      }
+    }
+
   fun onKey(event: KeyEvent): Boolean {
     val key = event.key
     val shift = event.isShiftPressed
@@ -647,7 +704,7 @@ fun EditorView(
           }
           .focusRequester(focusRequester)
           .onFocusChanged { focused = it.hasFocus }
-          .then(LocalEditorTextInput.current)
+          .then(LocalEditorTextInput.current(keyboardTarget))
           .focusable()
           .onPreviewKeyEvent { event -> event.type == KeyEventType.KeyDown && onKey(event) }
           .pointerInput(file.path, metrics) {

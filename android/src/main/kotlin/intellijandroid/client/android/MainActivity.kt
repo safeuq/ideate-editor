@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
       CompositionLocalProvider(
         LocalClientFonts provides fonts,
         LocalIcons provides icons,
-        LocalEditorTextInput provides editorTextInput,
+        LocalEditorTextInput provides ::editorTextInput,
       ) {
         IdeateApp(controller, fonts, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
       }
