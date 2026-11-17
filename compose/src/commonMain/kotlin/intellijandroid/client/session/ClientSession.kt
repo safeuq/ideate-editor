@@ -152,6 +152,7 @@ class ClientSession(
   private var requestResponse: RequestResponseModel? = null
   private var actionMenus: ActionMenus? = null
   private var luxDialogs: LuxDialogs? = null
+  private var backendPopups: BackendPopups? = null
   private val menuSerials = AtomicInteger()
   private var selectedEditorId: RdFileEditorId? = null
 
@@ -329,6 +330,18 @@ class ClientSession(
     luxDialogs?.send(dialogId, event)
   }
 
+  /** The user typed [text] into a backend popup's [field]. */
+  fun popupType(field: PopupTextField, text: String) {
+    field.text = text // at once, so the text field doesn't lag behind the keyboard
+    onRd { backendPopups?.type(field, text) }
+  }
+
+  /** Enter in backend popup [popup]. */
+  fun popupEnter(popup: BackendPopup) = onRd { backendPopups?.enter(popup) }
+
+  /** Escape, Back or a tap outside backend popup [popup]. */
+  fun popupCancel(popup: BackendPopup) = onRd { backendPopups?.cancel(popup) }
+
   /**
    * A right click on Project view node [nodeId]: the backend's `ProjectViewPopupMenu` for it, in
    * [SessionState.contextMenu]. The backend finds the node's file or folder from the node id.
@@ -437,6 +450,11 @@ class ClientSession(
     luxDialogs =
       LuxDialogs(lifetime, protocol, ::log) { dialogs ->
           mutableState.update { it.copy(luxDialogs = dialogs) }
+        }
+        .also { it.bind() }
+    backendPopups =
+      BackendPopups(lifetime, protocol, ::log) { popups ->
+          mutableState.update { it.copy(backendPopups = popups) }
         }
         .also { it.bind() }
     val registry = DefaultRegistryModel()

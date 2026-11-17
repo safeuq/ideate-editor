@@ -43,6 +43,15 @@ object ThemeKeys {
       "ComboBox.ArrowButton.nonEditableBackground" to IslandsDark.popupBackground,
       "ComboBox.ArrowButton.background" to IslandsDark.islandBackground, // control-bg
       "Separator.separatorColor" to IslandsDark.popupBorder,
+      // The hint under a field with a problem, e.g. New ▸ File's "already exists" (ManyIslandsDark:
+      // feedback-error-bg = red-40, feedback-error-border = red-60, warnings yellow-40 /
+      // yellow-60).
+      "ValidationTooltip.errorBackground" to Color(0xFF56272B),
+      "ValidationTooltip.errorBackgroundColor" to Color(0xFF56272B),
+      "ValidationTooltip.errorBorderColor" to Color(0xFF80383E),
+      "ValidationTooltip.warningBackground" to Color(0xFF44321D),
+      "ValidationTooltip.warningBackgroundColor" to Color(0xFF44321D),
+      "ValidationTooltip.warningBorderColor" to Color(0xFF694820),
       // Darcula's AWT system color; Islands Dark doesn't set it. Lux sends it as the clear color.
       "control" to Color(0xFF3C3F41),
     )

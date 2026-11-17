@@ -378,11 +378,11 @@ platform's `pngDecoder` (set at startup: Skia on the desktop, `BitmapFactory` on
     closes its own dialog, and the window goes when `components` drops it.
 - **Un-greyed:** the dialog actions in `ActionMenus` (Rename, Delete, Reformat Code, Optimize Imports,
   Module Settings, …). Still greyed: what opens a popup, frame or tool window (Find Usages, Find/Replace
-  in Files, Show History, Compare, Go To, Analyze, Run), and New.
+  in Files, Show History, Compare, Go To, Analyze, Run). New is un-greyed in section 10.
 
 **New ▸ File, Java Class, …** don't use Lux. Their name popup arrives as
 `uiAutomationInteractionModel.activePopups[1] = BeAbstractPopup`, the semantic BeControl popup route, and
-`NewFile` returns at once (the popup isn't modal). So New stays greyed until that route is supported.
+`NewFile` returns at once (the popup isn't modal). IDEate shows them since section 10.
 
 **Tested** against the isolated Mac backend:
 
@@ -435,3 +435,37 @@ sends it `Closing` and Escape.
 
 Checked on the emulator: the list opens under the combo; a tap on "Open Files" sets Scope to it; Cancel
 still closes the dialog and nothing is renamed.
+
+## 10. Backend BeControl popups: New ▸ File and Directory (2026-11-17)
+
+New ▸ File, Directory and the other name popups now show (`session/BackendPopups.kt`, `ui/popup/BackendPopupView.kt`), and New is no longer greyed. One popup arrives like this (recorded with New ▸ File on `empty/`):
+
+```
+activePopups[1] = BeAbstractPopup(
+  title   = BeLabel("New File"),
+  content = DefaultPopupContent(BeStyleControl(margin bottom 8 →
+              BeBehaviorControl(behavior = [BeShortcutListener(["pressed ENTER"])] →
+                BeTextBox(text = "", placeholder = "Name")))),
+  settings = (isFocused = true, closeOnEnter = false, cancelKeyEnabled = true, cancelOnClickOutside = true, modality = MODAL),
+  context  = BePopupPositionActiveWindow(position = TOP))
+```
+
+| Step | Client does (as JetBrains Client's `PopupViewControl`) |
+|---|---|
+| `loaded` fires | read the tree then: the Enter listener is added between the popup appearing and `loaded` (reading on add found `behavior = []`) |
+| typing | `BeTextBox.text.set(...)` on every change |
+| Enter | fire each `pressed ENTER` listener's `reaction` with `BeEmptyData()`; the backend creates the file and sets `result = CLOSE` |
+| Escape, Back, a tap outside | `result = CANCEL`, then `CLOSE` |
+
+**The "already exists" hint is a second popup with Lux inside.** Enter on a name that exists opens `activePopups[2]` with `isFocused = false` and content `BeneluxView(luxId = 10)`: a BeControl that only names an `LxPanel` the backend paints. JetBrains Client hosts it in `BeneluxViewControl` (`intellij.platform.frontend.split.jar`, `com.jetbrains.thinclient.unattendedHost`). The panel draws only after the client does the same handshake as for a Lux window:
+
+| Panel property | Set to |
+|---|---|
+| `graphicsConfiguration` | IDEate's one screen (`LuxDialogs.CONFIGURATION`) |
+| `position` | `(0, 0)` |
+| `visible` | `true` |
+| `size` | each `preferredSize` the backend sends, e.g. `291 × 25`, even though `layoutSource` is `Backend` (the client sets it unconditionally) |
+
+Its colors are `ValidationTooltip.errorBackground` / `errorBorderColor`, which `ThemeKeys` now resolves as Islands Dark does (`#56272B` / `#80383E`; without them the painter used the light fallback, a pale pink). IDEate shows the hint under the name popup, and cancelling the name popup cancels the hint too (the backend doesn't close it on its own).
+
+**Tested** on the emulator against the isolated Mac backend: New ▸ File `notes.txt` and New ▸ Directory `docs` in `empty/` created both; a second `notes.txt` showed "A file with the name 'notes.txt' already exists"; one Back (after the keyboard closed) cancelled both popups. The field takes focus, so the soft keyboard opens.

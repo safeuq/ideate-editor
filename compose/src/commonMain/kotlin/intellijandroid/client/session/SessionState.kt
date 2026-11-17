@@ -147,6 +147,8 @@ data class SessionState(
   val contextMenu: BackendMenu? = null,
   /** The backend's open dialogs over Lux (LuxDialogs), oldest first. */
   val luxDialogs: List<LuxDialog> = emptyList(),
+  /** The backend's open BeControl popups (BackendPopups), e.g. New ▸ File's name popup. */
+  val backendPopups: List<BackendPopup> = emptyList(),
 )
 
 /** Context menu number [serial]; [entries] null until the backend has answered ("Loading…"). */

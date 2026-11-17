@@ -211,10 +211,6 @@ internal class ActionMenus(
     /** Groups whose items open what IDEate doesn't show yet. */
     val UNSHOWN_GROUPS =
       setOf(
-        // New ▸ File, Java Class, …: the name popup comes as a BeControl popup
-        // (uiAutomationInteractionModel.activePopups), not over Lux (docs/lux-protocol.md).
-        "WeighingNewGroup",
-        "NewGroup",
         // The editor's menu: Go To and Diagrams open popups, Analyze fills tool windows, Run and
         // Debug run the program with its output in a backend tool window, and Folding changes
         // folds IDEate doesn't draw yet.

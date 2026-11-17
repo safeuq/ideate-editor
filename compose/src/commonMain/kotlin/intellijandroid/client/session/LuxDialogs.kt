@@ -161,14 +161,14 @@ internal class LuxDialogs(
     components[id]?.events?.fire(event)
   }
 
-  private companion object {
+  internal companion object {
     private val IDENTITY = LxAffineTransform(doubleArrayOf(1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
 
     /**
      * One screen at scale 1, so a backend pixel is a dp. Its size only bounds where the backend
      * places windows; IDEate centres its dialogs itself.
      */
-    private val CONFIGURATION =
+    internal val CONFIGURATION =
       RemoteGraphicsConfigurationModel("ideate", LxRect(0, 0, 1920, 1200), IDENTITY, IDENTITY)
     private const val DEVICE = "ideate"
   }

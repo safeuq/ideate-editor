@@ -233,6 +233,8 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 3.dp),
       )
     }
+    // Over everything: the backend's BeControl popups (New ▸ File's name).
+    intellijandroid.client.ui.popup.BackendPopups(state.backendPopups, session)
   }
 }
 
