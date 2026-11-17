@@ -465,6 +465,22 @@ folders would reach the IntelliJ the user has open. The test added a wrapper "ID
 for the test only from `userProvidedDist/`. IDEate lists it like any IDE; it was chosen in Choose IDE and Project.
 A recent-project row reuses the IDE path from its status file (the real IntelliJ), so the test didn't open rows.
 
+### The same from Android (2026-11-17)
+
+Repeated from the Pixel 3a emulator (API 34) at c54ac36, against the same Mac at
+`safeuq@10.0.2.2:22` (the emulator's address for the host):
+
+| Step | Android part it exercised | Result |
+|---|---|---|
+| Connect to SSH | IDEate key generated and kept by `AndroidSecretStore` (Keystore AES-GCM): `ssh-ed25519 AAAAC3…Xe8r IDEate on sdk_gphone64_arm64` | key shown in the dialog; added to the Mac's `authorized_keys` for the test only |
+| Host key question | the message dialog on a phone screen | same fingerprint as on the desktop, `SHA256:1cqIIjvM…` |
+| Log-in and probe | the full BouncyCastle swapped in as "BC" | logged in; both IDEs and the recent project listed |
+| Start IDE and Connect | launch, status polling, local port forward on the phone | the isolated backend started (5991) and the project opened in the portrait layout |
+
+Test hygiene: every backend run, the isolated ones too, writes status files into the user's
+`~/Library/Caches/JetBrains/RemoteDev/recent/`. Their rows then name the user's real IntelliJ for a
+scratchpad project, so they are deleted after each test (`grep -l /private/tmp/claude-501/ recent/*`).
+
 ## Open questions
 
 - Where the `recents.json` that `remove-recent-project` deletes lives: not under `RemoteDev/` on the phone or the
