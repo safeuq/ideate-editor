@@ -2,7 +2,6 @@ package intellijandroid.client.connect
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,9 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -43,11 +39,16 @@ import androidx.compose.ui.window.PopupProperties
 import intellijandroid.client.ui.ContextMenuArea
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.MenuItem
+import intellijandroid.client.ui.component.IconButton
+import intellijandroid.client.ui.component.Menu
 import intellijandroid.client.ui.component.OutlinedButton
+import intellijandroid.client.ui.component.SearchTextField
 import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.dialog.MessageKind
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
+import intellijandroid.client.ui.theme.h3
+import intellijandroid.client.ui.theme.label
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -502,31 +503,20 @@ internal fun Header(title: String, styles: ConnectStyles, trailing: @Composable 
   Box(Modifier.fillMaxWidth().height(1.dp).background(Gateway.divider))
 }
 
+/**
+ * The search field over Gateway's project list: IntelliJ's welcome screen puts a [SearchTextField]
+ * there with its border emptied (`RecentProjectFilteringTree.installSearchField`), and a separator
+ * under it. [styles] is unused now; kept so SshPage's call stays the same.
+ */
 @Composable
 internal fun SearchRow(value: String, onChange: (String) -> Unit, styles: ConnectStyles) {
-  val icon = LocalIcons.current.painter("expui/inline/searchHistory.svg")
   Row(
-    Modifier.fillMaxWidth().height(Gateway.searchHeight).padding(start = Gateway.searchIconInset),
+    Modifier.fillMaxWidth()
+      .height(Gateway.searchHeight)
+      .padding(start = Gateway.searchIconInset, end = Gateway.contentInset),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    icon?.let {
-      Image(
-        it,
-        contentDescription = "Search",
-        modifier = Modifier.size(width = 22.dp, height = 16.dp),
-      )
-    }
-    Box(Modifier.weight(1f).padding(start = 3.dp, end = Gateway.contentInset)) {
-      if (value.isEmpty()) BasicText("Search", style = styles.secondary)
-      BasicTextField(
-        value,
-        onChange,
-        singleLine = true,
-        textStyle = styles.body,
-        cursorBrush = SolidColor(IslandsDark.text),
-        modifier = Modifier.fillMaxWidth(),
-      )
-    }
+    SearchTextField(value, onChange, history = true, undecorated = true)
   }
   Box(Modifier.fillMaxWidth().height(1.dp).background(Gateway.divider))
 }
@@ -574,11 +564,11 @@ internal fun HostGroup(
               ),
         )
       }
-      icons.forEach { icon -> IconButton(icon.path, icon.description, icon.onClick) }
+      icons.forEach { icon -> RowIconButton(icon.path, icon.description, icon.onClick) }
       if (menu.isNotEmpty()) {
         Box {
-          IconButton("expui/general/settings.svg", "Host Settings") { menuOpen = true }
-          if (menuOpen) ProjectMenu(onDismiss = { menuOpen = false }, items = menu, styles)
+          RowIconButton("expui/general/settings.svg", "Host Settings") { menuOpen = true }
+          if (menuOpen) ProjectMenu(onDismiss = { menuOpen = false }, items = menu)
         }
       }
     }
@@ -634,11 +624,11 @@ internal fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
           BasicText(status, style = statusStyle, maxLines = 1)
         }
       }
-      row.onStop?.let { stop -> IconButton("expui/run/stop.svg", "Stop", stop) }
+      row.onStop?.let { stop -> RowIconButton("expui/run/stop.svg", "Stop", stop) }
       if (row.onRemove != null && row.enabled) {
         Box {
-          IconButton("expui/general/moreVertical.svg", "More") { menuOpen = true }
-          if (menuOpen) ProjectMenu(onDismiss = { menuOpen = false }, items = menu, styles)
+          RowIconButton("expui/general/moreVertical.svg", "More") { menuOpen = true }
+          if (menuOpen) ProjectMenu(onDismiss = { menuOpen = false }, items = menu)
         }
       }
     }
@@ -658,58 +648,35 @@ private fun projectMenu(row: ProjectRow): List<MenuItem> = buildList {
 }
 
 /**
- * Gateway's ⋮ and gear popup, in its measured look; the items are the same ones the right-click /
- * long-press menu shows ([projectMenu], the SSH host menu). Greyed-out items can't be clicked.
+ * Gateway's ⋮ and gear popup, IntelliJ's popup menu ([Menu]); the items are the same ones the
+ * right-click / long-press menu shows ([projectMenu], the SSH host menu). Greyed-out items can't be
+ * clicked.
  */
 @Composable
-private fun ProjectMenu(onDismiss: () -> Unit, items: List<MenuItem>, styles: ConnectStyles) {
+private fun ProjectMenu(onDismiss: () -> Unit, items: List<MenuItem>) {
   Popup(
     alignment = Alignment.TopEnd,
     offset = IntOffset(0, with(LocalDensity.current) { 28.dp.roundToPx() }),
     onDismissRequest = onDismiss,
     properties = PopupProperties(focusable = true),
   ) {
-    Column(
-      Modifier.width(Gateway.menuWidth)
-        .background(Gateway.menuBackground, Gateway.menuShape)
-        .border(1.dp, Gateway.menuBorder, Gateway.menuShape)
-        .padding(vertical = 6.dp),
-    ) {
-      items.forEach { item ->
-        Box(
-          Modifier.fillMaxWidth()
-            .height(Gateway.menuRowHeight)
-            .padding(horizontal = 8.dp)
-            .clickable(enabled = item.enabled) {
-              onDismiss()
-              item.onClick()
-            }
-            .padding(start = 12.dp),
-          contentAlignment = Alignment.CenterStart,
-        ) {
-          BasicText(
-            item.label,
-            style =
-              if (item.enabled) styles.body else styles.body.copy(color = Gateway.disabledText),
-          )
-        }
-      }
-    }
+    Menu({ items }, rowHeight = Gateway.menuRowHeight, close = onDismiss)
   }
 }
 
+/**
+ * A trailing row icon (Reconnect, Open Project, Stop, ⋮): IntelliJ's action button, one every 25.5.
+ */
 @Composable
-internal fun IconButton(path: String, description: String, onClick: () -> Unit) {
-  val icon = LocalIcons.current.painter(path) ?: return
+private fun RowIconButton(path: String, description: String, onClick: () -> Unit) {
   Box(
-    Modifier.size(width = Gateway.iconStep, height = 28.dp).clickable(onClick = onClick),
+    Modifier.size(width = Gateway.iconStep, height = 28.dp),
     contentAlignment = Alignment.Center,
   ) {
-    Image(icon, contentDescription = description, modifier = Modifier.size(16.dp))
+    IconButton(path, description, onClick)
   }
 }
 
-/** A bordered text field, for the join link and the file to open. */
 /**
  * `/data/data/com.termux/files/home/intellij/smoke` → `~/intellij/smoke`: the full path doesn't fit
  * a phone.
@@ -748,27 +715,32 @@ internal fun lastActive(
   }
 }
 
-/** [twoLineRows]: the status goes under the path, for narrow screens. */
+/**
+ * The connect screen's text, in JBFont sizes (ui/theme/Typography.kt). [twoLineRows]: the status
+ * goes under the path, for narrow screens.
+ */
 internal class ConnectStyles(fonts: ClientFonts, val twoLineRows: Boolean) {
-  val body =
-    TextStyle(
-      color = IslandsDark.text,
-      fontFamily = fonts.ui,
-      fontSize = IslandsDark.UI_FONT_SIZE.sp,
-    )
-  val secondary = body.copy(color = IslandsDark.textSecondary)
+  val body = fonts.label()
+  val secondary = fonts.label(IslandsDark.textSecondary)
   val sidebarItem = body
-  val title = body.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-  val host = body.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+  // JBFont.h3() (label + 3 = 16); semi-bold as measured on Gateway's page titles.
+  val title = fonts.h3().copy(fontWeight = FontWeight.SemiBold)
+  // Measured on Gateway's host names: 15 semi-bold, between JBFont.h4 (14 bold) and h3.
+  val host = fonts.label().copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
 }
 
-/** Measured on Gateway 2026.3's welcome window and its ⋮ menu (2x screenshots), in dp = pt. */
+/**
+ * Gateway 2026.3's welcome window: sizes measured on 2x screenshots (dp = pt); colors from the
+ * Islands Dark theme keys where one exists (docs/ui-components.md).
+ */
 internal object Gateway {
-  val background = Color(0xFF1C1D20)
-  val divider = Color(0xFF2B2D30)
+  // WelcomeScreen.Details.background, SidePanel.background = dialog-bg = layer-0-bg
+  val background = IslandsDark.islandBackground
+  // WelcomeScreen.separatorColor, rewritten by *.separatorColor = popup-border
+  val divider = IslandsDark.popupBorder
   val selection = IslandsDark.selectionBackground // selected sidebar row, full width, square
-  val running = Color(0xFF6AAB73)
-  val error = Color(0xFFDB5C5C) // Label.errorForeground: Red7, "Host unreachable"
+  val running = IslandsDark.textSuccess // a running backend
+  val error = IslandsDark.textError // "Host unreachable"
   val disabledText = IslandsDark.textDisabled // an unreachable host's paths
   val sidebarWidth = 224.dp
   val tabBarHeight = 40.dp // portrait: like the main window's tool window bar
@@ -788,11 +760,5 @@ internal object Gateway {
   val projectRowHeight = 39.dp
   val iconStep = 25.5.dp // trailing icons, one every 25.5 pt
   val iconColumnEndInset = 32.dp // last icon centred 44.5 pt from the right
-  val buttonBorder = IslandsDark.controlBorder
-  val buttonShape = RoundedCornerShape(4.dp)
-  val menuWidth = 237.dp
-  val menuRowHeight = 24.dp
-  val menuBackground = IslandsDark.popupBackground
-  val menuBorder = IslandsDark.popupBorder
-  val menuShape = RoundedCornerShape(8.dp)
+  val menuRowHeight = 24.dp // pointer rows, as the context menu's
 }

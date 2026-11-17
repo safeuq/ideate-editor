@@ -31,6 +31,7 @@ import intellijandroid.client.ui.component.IndeterminateHorizontalProgressBar
 import intellijandroid.client.ui.component.Menu
 import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.component.RadioButtonRow
+import intellijandroid.client.ui.component.SearchTextField
 import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.component.popupContainer
 import intellijandroid.client.ui.dialog.DialogAction
@@ -142,6 +143,15 @@ private fun Gallery() {
           TextField("secret", {}, Modifier.width(200.dp), secret = true)
           TextField("line 1\nline 2\nline 3", {}, Modifier.width(200.dp), singleLine = false)
         }
+      }
+    }
+    Section(
+      "SearchTextField.kt: empty, with text (clear icon), welcome screen's (history, undecorated)",
+    ) {
+      Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        SearchTextField("", {}, Modifier.width(200.dp))
+        SearchTextField("smoke", {}, Modifier.width(200.dp))
+        SearchTextField("", {}, Modifier.width(200.dp), history = true, undecorated = true)
       }
     }
     Section("IconButton.kt: 22 dp, selected (a toggle that is on), main toolbar size") {

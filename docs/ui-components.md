@@ -154,13 +154,13 @@ the desktop app and the emulator before it's pushed.
 | Step | What | Who | Status |
 |---|---|---|---|
 | 1 | `theme/IslandsDark.kt` (moved) with semantic colors, `theme/Typography.kt`; per-file colors switch to theme values | me | done (see below) |
-| 2 | `component/Button.kt`: both `DialogButton`s (now one, in MessageDialog.kt), `OutlinedButton`, StartProgress's Cancel | UI session | done, except StartProgress's Cancel (its file is yours: use `OutlinedButton`) |
+| 2 | `component/Button.kt`: both `DialogButton`s (now one, in MessageDialog.kt), `OutlinedButton`, StartProgress's Cancel | UI session (StartProgress's Cancel: me, in step 7) | done |
 | 3 | `component/TextField.kt`: `InputField`, `Field`, the FolderChooser path field. `LabeledField` becomes `Column { Text(label); TextField() }` at the call site (Kotlin UI DSL `row(label)`) | UI session | done |
 | 4 | `component/RadioButton.kt` + `Checkbox.kt`: `Choice`, with IntelliJ's `radio*.svg`/`checkBox*.svg` (look in the client dist's `lib/*.jar` first; `IconJar` can take a second jar) | UI session | done |
-| 5 | `component/IconButton.kt`: `IconButton`; the main toolbar's Build/Run/Debug/More use it. `ToolbarIcon` and ConnectScreen's `IconButton` move onto it with the UI session's files. `TabCloseButton` stays (an `InplaceButton`) | me (ConnectScreen and FolderChooser call sites: UI session) | done |
-| 6 | `component/PopupContainer.kt` + `Menu.kt`: `MenuPanel` out of ContextMenu.kt; `LookupPopup`'s frame and StartProgress on `PopupContainer` | me (`ProjectMenu` call site: UI session) | done |
+| 5 | `component/IconButton.kt`: `IconButton`; the main toolbar's Build/Run/Debug/More use it. `ToolbarIcon` and ConnectScreen's `IconButton` move onto it (FolderChooser in step 9, ConnectScreen in step 8). `TabCloseButton` stays (an `InplaceButton`) | me | done |
+| 6 | `component/PopupContainer.kt` + `Menu.kt`: `MenuPanel` out of ContextMenu.kt; `LookupPopup`'s frame and StartProgress on `PopupContainer`; Gateway's `ProjectMenu` on `Menu` (step 8) | me | done |
 | 7 | `component/LinearProgressBar.kt`: StartProgress's bar; StartProgress's Cancel on step 2's `OutlinedButton` | me | done |
-| 8 | `component/SearchTextField.kt`: `SearchRow` | UI session | to do |
+| 8 | `component/SearchTextField.kt`: `SearchRow`; and the rest of ConnectScreen.kt (row icons, `ProjectMenu`, `ConnectStyles`, `Gateway` colors) | me | done |
 | 9 | `dialog/DialogWrapper.kt`: `DialogFrame` and FolderChooser's frame, south panel order; `MessageDialog` moves onto it | UI session | done |
 
 ### Step 1 (done)
@@ -299,6 +299,45 @@ the desktop app and the emulator before it's pushed.
     `ToolbarIcon` became step 5's `IconButton(selected = …)`.
 - `CLIENT_GALLERY=<out.png>` now also writes `<out>-dialog.png` (a `DialogWrapper` with fields,
   radio buttons and an error) and `<out>-message.png` (the host key question).
+
+### Step 8 (done)
+
+- `SearchTextField(value, onValueChange, modifier, placeholder = "Search", history = false,
+  undecorated = false)`, after IntelliJ's `SearchTextField.java` as `TextFieldWithPopupHandlerUI`
+  paints it, and Jewel's `SearchTextField`.
+  - The search icon sits before the text: `AllIcons.Actions.Search` = `expui/general/search.svg`,
+    or `SearchWithHistory` = `expui/inline/searchHistory.svg` with [history]. The paths come from
+    `PlatformIconMappings.json`. The history popup itself isn't done.
+  - Once there is text, a clear icon follows it (`Actions.Close`/`CloseHovered` =
+    `expui/general/closeSmall.svg`/`closeSmallHovered.svg`); a click empties the field. The gap
+    between icon and text is 2 (`getSearchIconGap`, `getClearIconGap`).
+- `TextField` gained Jewel's optional `placeholder` (`text-secondary`, Swing's `emptyText`),
+  `leadingIcon`, `trailingIcon` and `undecorated` (no border, background, ring or side padding).
+  Existing calls are unchanged.
+- ConnectScreen.kt:
+  - `SearchRow` keeps its signature (SshPage calls it). Inside it is
+    `SearchTextField(history = true, undecorated = true)`, as the welcome screen empties its search
+    field's border (`RecentProjectFilteringTree.installSearchField`).
+  - The trailing row icons (Reconnect, Open Project, Host Settings, Stop, ⋮) are `IconButton`s,
+    one every 25.5 as measured. They now show hover and press.
+  - `ProjectMenu` (the ⋮ and gear popups) is `Menu` with pointer rows; Gateway's own popup colors
+    (`#2B2D30`/`#43454A`) and its 237 width are gone.
+  - `ConnectStyles` maps onto Typography: `body` = `label()`, `secondary` = `label(text-secondary)`,
+    `title` = `h3()` semi-bold. `host` stays 15 semi-bold, measured; no JBFont size matches.
+    SshPage still takes `ConnectStyles`.
+  - `Gateway` colors from keys:
+    - `background` `#191A1C` (`WelcomeScreen.Details.background`, `SidePanel.background` =
+      dialog-bg; was `#1C1D20`);
+    - `divider` `#33353B` (`WelcomeScreen.separatorColor`, rewritten by `*.separatorColor` =
+      popup-border; was `#2B2D30`);
+    - `running` `#6DB083` (new `IslandsDark.textSuccess` = text-success = green-100; was
+      `#6AAB73`);
+    - `error` = `IslandsDark.textError`.
+  - Still measured, no key: the sizes, the portrait tab pill `#393B40`.
+- Checked:
+  - Gallery: the three search field states.
+  - Desktop: the Link and SSH pages, and the host gear menu opened and closed with nothing chosen.
+  - Emulator: the SSH page; typing shows the clear icon, and tapping it empties the field.
 
 ## 5. Split
 

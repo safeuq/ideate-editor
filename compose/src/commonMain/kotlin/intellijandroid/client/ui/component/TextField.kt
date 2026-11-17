@@ -5,10 +5,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -38,6 +40,12 @@ import intellijandroid.client.ui.theme.label
  * field ([singleLine] false) grows to [maxHeight], like a `JBTextArea` in a scroll pane.
  *
  * Example: SSH's "Host:" field, `TextField(form.host, { host -> … })`, 28 high (24 compact).
+ *
+ * As in Jewel: [placeholder] shows in `text-secondary` while the field is empty (Swing's
+ * `emptyText`); [leadingIcon] and [trailingIcon] sit inside the border, before and after the text
+ * ([SearchTextField] puts its search and clear icons there); [undecorated] drops the border, the
+ * background and the focus ring, as IntelliJ's welcome screen does with its search field (`border =
+ * JBUI.Borders.empty()`).
  */
 @Composable
 fun TextField(
@@ -50,6 +58,10 @@ fun TextField(
   maxHeight: androidx.compose.ui.unit.Dp = 160.dp,
   keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
   keyboardActions: KeyboardActions = KeyboardActions.Default,
+  placeholder: String? = null,
+  leadingIcon: (@Composable () -> Unit)? = null,
+  trailingIcon: (@Composable () -> Unit)? = null,
+  undecorated: Boolean = false,
 ) {
   val fonts = LocalClientFonts.current
   val interaction = remember { MutableInteractionSource() }
@@ -73,7 +85,7 @@ fun TextField(
         .fillMaxWidth()
         .heightIn(min = height, max = if (singleLine) height else maxHeight)
         .drawBehind {
-          if (!focused) return@drawBehind
+          if (!focused || undecorated) return@drawBehind
           // The border is 1 px; the focus ring adds 1 px outside it, 2 px of focus color in all.
           val ring = 1.dp.toPx()
           drawRoundRect(
@@ -84,22 +96,38 @@ fun TextField(
             style = Stroke(ring),
           )
         }
-        .background(FieldLook.background, shape)
-        .border(
-          1.dp,
-          when {
-            !enabled -> FieldLook.disabledBorder
-            focused -> IslandsDark.focusBorder
-            else -> IslandsDark.controlBorder
-          },
-          shape,
+        .then(
+          if (undecorated) Modifier
+          else
+            Modifier.background(FieldLook.background, shape)
+              .border(
+                1.dp,
+                when {
+                  !enabled -> FieldLook.disabledBorder
+                  focused -> IslandsDark.focusBorder
+                  else -> IslandsDark.controlBorder
+                },
+                shape,
+              ),
         ),
     decorationBox = { inner ->
-      Box(
-        Modifier.padding(horizontal = FieldLook.horizontalPadding, vertical = 4.dp),
-        contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
+      Row(
+        Modifier.padding(
+          horizontal = if (undecorated) 0.dp else FieldLook.horizontalPadding,
+          vertical = 4.dp,
+        ),
+        verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
       ) {
-        inner()
+        leadingIcon?.invoke()
+        Box(
+          Modifier.weight(1f),
+          contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
+        ) {
+          if (value.isEmpty() && placeholder != null)
+            BasicText(placeholder, style = fonts.label(IslandsDark.textSecondary), maxLines = 1)
+          inner()
+        }
+        trailingIcon?.invoke()
       }
     },
   )
