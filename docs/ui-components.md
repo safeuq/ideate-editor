@@ -98,6 +98,28 @@ Decision for review: where a measured value and the theme disagree by a few unit
 theme value wins. Where they disagree a lot (Gateway's menu `#2B2D30`/`#43454A`), Gateway was
 measured in its own Dark theme; IDEate follows Islands Dark, so the theme value wins there too.
 
+### What is still hand-built (after step 9, 2026-11-17)
+
+Found by searching connect/, ui/ and ui/dialog for `.border(`, `BasicTextField(`, `.clickable`,
+`Color(0x` and `RoundedCornerShape(` outside ui/theme and ui/component. Lines are at 04f0664.
+"Keep" means it is layout or an IDEate-only view, not an IntelliJ widget we'd share.
+
+| What | file:line | IntelliJ counterpart | Status |
+|---|---|---|---|
+| Path and status links in project rows (`row.onOpen`, "Authenticate…", "Host unreachable" when clickable) | connect/ConnectScreen.kt:562, :609 | `ActionLink` (Jewel `Link.kt`); `Link.activeForeground` = text-link = blue-100 `#71A1FE` | to do: a `component/Link.kt`; IDEate's `IslandsDark.link` is `#538AF9` (measured on the completion popup), not the theme's `#71A1FE` |
+| FolderChooser's "Show path" / "Hide path" toggle text | connect/FolderChooser.kt:186 | `ActionLink` | to do with `Link.kt` |
+| Portrait bottom tabs (This phone, SSH, Link): pill `#393B40`, radius 6 | connect/ConnectScreen.kt:222, :748-749 | the tool window stripe's selected button (see the next row) | keep the layout; the color follows whatever the stripe decides |
+| Tool window stripe button, selected `#393B40`; stripe separator `#393B40` | ui/ToolWindows.kt:151, :293-294 | `SquareStripeButton`; `ToolWindow.Button.selectedBackground` = toolbar-selected-bg-active = `#3871E1`; `ToolBar.separatorColor` = toolbar-border = `#FFFFFF21` | open: the theme key gives the blue accent, but the selected stripe button measured gray on the real client, so check it on a screenshot before switching |
+| Sidebar rows (Connections list) | connect/ConnectScreen.kt:263 | the welcome screen's tab tree (`TabbedWelcomeScreen`); selection already `selectionBackground` | keep (a list row, like the tree rows) |
+| Main toolbar run widget "Current File ⌄" | ui/ToolWindows.kt:209 | `RunWidget` / `RunConfigurationsComboBoxAction` (a toolbar combo button) | keep until run configurations work; then a combo-box-like button |
+| Main toolbar project badge `#3574F0` | ui/ToolWindows.kt:187, :297 | `RecentProject.Color1..9.Avatar.Start/End` (a gradient picked per project) | to do: take the avatar colors from the theme |
+| Tool window header back chevron | ui/ToolWindows.kt:260 | none in IntelliJ (IDEate's phone layout); looks like an `ActionButton` | could use `IconButton` (22) instead of a 32-wide clickable |
+| Editor tab pills, selected `#233657` / `#2C4A82` | ui/ClientScreen.kt:483-494 | `JBEditorTabs` (`EditorTabs.underlinedTabBackground` etc.) | keep (measured on the real client, section 7 of intellij-look.md) |
+| Status-bar failure text `#FA6675` | ui/ClientScreen.kt:227 | `Label.errorForeground` = text-error `#F57E84` | to do: use `IslandsDark.textError` |
+| Completion rows | ui/LookupPopup.kt:201-202, :256-257 | `LookupCellRenderer`; `CompletionPopup.foreground`/`matchForeground` already named | keep (one popup, already key-commented) |
+| FolderChooser tree border `#2B2D30`, toolbar separator `#393B40` | connect/FolderChooser.kt:197, :244-247 | `FileChooserDialogImpl`'s tree in a `JBScrollPane` (border = `*.borderColor` = tool-window-border `#26282C`); `ToolBar.separatorColor` `#FFFFFF21` | to do: theme values, with the stripe decision above |
+| Dialog frame outline `#393B40`, radius 10 | ui/dialog/DialogWrapper.kt:179-189 | the macOS window | keep (measured; no key) |
+
 ## 3. Layout
 
 Mirrors Jewel's `ui/component/` for widgets and IntelliJ's `openapi/ui` for dialogs. Package
