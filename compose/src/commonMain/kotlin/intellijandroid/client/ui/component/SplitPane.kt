@@ -1,5 +1,6 @@
 package intellijandroid.client.ui.component
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -59,7 +60,8 @@ val LocalResizePointers = staticCompositionLocalOf {
  * through [onProportion].
  * - The border takes presses over the island gap and [SplitLook.grabMargin] on each side of it; a
  *   mouse sees the resize pointer there.
- * - A finger's drag shows a pill on the border; a mouse's doesn't.
+ * - A finger's drag shows a pill on the border and widens the gap to [SplitLook.touchGap] around
+ *   it; a mouse's drag does neither.
  * - Each pane keeps at least [SplitLook.leastPane]; a split too small for that doesn't move.
  */
 @Composable
@@ -75,20 +77,35 @@ fun SplitPane(
     val gap = IslandsDark.islandGap
     val room = (if (stacked) maxHeight else maxWidth) - gap
     val firstSize = room * shownProportion(proportion, room.value, SplitLook.leastPane.value)
+    // While a finger drags, the gap widens to SplitLook.touchGap so the pill has room around it;
+    // each pane gives half, so the border's centre (and the proportion) stays where it was.
+    var touchDrag by remember { mutableStateOf(false) }
+    val extra by
+      animateDpAsState(
+        if (touchDrag) (SplitLook.touchGap - gap).coerceAtLeast(0.dp) else 0.dp,
+        label = "split gap",
+      )
     if (stacked) {
       Column {
-        Box(Modifier.fillMaxWidth().height(firstSize)) { first() }
-        Spacer(Modifier.height(gap))
+        Box(Modifier.fillMaxWidth().height(firstSize - extra / 2)) { first() }
+        Spacer(Modifier.height(gap + extra))
         Box(Modifier.fillMaxWidth().weight(1f)) { second() }
       }
     } else {
       Row {
-        Box(Modifier.fillMaxHeight().width(firstSize)) { first() }
-        Spacer(Modifier.width(gap))
+        Box(Modifier.fillMaxHeight().width(firstSize - extra / 2)) { first() }
+        Spacer(Modifier.width(gap + extra))
         Box(Modifier.fillMaxHeight().weight(1f)) { second() }
       }
     }
-    Border(stacked, firstSize, room, onProportion)
+    Border(
+      stacked,
+      firstSize,
+      room,
+      onProportion,
+      pill = touchDrag,
+      onTouchDrag = { touchDrag = it },
+    )
   }
 }
 
@@ -107,6 +124,9 @@ object SplitLook {
   /** The pill a finger's drag shows: Android's split-screen handle, across the border. */
   val pillLength = 32.dp
   val pillThickness = 4.dp
+
+  /** The gap while a finger drags: the pill with 4 dp on each side. A mouse leaves it as it is. */
+  val touchGap = 12.dp
   val pill = Color(0xFF9DA0A8) // Slider.buttonColor in Islands Dark
 }
 
@@ -135,9 +155,19 @@ internal fun draggedProportion(startFirst: Float, delta: Float, room: Float, lea
 
 private const val DEFAULT_WEIGHT = 0.33f // WindowInfoImpl.DEFAULT_WEIGHT
 
-/** The draggable border over the gap at [firstSize]. */
+/**
+ * The draggable border over the gap after [firstSize] (the first pane's size with the plain gap).
+ * [pill] shows while a finger drags; [onTouchDrag] reports when one starts and ends.
+ */
 @Composable
-private fun Border(stacked: Boolean, firstSize: Dp, room: Dp, onProportion: (Float) -> Unit) {
+private fun Border(
+  stacked: Boolean,
+  firstSize: Dp,
+  room: Dp,
+  onProportion: (Float) -> Unit,
+  pill: Boolean,
+  onTouchDrag: (Boolean) -> Unit,
+) {
   val density = LocalDensity.current
   val pointers = LocalResizePointers.current
   val margin = SplitLook.grabMargin
@@ -145,7 +175,7 @@ private fun Border(stacked: Boolean, firstSize: Dp, room: Dp, onProportion: (Flo
   val currentFirst by rememberUpdatedState(firstSize)
   val currentRoom by rememberUpdatedState(room)
   val report by rememberUpdatedState(onProportion)
-  var pill by remember { mutableStateOf(false) }
+  val touchDrag by rememberUpdatedState(onTouchDrag)
   // The border moves with the drag, so pointer positions (relative to it) are added to where it
   // was laid out when the event came: positions along the split.
   var placedAt by remember { mutableFloatStateOf(0f) }
@@ -170,13 +200,14 @@ private fun Border(stacked: Boolean, firstSize: Dp, room: Dp, onProportion: (Flo
           val slopped =
             awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
               ?: return@awaitEachGesture
-          pill = down.type == PointerType.Touch
+          val touch = down.type == PointerType.Touch
+          if (touch) touchDrag(true)
           report(draggedProportion(start, along(slopped) - downAt, roomPx, least))
           drag(slopped.id) { change ->
             change.consume()
             report(draggedProportion(start, along(change) - downAt, roomPx, least))
           }
-          pill = false
+          if (touch) touchDrag(false)
         }
       },
     contentAlignment = Alignment.Center,

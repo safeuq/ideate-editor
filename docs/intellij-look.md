@@ -668,7 +668,7 @@ be measured; IntelliJ's own rule is 40, compact 32 (`CustomWindowHeaderUtil.getP
 | Out-of-range weight | `ToolWindowPane.normalizeWeight`: ≤ 0 → 0.33, ≥ 1 → 0.67 | same, for given and saved values |
 | Mouse zone | 6 px around a 1 px divider (`ide.splitter.mouseZone`) | the island gap plus 4 dp each side (12 dp in compact), wide enough for a finger |
 | Pointer | `W_RESIZE_CURSOR` side by side, `N_RESIZE_CURSOR` stacked | the same AWT cursors on the desktop; `PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW` / `TYPE_VERTICAL_DOUBLE_ARROW` on Android (`LocalResizePointers`) |
-| Finger | (desktop only) | a pill 32 × 4 dp in `#9DA0A8` on the border while a finger drags |
+| Finger | (desktop only) | a pill 32 × 4 dp in `#9DA0A8` on the border while a finger drags; the gap widens to 12 dp meanwhile (4 dp each side of the pill; was the 4 dp island gap, which the pill filled), each pane giving half so the border's centre stays put, and narrows again on release (animated) |
 
 The pane weights (`ui/PaneWeights.kt`, IntelliJ's `WindowInfoImpl` weight 0.33 and side weight 0.5) are saved
 per project next to the open editors (`OpenEditors`, `"panes": {"left": 0.28, …}`), 500 ms after the last change,
