@@ -2,9 +2,11 @@ package intellijandroid.client.desktop
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
@@ -19,9 +21,16 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import intellijandroid.client.ui.LocalIcons
+import intellijandroid.client.ui.MenuItem
+import intellijandroid.client.ui.MenuSeparator
+import intellijandroid.client.ui.SubMenu
 import intellijandroid.client.ui.component.DefaultButton
+import intellijandroid.client.ui.component.IconButton
+import intellijandroid.client.ui.component.IndeterminateHorizontalProgressBar
+import intellijandroid.client.ui.component.Menu
 import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.component.TextField
+import intellijandroid.client.ui.component.popupContainer
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -85,6 +94,38 @@ private fun Gallery() {
           TextField("disabled", {}, Modifier.width(200.dp), enabled = false)
           TextField("secret", {}, Modifier.width(200.dp), secret = true)
           TextField("line 1\nline 2\nline 3", {}, Modifier.width(200.dp), singleLine = false)
+        }
+      }
+    }
+    Section("IconButton.kt: 22 dp, selected (a toggle that is on), main toolbar size") {
+      Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        IconButton("expui/general/settings.svg", "Settings", {})
+        IconButton("expui/general/show.svg", "Show hidden", {}, selected = true)
+        IconButton(
+          "expui/build/build.svg",
+          "Build",
+          {},
+          size = IslandsDark.toolbarButton,
+          iconSize = IslandsDark.toolbarIcon,
+        )
+      }
+    }
+    Section("PopupContainer.kt, Menu.kt: pointer rows; LinearProgressBar.kt: indeterminate") {
+      Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        Menu(
+          {
+            listOf(
+              MenuItem("Copy", shortcut = "⌘C", iconPath = "expui/general/copy.svg"),
+              MenuItem("Paste", shortcut = "⌘V", iconPath = "expui/general/paste.svg"),
+              MenuSeparator,
+              MenuItem("Find Usages", shortcut = "⌥F7", enabled = false),
+              SubMenu("Refactor", emptyList()),
+            )
+          },
+          rowHeight = 24.dp,
+        ) {}
+        Box(Modifier.width(300.dp).popupContainer(8.dp).padding(12.dp)) {
+          IndeterminateHorizontalProgressBar(Modifier.fillMaxWidth())
         }
       }
     }

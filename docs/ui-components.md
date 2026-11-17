@@ -49,7 +49,7 @@ the SSH message dialog (32b2677) and step 1, so they have moved a little since.
 | `Choice` (radio; also used as a check box) | connect/SshPage.kt:443 | `DarculaRadioButtonUI`, `DarculaCheckBoxUI` (icons `radio*.svg`, `checkBox*.svg` via `LafIconLookup`) | RadioButton.kt, Checkbox.kt |
 | `IconButton` | connect/ConnectScreen.kt:693 | `ActionButton` (`IC/platform/platform-impl/src/com/intellij/openapi/actionSystem/impl/ActionButton.java`) | IconButton.kt |
 | FolderChooser `ToolbarIcon` (toggle) | connect/FolderChooser.kt:173 | `ActionButton` for a `ToggleAction` | ToggleableIconActionButton.kt |
-| `TabCloseButton` | ui/ClientScreen.kt:526 | `InplaceButton` / `CloseTab` in editor tabs | IconButton.kt |
+| `TabCloseButton` | ui/ClientScreen.kt:526 | `InplaceButton` (`IC/platform/platform-api/src/com/intellij/ui/InplaceButton.java`): the icon swaps on hover, no background, so not an `ActionButton`; stays as it is | none |
 | `Header` | connect/ConnectScreen.kt:477 | welcome screen title row (`IC/platform/platform-impl/src/com/intellij/openapi/wm/impl/welcomeScreen/ProjectsTabFactory.kt`) | none |
 | `Notice` | connect/ConnectScreen.kt:469 | `ComponentPanelBuilder` comment text / `JBLabel` with `UIUtil.ComponentStyle.SMALL` | Text.kt (InfoText.kt) |
 | `Gateway` look object | connect/ConnectScreen.kt:788 | Gateway welcome window (measured) | none |
@@ -157,9 +157,9 @@ the desktop app and the emulator before it's pushed.
 | 2 | `component/Button.kt`: both `DialogButton`s (now one, in MessageDialog.kt), `OutlinedButton`, StartProgress's Cancel | UI session | done, except StartProgress's Cancel (its file is yours: use `OutlinedButton`) |
 | 3 | `component/TextField.kt`: `InputField`, `Field`, the FolderChooser path field. `LabeledField` becomes `Column { Text(label); TextField() }` at the call site (Kotlin UI DSL `row(label)`) | UI session | done |
 | 4 | `component/RadioButton.kt` + `Checkbox.kt`: `Choice`, with IntelliJ's `radio*.svg`/`checkBox*.svg` (look in the client dist's `lib/*.jar` first; `IconJar` can take a second jar) | UI session | to do |
-| 5 | `component/IconButton.kt`: `IconButton`, `ToolbarIcon`, `TabCloseButton` | me (ConnectScreen and FolderChooser call sites: UI session) | to do |
-| 6 | `component/PopupContainer.kt` + `Menu.kt`: `MenuPanel` out of ContextMenu.kt; `LookupPopup`'s frame and StartProgress on `PopupContainer` | me (`ProjectMenu` call site: UI session) | to do |
-| 7 | `component/LinearProgressBar.kt`: StartProgress's bar | me | to do |
+| 5 | `component/IconButton.kt`: `IconButton`; the main toolbar's Build/Run/Debug/More use it. `ToolbarIcon` and ConnectScreen's `IconButton` move onto it with the UI session's files. `TabCloseButton` stays (an `InplaceButton`) | me (ConnectScreen and FolderChooser call sites: UI session) | done |
+| 6 | `component/PopupContainer.kt` + `Menu.kt`: `MenuPanel` out of ContextMenu.kt; `LookupPopup`'s frame and StartProgress on `PopupContainer` | me (`ProjectMenu` call site: UI session) | done |
+| 7 | `component/LinearProgressBar.kt`: StartProgress's bar; StartProgress's Cancel on step 2's `OutlinedButton` | me | done |
 | 8 | `component/SearchTextField.kt`: `SearchRow` | UI session | to do |
 | 9 | `dialog/DialogWrapper.kt`: `DialogFrame` and FolderChooser's frame, south panel order; `MessageDialog` moves onto it | UI session | to do |
 
@@ -234,6 +234,32 @@ the desktop app and the emulator before it's pushed.
   in its states (`desktop/…/ComponentGallery.kt`) and exits. Checks need no clicking through
   screens, so a misplaced click can't reach a running backend. Add each new component to it.
   Button focus doesn't show there: Compose focuses buttons only from the keyboard.
+
+### Steps 5 to 7 (done)
+
+- `IconButton(iconPath, contentDescription, onClick, modifier, size = 22.dp, iconSize = 16.dp,
+  selected = false, hoveredIconPath = null)`, IntelliJ's `ActionButton`: hover `#FFFFFF17`
+  (`ActionButton.hoverBackground` = transparent-white-20), pressed and selected `#FFFFFF29`
+  (`ActionButton.pressedBackground` = transparent-white-40), corner 4 (`Button.arc` 8). The main
+  toolbar's buttons use it at `IslandsDark.toolbarButton`/`toolbarIcon` and now show hover and
+  press, which they didn't before. For ConnectScreen's `IconButton` (25.5 × 28, 16 icon) and
+  FolderChooser's `ToolbarIcon` (22, toggled `#393B40` measured; the theme's selected is
+  `#FFFFFF29`).
+- `Modifier.popupContainer(radius)`: `Popup.background`, a 1 px `Popup.borderColor`, rounded.
+  Used by `Menu` (8), the completion popup (6) and StartProgress (0, Gateway's square popup).
+- `Menu(entries, rowHeight, close)`: the panel that was `MenuPanel` in ContextMenu.kt; the menu
+  types (`MenuEntry`, `MenuItem`, `SubMenu`, `MenuSeparator`) stay in ContextMenu.kt (package `ui`)
+  so their importers don't change. `ContextMenuArea` and, next, Gateway's ⋮ menu (`ProjectMenu`)
+  open it.
+- `IndeterminateHorizontalProgressBar(modifier)` (Jewel's name, file `LinearProgressBar.kt`): the
+  4 dp track with a sliding segment from StartProgress. Single color; IntelliJ's gradient
+  (`indeterminateStartColor` blue-110 → `indeterminateEndColor`) is not done.
+- StartProgress's Cancel is step 2's `OutlinedButton`, focused when the popup opens (Gateway
+  shows it with the focus ring; Enter cancels).
+- Checked: the component gallery (`CLIENT_GALLERY`), the desktop app (Project menu, toolbar) and
+  the emulator (Project menu by long press). Hover and press can't be shown in the gallery's still
+  image; the completion popup's frame wasn't opened on screen (background typing doesn't reach the
+  window), it uses the same `popupContainer` as the menu.
 
 ## 5. Split
 
