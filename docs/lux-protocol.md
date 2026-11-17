@@ -240,3 +240,48 @@ Types you can skip: gradients beyond linear, `LxTexturePaint`, `LxXorComposite`,
 - Shared event conversion: `plugins/remdev-plugin/lib/modules/intellij.platform.split.jar` -> `com.jetbrains.rd.platform.codeWithMe.lux.util.EventsKt`.
 - Backend: `plugins/remdev-plugin/lib/modules/intellij.platform.backend.split.jar` -> `com.jetbrains.rdserver.lux.*` (`toolkit/RemoteToolkit`, `services/LuxHostService`, `services/LuxHostConnection`, `adapter/Lux*Adapter`, `awt/graphics/RemoteGraphicsEnvironment`, `awt/pipe/*`, `local/LuxBackendLocalBeControlBinder`) and `com.jetbrains.rdserver.ui.dialogs.*` (BeDialog route).
 - Decompiled output: `/private/tmp/claude-501/-Users-safeuq-Files-XFlow-Claude/9a9f1a88-f9f2-49ac-8e20-09842dfad5e9/scratchpad/dec-lux/out/`.
+
+## 6. Recording spike (2026-11-17)
+
+A throwaway desktop build attached Lux and logged everything for Rename on `smoke.iml` (isolated Mac backend,
+263.7307.200). The build wasn't kept; this is what it showed.
+
+**Attach.** Setting `codeWithMeUnattendedHostControlModel.session.graphicsDevices` to one device was enough:
+`RemoteGraphicsDeviceModel("ideate", [RemoteGraphicsConfigurationModel("ideate", LxRect(0, 0, 1200, 800),
+identity, identity)], 0)` with identity = `LxAffineTransform([1, 0, 0, 1, 0, 0])`. The backend creates the
+session; the client fills it once it appears.
+
+**Timeline of one Rename** (ms after the dialog appeared):
+
+| ms | What |
+|---|---|
+| −500 | `RdCallActionRequest(RenameElement)` sent (the item is greyed in the menu; the spike called it) |
+| 0 | `luxModel.components[2] = LxDialog`, `modality = true`, `layoutSource = Backend`, info `className = "MyDialog"` |
+| 0–4 | `title = "Rename"`, `position = (333, 257)`, `preferredSize = 358 × 254`. The spike wrote `size` = preferred size, a position and `graphicsConfiguration` back |
+| 82–164 | `visible = true`; the first full frame: 57 operations (42 fill shape, 9 draw text, 5 draw image, 1 draw shape) and the same 57 again a few times |
+| ~170 | small updates (2–8 operations) |
+| 2 000 | spike sent `LxWindowEvent(Activated)`, `LxWindowEvent(GainedFocus)` (opposite window null) |
+| 2 080 → | from then on a caret repaint every 500 ms (5 operations, texts `smoke`, `.iml`). **Before the focus events there was none: the client must send them** |
+| 3 600 | `LxKeyEvent(Pressed, 88, 'x', 1, 0)`, `(Typed, 0, 'x', 0, 0)`, `(Released, 88, 'x', 1, 0)`; next frame draws `x`, `.iml`. The name was selected without its extension, as in IntelliJ, and typing replaced it |
+| 5 600 | Escape as `LxKeyEvent(Pressed, 27, '\u001b', 1, 0)` + `Released` |
+| 5 654 | `visible = false`, then the map entry was removed: the backend closed its dialog itself (no rename happened) |
+
+**What the operations carry** (first frame, `LxDrawOperation(command, stateChanges)`):
+
+- Colors are IntelliJ theme keys with fallbacks, not RGB: `LxColorPaint(NamedColor("Panel.background"))`,
+  `LxGradientPaint(NamedColor("Button.default.startBackground", fallback "Button.darcula.defaultStartColor"
+  → RgbaColor(56, 79, 107)), …)`. The client resolves them from its theme, so IDEate resolves them from the
+  Islands Dark keys in `ui/theme` (with the `RgbaColor` fallback when a key is unknown).
+- Fonts by name: `LxPlainFont("Inter", style 0, size 13)`.
+- Text with its box: `LxDrawTextCommand("Rename file 'smoke.iml' and its usages to:", x = 0, y = 13, width = 255.0,
+  height = 15.7)`, also "Refactor", "Preview", "Cancel", "Scope:", "Search in comments and strings",
+  "Search for references".
+- Shapes: `LxRectShape`, `LxRoundRectShape(arcWidth = 8)` for buttons; each operation usually brings its own
+  `LxTransformStateChange` (component offset) and `LxClipStateChange`.
+- Images: `LxCacheableImage` (data, sent once) and `LxCachedImage` (a reference to one sent before).
+
+**Answered** (section 5's list): 1 Rename arrives as `LxDialog`; 2 `graphicsDevices` is needed and one plain
+device works; 3 the order above, and writing `size` right away is accepted; 5 Pressed/Typed/Released with AWT
+codes types into the field; 8 focus events are needed (no caret before them). **Still open:** 4 closing the
+window (`LxWindowEvent(Closing)`), 6 a disconnect mid-dialog, 7 clipboard paste, and New/Delete dialogs (same
+route expected).
