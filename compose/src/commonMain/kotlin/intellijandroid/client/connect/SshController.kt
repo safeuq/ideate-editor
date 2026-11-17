@@ -580,6 +580,7 @@ class SshController(
         val remote = remoteFor(entry)
         progress("Checking for already running IDE Backend")
         var status = remote.status(idePath, projectPath)
+        val wasRunning = status?.isReady == true
         if (status?.isReady != true) {
           progress("Starting the remote IDE Backend")
           remote.launch(idePath, projectPath)
@@ -598,6 +599,13 @@ class SshController(
           status.joinLink?.takeIf { it.isNotEmpty() }
             ?: status.projects.firstOrNull { it.projectPath == projectPath }?.joinLink
             ?: error("The backend for $projectPath has no join link")
+        // As for Termux's backend: a running backend with another client (Gateway on a laptop, or
+        // IDEate on another device) hands the session over only if the user says so.
+        val otherClient =
+          wasRunning &&
+            status.projects.firstOrNull { it.projectPath == projectPath }?.controllerConnected ==
+              true
+        if (otherClient && !ask(TAKE_OVER, "Take over")) return@runCatching null
         progress("Performing the SSH port forwarding")
         val joinLink = JoinLink.parse(link)
         val forward = sessions.getValue(entry.id).forward(joinLink.port)
@@ -609,7 +617,8 @@ class SshController(
         if (run != openRun) return@launch
         state = state.copy(progress = null)
         result.fold(
-          onSuccess = { local -> connect(local, projectPath) },
+          // null: the user kept the other client's session.
+          onSuccess = { local -> local?.let { connect(it, projectPath) } },
           onFailure = { failure ->
             state = state.copy(message = "${entry.name}: ${failure.message}")
           },
@@ -620,6 +629,9 @@ class SshController(
 
   private companion object {
     const val QUESTION_TIMEOUT_SECONDS = 120L
+    /** The Termux page's words for the same question (ConnectController.termuxStatus). */
+    const val TAKE_OVER =
+      "Another device is connected to this backend (for example Gateway on a laptop). Take over? It will be disconnected."
     /** Termux's `intellij-backend start` waits up to 180 s; a phone backend can take that long. */
     const val START_TIMEOUT_MILLIS = 180_000L
     const val TERMUX_FILES = "/data/data/com.termux/files"

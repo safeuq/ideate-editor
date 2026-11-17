@@ -481,6 +481,21 @@ Test hygiene: every backend run, the isolated ones too, writes status files into
 `~/Library/Caches/JetBrains/RemoteDev/recent/`. Their rows then name the user's real IntelliJ for a
 scratchpad project, so they are deleted after each test (`grep -l /private/tmp/claude-501/ recent/*`).
 
+### Taking over a running backend (2026-11-17)
+
+As on the Termux page: when Start IDE and Connect finds the project's backend already running and its
+live status (`remote-dev-server.sh status`) says `"controllerConnected": true` for the project, IDEate asks
+in the message dialog: "Another device is connected to this backend (for example Gateway on a laptop). Take
+over? It will be disconnected." Cancel ends quietly; Take over forwards the port and connects, and the backend
+drops the other client. A backend IDEate has just started isn't asked about.
+
+Tested: a desktop IDEate connected to the isolated Mac backend by join link, then the emulator opened the same
+project over SSH. The question came up; Cancel left the desktop client connected; Take over opened the project
+on the emulator, and the desktop client got "Backend terminated the wire".
+
+The status file in `RemoteDev/active/` lagged: it still said `"controllerConnected": false` while the live
+`status` command said `true`, so only the command's answer is used.
+
 ## Open questions
 
 - Where the `recents.json` that `remove-recent-project` deletes lives: not under `RemoteDev/` on the phone or the
@@ -489,4 +504,5 @@ scratchpad project, so they are deleted after each test (`grep -l /private/tmp/c
   readable). It doesn't matter until IDEate downloads IDEs, which it won't.
 - The exact command line `host-launch` uses. `ShellHost` uses Gateway's older shell form, which the phone's
   `intellij-backend` wrapper also accepts.
-- Whether `controllerConnected` should offer "Take over?" for SSH hosts too, as Termux entries do. Probably yes.
+- ~~Whether `controllerConnected` should offer "Take over?" for SSH hosts too~~: yes, done 2026-11-17 (see
+  "Taking over a running backend" below).
