@@ -13,6 +13,7 @@ import intellijandroid.client.connect.ConnectionHistory
 import intellijandroid.client.connect.IdeateApp
 import intellijandroid.client.connect.SshSetup
 import intellijandroid.client.connect.StoredText
+import intellijandroid.client.desktop.ComponentGallery
 import intellijandroid.client.desktop.DesktopOpenSshFiles
 import intellijandroid.client.desktop.DesktopResources
 import intellijandroid.client.desktop.FileSecretStore
@@ -52,6 +53,11 @@ fun main(arguments: Array<String>) {
     )
   val fonts = DesktopResources.fonts(clientLib)
   IslandsDark.density = DesktopResources.uiDensity()
+  // Debug aid: CLIENT_GALLERY=<file.png> renders the shared components and exits.
+  System.getenv("CLIENT_GALLERY")?.let { target ->
+    ComponentGallery.render(File(target), clientLib, fonts)
+    exitProcess(0)
+  }
 
   val dataFolder = File(System.getProperty("user.home"), ".ideate")
   if (dataFolder.mkdirs()) {

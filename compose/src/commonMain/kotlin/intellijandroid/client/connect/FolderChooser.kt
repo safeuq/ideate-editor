@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,9 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +42,7 @@ import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.ProjectTreeView
 import intellijandroid.client.ui.component.DefaultButton
 import intellijandroid.client.ui.component.OutlinedButton
+import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 
@@ -219,25 +217,7 @@ fun FolderChooser(
         )
       }
       if (showPath) {
-        var fieldFocused by remember { mutableStateOf(false) }
-        BasicTextField(
-          value = path,
-          onValueChange = { path = it },
-          singleLine = true,
-          textStyle = text,
-          cursorBrush = SolidColor(IslandsDark.text),
-          modifier =
-            Modifier.padding(horizontal = Chooser.sideInset)
-              .fillMaxWidth()
-              .height(Chooser.fieldHeight)
-              .onFocusChanged { fieldFocused = it.isFocused }
-              .border(
-                if (fieldFocused) 2.dp else 1.dp,
-                if (fieldFocused) Chooser.accent else Chooser.fieldBorder,
-                Chooser.fieldShape,
-              )
-              .padding(horizontal = 6.dp, vertical = 4.dp),
-        )
+        TextField(path, { path = it }, Modifier.padding(horizontal = Chooser.sideInset))
       }
       Box(
         Modifier.padding(horizontal = Chooser.treeInset)
@@ -313,10 +293,6 @@ private object Chooser {
   val toggledButton = Color(0xFF393B40)
   val separator = Color(0xFF393B40)
   val sideInset = 14.dp // path field: 14.5 pt from the dialog's side
-  val fieldHeight = 26.dp // 24 pt plus the focus ring
-  val fieldShape = RoundedCornerShape(4.dp)
-  val fieldBorder = IslandsDark.controlBorder
-  val accent = IslandsDark.controlBrandBackground // focused field ring and the OK button
   val treeInset = 12.dp // tree panel: 12.5 pt from the dialog's side
   val treeBorder = Color(0xFF2B2D30)
   val bottomInset = 11.dp

@@ -19,7 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,12 +29,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +44,7 @@ import intellijandroid.client.ui.MessageDialog
 import intellijandroid.client.ui.MessageOption
 import intellijandroid.client.ui.component.DefaultButton
 import intellijandroid.client.ui.component.OutlinedButton
+import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import kotlinx.coroutines.delay
@@ -312,7 +310,7 @@ private fun ChooseIdeDialog(
     BasicText("Project directory:", style = styles.label)
     Row(verticalAlignment = Alignment.CenterVertically) {
       Box(Modifier.weight(1f)) {
-        InputField(dialog.projectPath, actions.projectPathChanged, styles)
+        TextField(dialog.projectPath, actions.projectPathChanged)
       }
       Spacer(Modifier.width(6.dp))
       OutlinedButton("…", onClick = onBrowse)
@@ -358,12 +356,6 @@ private class DialogStyles(fonts: ClientFonts) {
   val error = label.copy(color = Gateway.error)
   val code =
     TextStyle(color = IslandsDark.textSecondary, fontFamily = fonts.editor, fontSize = 11.sp)
-  val input =
-    TextStyle(
-      color = IslandsDark.text,
-      fontFamily = fonts.editor,
-      fontSize = IslandsDark.EDITOR_FONT_SIZE.sp,
-    )
 }
 
 /** The frame of IntelliJ's dialogs, as measured for the folder chooser: 475 wide, title 32 high. */
@@ -412,36 +404,8 @@ private fun LabeledField(
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
     BasicText(label, style = styles.label)
-    InputField(value, onChange, styles, secret, singleLine)
+    TextField(value, onChange, secret = secret, singleLine = singleLine)
   }
-}
-
-@Composable
-private fun InputField(
-  value: String,
-  onChange: (String) -> Unit,
-  styles: DialogStyles,
-  secret: Boolean = false,
-  singleLine: Boolean = true,
-) {
-  BasicTextField(
-    value = value,
-    onValueChange = onChange,
-    textStyle = styles.input,
-    singleLine = singleLine,
-    visualTransformation =
-      if (secret) PasswordVisualTransformation()
-      else androidx.compose.ui.text.input.VisualTransformation.None,
-    cursorBrush = SolidColor(IslandsDark.text),
-    modifier =
-      Modifier.fillMaxWidth()
-        .heightIn(
-          min = DialogLook.fieldHeight,
-          max = if (singleLine) DialogLook.fieldHeight else 160.dp,
-        )
-        .border(1.dp, DialogLook.fieldBorder, DialogLook.fieldShape)
-        .padding(horizontal = 6.dp, vertical = 4.dp),
-  )
 }
 
 /**
@@ -476,8 +440,6 @@ private object DialogLook {
   val shape = RoundedCornerShape(10.dp)
   val outline = Color(0xFF393B40)
   val titleHeight = 32.dp
-  val fieldHeight = 26.dp
-  val fieldShape = RoundedCornerShape(4.dp)
   val fieldBorder = IslandsDark.controlBorder
   val accent = IslandsDark.controlBrandBackground
 }

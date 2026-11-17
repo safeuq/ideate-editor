@@ -155,7 +155,7 @@ the desktop app and the emulator before it's pushed.
 |---|---|---|---|
 | 1 | `theme/IslandsDark.kt` (moved) with semantic colors, `theme/Typography.kt`; per-file colors switch to theme values | me | done (see below) |
 | 2 | `component/Button.kt`: both `DialogButton`s (now one, in MessageDialog.kt), `OutlinedButton`, StartProgress's Cancel | UI session | done, except StartProgress's Cancel (its file is yours: use `OutlinedButton`) |
-| 3 | `component/TextField.kt`: `InputField`, `Field`, the FolderChooser path field. `LabeledField` becomes `Column { Text(label); TextField() }` at the call site (Kotlin UI DSL `row(label)`) | UI session | to do |
+| 3 | `component/TextField.kt`: `InputField`, `Field`, the FolderChooser path field. `LabeledField` becomes `Column { Text(label); TextField() }` at the call site (Kotlin UI DSL `row(label)`) | UI session | done |
 | 4 | `component/RadioButton.kt` + `Checkbox.kt`: `Choice`, with IntelliJ's `radio*.svg`/`checkBox*.svg` (look in the client dist's `lib/*.jar` first; `IconJar` can take a second jar) | UI session | to do |
 | 5 | `component/IconButton.kt`: `IconButton`, `ToolbarIcon`, `TabCloseButton` | me (ConnectScreen and FolderChooser call sites: UI session) | to do |
 | 6 | `component/PopupContainer.kt` + `Menu.kt`: `MenuPanel` out of ContextMenu.kt; `LookupPopup`'s frame and StartProgress on `PopupContainer` | me (`ProjectMenu` call site: UI session) | to do |
@@ -209,6 +209,31 @@ the desktop app and the emulator before it's pushed.
   Connect, Authenticate, …), MessageDialog, FolderChooser (OK, Cancel), ConnectScreen
   (`OutlinedButton` removed). Buttons are now 28 high at normal density (were 24 or 27).
 - Checked: desktop, the SSH page and its Connect to SSH dialog.
+
+### Step 3 (done)
+
+- `ui/component/TextField.kt`: `TextField(value, onValueChange, modifier, enabled, secret,
+  singleLine, maxHeight, keyboardOptions, keyboardActions)`, after Jewel's `TextField.kt` and
+  `IntUiBridgeTextField.kt`.
+
+  | Value | Theme key |
+  |---|---|
+  | background `#191A1C` | `TextField.background` = control-bg |
+  | border `#40434A` | `Component.borderColor` |
+  | focused: 2 px of `#3871E1` (the border plus 1 px outside) | `Component.focusColor` |
+  | disabled border `#33353B`, text `#4C4F56` | `*.disabledBorderColor`, `*.disabledForeground` |
+  | corner 4 dp | `Component.arc` 8 |
+  | height 28, compact 24 | `TextField.minimumSize` 49,28 |
+  | padding 9 | 8 + the border, as `IntUiBridgeTextField` |
+
+- Text is in the UI font (Inter 13), as in IntelliJ's fields; the copies used the editor's mono
+  font.
+- Callers moved: SshPage (`InputField` removed; `LabeledField` stays as the label-over-field row),
+  ConnectScreen (`Field` removed; Link page's two fields), FolderChooser's path field.
+- New debug aid: `CLIENT_GALLERY=<file.png> ./gradlew :desktop:run` renders every shared component
+  in its states (`desktop/…/ComponentGallery.kt`) and exits. Checks need no clicking through
+  screens, so a misplaced click can't reach a running backend. Add each new component to it.
+  Button focus doesn't show there: Compose focuses buttons only from the keyboard.
 
 ## 5. Split
 

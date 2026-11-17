@@ -45,6 +45,7 @@ import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.MenuItem
 import intellijandroid.client.ui.MessageKind
 import intellijandroid.client.ui.component.OutlinedButton
+import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import java.time.Instant
@@ -424,9 +425,9 @@ private fun LinkPage(state: ConnectScreenState, actions: ConnectActions, styles:
         "Join link (printed by intellij-backend link or remote-dev-server.sh)",
         style = styles.secondary,
       )
-      Field(state.link, actions.linkChanged, styles)
+      TextField(state.link, actions.linkChanged)
       BasicText("File to open, optional (absolute path on the backend)", style = styles.secondary)
-      Field(state.file, actions.fileChanged, styles)
+      TextField(state.file, actions.fileChanged)
       OutlinedButton("Connect", onClick = actions.connectLink)
     }
     Notices(state, actions, styles)
@@ -709,18 +710,6 @@ internal fun IconButton(path: String, description: String, onClick: () -> Unit) 
 }
 
 /** A bordered text field, for the join link and the file to open. */
-@Composable
-internal fun Field(value: String, onChange: (String) -> Unit, styles: ConnectStyles) {
-  BasicTextField(
-    value = value,
-    onValueChange = onChange,
-    textStyle = styles.input,
-    cursorBrush = SolidColor(IslandsDark.text),
-    modifier =
-      Modifier.fillMaxWidth().border(1.dp, Gateway.buttonBorder, Gateway.buttonShape).padding(8.dp),
-  )
-}
-
 /**
  * `/data/data/com.termux/files/home/intellij/smoke` → `~/intellij/smoke`: the full path doesn't fit
  * a phone.
@@ -771,12 +760,6 @@ internal class ConnectStyles(fonts: ClientFonts, val twoLineRows: Boolean) {
   val sidebarItem = body
   val title = body.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
   val host = body.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-  val input =
-    TextStyle(
-      color = IslandsDark.text,
-      fontFamily = fonts.editor,
-      fontSize = IslandsDark.EDITOR_FONT_SIZE.sp,
-    )
 }
 
 /** Measured on Gateway 2026.3's welcome window and its ⋮ menu (2x screenshots), in dp = pt. */
