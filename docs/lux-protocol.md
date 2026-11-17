@@ -393,8 +393,7 @@ platform's `pngDecoder` (set at startup: Skia on the desktop, `BitmapFactory` on
 | emulator | Rename on `smoke.iml` | drawn at density; Gboard typing `xy` gave `xy.iml`; a tap on Cancel closed it |
 | emulator | Safe Delete on `smoke.iml` | drawn; Back closed it, the file kept |
 
-Not done yet: ~~a dialog's own popups~~ (done, see section 9), the backend clipboard for paste into a dialog field (pasted text is typed key by key), and a soft keyboard that
-opens only when the dialog has a text field (today it opens for every dialog on Android).
+Not done yet: none of these. Popups are in section 9; paste and the soft keyboard are in section 11.
 
 ## 9. A dialog's own popups (2026-11-17)
 
@@ -471,3 +470,28 @@ Its colors are `ValidationTooltip.errorBackground` / `errorBorderColor`, which `
 **New ▸ Java Class** wraps the name field in a `BeGrid` (its `items` are `BeGridElement(content)`), next to a `BeTreeGrid` listing the kinds (Class, Interface, Enum, …). IDEate shows the name field; the kind list isn't drawn yet, so Enter creates the preselected kind, a class (`src/Hello.java` in the test).
 
 **Tested** on the emulator against the isolated Mac backend: New ▸ File `notes.txt` and New ▸ Directory `docs` in `empty/` created both; a second `notes.txt` showed "A file with the name 'notes.txt' already exists"; one Back (after the keyboard closed) cancelled both popups. The field takes focus, so the soft keyboard opens.
+
+## 11. Paste and the soft keyboard in a dialog (2026-11-17)
+
+**The soft keyboard opens only for a text field.** The backend reports where the focused text field's caret
+is in `LxPanel.inputLocation` (an `LxRect`), and null when the focus isn't on text. JetBrains Client turns
+input methods on and off with it (`LuxEventSynchronizer`: `panel.enableInputMethods(it != null)`). IDEate
+connects the Android keyboard while it's set, and disconnects it when it goes back to null.
+
+| Dialog | `inputLocation` | Keyboard |
+| --- | --- | --- |
+| Rename (name field focused) | set | shown (`mInputShown=true`) |
+| Reformat Files (checkboxes only) | null | not shown (`mInputShown=false`); before, every dialog opened it |
+
+**Pasted text goes in as one input method commit**, as JetBrains Client sends an input method's text:
+`LxInputMethodEvent(Text, text, committedCount = text.length, caretPos = null, false)`. Before, it was typed
+key by key, so a newline pressed Enter and a long text took one key stroke per character. The paste
+shortcut (⌘V on a Mac, Ctrl+V elsewhere) and the keyboard's Paste read the device's clipboard. So a backend
+on another machine (Termux, SSH) pastes what the device copied, not its own clipboard. JetBrains Client
+syncs its clipboard to the backend on Ctrl+V instead (`syncClipboardIfNeeded`); a commit needs no clipboard
+model.
+
+Checked on the emulator with a test build whose paste text was fixed to `pasted⇥Text 123`, so neither
+clipboard was touched (the Mac's is shared with the emulator). Ctrl+V in Rename's name field: the backend
+got the one `LxInputMethodEvent` with all 15 characters. The field replaced the selected `Other` with
+`pastedText 123` (it drops the tab) and showed its own "not a valid identifier" check.

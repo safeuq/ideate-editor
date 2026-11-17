@@ -61,6 +61,11 @@ class LuxDialog(
    */
   var x by mutableIntStateOf(0)
   var y by mutableIntStateOf(0)
+  /**
+   * A text field in the window has the focus: the backend reports where its caret is
+   * (`LxPanel.inputLocation`, e.g. `LxRect(12, 40, 1, 18)`), and null when the focus leaves text.
+   */
+  var acceptsText by mutableStateOf(false)
   /** Bumped when [batches] gets more; the UI drains the queue then. */
   var version by mutableIntStateOf(0)
   internal val batches = ConcurrentLinkedQueue<List<LxDrawOperation>>()
@@ -113,6 +118,9 @@ internal class LuxDialogs(
           0,
         )
       frame?.title?.advise(componentLifetime) { dialog.title = it }
+      component.inputLocation.advise(componentLifetime) { location ->
+        dialog.acceptsText = location != null
+      }
       component.position.advise(componentLifetime) { position ->
         dialog.x = position.x.toInt()
         dialog.y = position.y.toInt()

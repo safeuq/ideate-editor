@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +51,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.jetbrains.rd.ide.model.LxEvent
+import com.jetbrains.rd.ide.model.LxInputMethodEvent
+import com.jetbrains.rd.ide.model.LxInputMethodEventType
 import com.jetbrains.rd.ide.model.LxKeyEvent
 import com.jetbrains.rd.ide.model.LxKeyEventType
 import com.jetbrains.rd.ide.model.LxMouseEvent
@@ -195,14 +198,42 @@ private fun LuxContent(
   send: (LxEvent) -> Unit,
   softKeyboard: Boolean,
 ) {
+  val clipboard = LocalClipboardManager.current
+  val keyboard = remember(dialog.id) { LuxKeyboard(send) { clipboard.getText()?.text } }
+  val textInput = LocalEditorTextInput.current
+  // The soft keyboard only while a text field has the focus: the backend then reports where its
+  // caret is (`inputLocation`), as JetBrains Client turns input methods on and off with it. A new
+  // focus node each time, since the keyboard connects when the node gains focus.
+  val wantsKeyboard = softKeyboard && dialog.acceptsText
+  key(wantsKeyboard) {
+    LuxCanvas(
+      dialog,
+      bitmap,
+      painted,
+      fit,
+      send,
+      keyboard,
+      if (wantsKeyboard) textInput(keyboard) else Modifier,
+    )
+  }
+}
+
+@Composable
+private fun LuxCanvas(
+  dialog: LuxDialog,
+  bitmap: ImageBitmap,
+  painted: Int,
+  fit: Float,
+  send: (LxEvent) -> Unit,
+  keyboard: LuxKeyboard,
+  textInput: Modifier,
+) {
   val density = LocalDensity.current
   val focus = remember { FocusRequester() }
-  val keyboard = remember(dialog.id) { LuxKeyboard(send) }
-  val textInput = LocalEditorTextInput.current
   Canvas(
     Modifier.size((dialog.width * fit).dp, (dialog.height * fit).dp)
       .focusRequester(focus)
-      .then(if (softKeyboard) textInput(keyboard) else Modifier)
+      .then(textInput)
       .focusable()
       .onKeyEvent { event -> keyboard.key(event) }
       .pointerInput(dialog.id, fit) {
@@ -289,18 +320,31 @@ private fun LuxContent(
     painted // read, so a painted batch redraws
     drawImage(bitmap, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()))
   }
-  LaunchedEffect(dialog.id) { runCatching { focus.requestFocus() } }
+  LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 }
 
 /**
  * Keys for a backend dialog: hardware keys as AWT key events (`LxKeyEvent`, as `EventsKt.toLx`
  * converts them), and a soft keyboard's text through [EditorTextTarget], each character as a key
  * press. Example: `x` is `Pressed(VK_X = 88, 'x')`, `Typed(0, 'x')`, `Released(88, 'x')`.
+ *
+ * Pasted text goes in as one input method commit (`LxInputMethodEvent` Text with all of it
+ * committed), as JetBrains Client sends an input method's text: e.g. `"fooBar"` arrives whole, and
+ * a tab or newline in it is text, not a key. The paste shortcut (⌘V on a Mac, Ctrl+V elsewhere) and
+ * the keyboard's Paste take [clipboardText], the device's clipboard, so a backend on another
+ * machine never pastes its own.
  */
-private class LuxKeyboard(private val send: (LxEvent) -> Unit) : EditorTextTarget {
+private class LuxKeyboard(
+  private val send: (LxEvent) -> Unit,
+  private val clipboardText: () -> String?,
+) : EditorTextTarget {
   fun key(event: KeyEvent): Boolean {
     val code = awtKeyCode(event.key) ?: return false
     val modifiers = modifiersOf(event)
+    if (code == 'V'.code && modifiers == PASTE_MODIFIER) {
+      if (event.type == KeyEventType.KeyDown) pasteClipboard()
+      return true
+    }
     val character = event.utf16CodePoint.takeIf { it in 32..0xFFFF && it != 127 }?.toChar()
     when (event.type) {
       KeyEventType.KeyDown -> {
@@ -326,11 +370,14 @@ private class LuxKeyboard(private val send: (LxEvent) -> Unit) : EditorTextTarge
 
   override fun delete() = sendKey(send, KEY_DELETE, '\u007f', 0)
 
-  // ponytail: a pasted text is typed key by key; the backend clipboard (Ctrl+V) isn't synced for
-  // dialogs yet.
-  override fun paste(text: String) = text.forEach(::type)
+  override fun paste(text: String) {
+    if (text.isEmpty()) return
+    send(LxInputMethodEvent(LxInputMethodEventType.Text, text, text.length, null, false))
+  }
 
-  override fun pasteClipboard() = Unit
+  override fun pasteClipboard() {
+    clipboardText()?.let(::paste)
+  }
 
   override fun copy() = Unit
 
@@ -344,8 +391,7 @@ private class LuxKeyboard(private val send: (LxEvent) -> Unit) : EditorTextTarge
   override fun selectedText() = ""
 
   /** The keyboard's Select all: the platform's shortcut, as the backend's text field takes it. */
-  override fun selectAll() =
-    sendKey(send, 'A'.code, 'a', if (intellijandroid.client.ui.IS_MAC) META else CTRL)
+  override fun selectAll() = sendKey(send, 'A'.code, 'a', PASTE_MODIFIER)
 }
 
 /** Pressed, Typed and Released, as AWT sends one key stroke (Enter, Escape, Backspace type too). */
@@ -463,3 +509,6 @@ private const val ALT = 512 // ALT_DOWN_MASK
 private const val BUTTON1 = 1 // MouseEvent.BUTTON1
 private const val BUTTON1_DOWN = 1024 // BUTTON1_DOWN_MASK
 private const val DOUBLE_CLICK_MILLIS = 500L
+
+/** The platform's shortcut modifier, as for ⌘V / Ctrl+V and ⌘A / Ctrl+A. */
+private val PASTE_MODIFIER = if (intellijandroid.client.ui.IS_MAC) META else CTRL
