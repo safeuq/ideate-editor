@@ -41,8 +41,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import intellijandroid.client.ui.ClientFonts
+import intellijandroid.client.ui.ContextMenuArea
 import intellijandroid.client.ui.IslandsDark
 import intellijandroid.client.ui.LocalIcons
+import intellijandroid.client.ui.MenuItem
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -531,41 +533,44 @@ internal fun HostGroup(
   status: String? = null,
   statusColor: Color = IslandsDark.textSecondary,
   onStatusClick: (() -> Unit)? = null,
-  /** Gateway's host gear menu. */
-  menu: List<Pair<String, () -> Unit>> = emptyList(),
+  /** Gateway's host gear menu; also the header's right-click / long-press menu. */
+  menu: List<MenuItem> = emptyList(),
 ) {
   var menuOpen by remember { mutableStateOf(false) }
-  Row(
-    Modifier.fillMaxWidth()
-      .padding(top = 17.dp)
-      .height(28.dp)
-      .padding(start = Gateway.contentInset, end = Gateway.iconColumnEndInset),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    BasicText(
-      host,
-      style = styles.host,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.weight(1f),
-    )
-    status?.let {
+  ContextMenuArea(entries = { menu.takeIf { it.isNotEmpty() } }) {
+    Row(
+      Modifier.fillMaxWidth()
+        .padding(top = 17.dp)
+        .height(28.dp)
+        .padding(start = Gateway.contentInset, end = Gateway.iconColumnEndInset),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
       BasicText(
-        it,
-        style = styles.body.copy(color = statusColor),
+        host,
+        style = styles.host,
         maxLines = 1,
-        modifier =
-          Modifier.padding(end = 8.dp)
-            .then(
-              if (onStatusClick != null) Modifier.clickable(onClick = onStatusClick) else Modifier,
-            ),
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f),
       )
-    }
-    icons.forEach { icon -> IconButton(icon.path, icon.description, icon.onClick) }
-    if (menu.isNotEmpty()) {
-      Box {
-        IconButton("expui/general/settings.svg", "Host Settings") { menuOpen = true }
-        if (menuOpen) ProjectMenu(onDismiss = { menuOpen = false }, items = menu, styles)
+      status?.let {
+        BasicText(
+          it,
+          style = styles.body.copy(color = statusColor),
+          maxLines = 1,
+          modifier =
+            Modifier.padding(end = 8.dp)
+              .then(
+                if (onStatusClick != null) Modifier.clickable(onClick = onStatusClick)
+                else Modifier,
+              ),
+        )
+      }
+      icons.forEach { icon -> IconButton(icon.path, icon.description, icon.onClick) }
+      if (menu.isNotEmpty()) {
+        Box {
+          IconButton("expui/general/settings.svg", "Host Settings") { menuOpen = true }
+          if (menuOpen) ProjectMenu(onDismiss = { menuOpen = false }, items = menu, styles)
+        }
       }
     }
   }
@@ -583,48 +588,48 @@ internal fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
       row.lastActive?.let { "Last active: ${lastActive(it, System.currentTimeMillis())}" }.orEmpty()
   val statusStyle =
     styles.body.copy(color = if (row.running) Gateway.running else IslandsDark.textSecondary)
-  Row(
-    Modifier.fillMaxWidth()
-      .height(if (styles.twoLineRows) Gateway.twoLineRowHeight else Gateway.projectRowHeight)
-      .padding(start = Gateway.contentInset, end = Gateway.iconColumnEndInset),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(16.dp)) }
-    val title =
-      @Composable { modifier: Modifier ->
-        BasicText(
-          row.title,
-          style =
-            styles.body.copy(color = if (row.enabled) IslandsDark.link else Gateway.disabledText),
-          maxLines = 1,
-          overflow = if (row.middleEllipsis) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
-          modifier = if (row.enabled) modifier.clickable(onClick = row.onOpen) else modifier,
-        )
-      }
-    if (styles.twoLineRows) {
-      Column(Modifier.weight(1f).padding(start = 9.dp)) {
-        title(Modifier)
-        BasicText(status, style = statusStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      }
-    } else {
-      // The status follows the path; the path gives way when both don't fit, and the icons stay on
-      // the right.
-      Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-        title(Modifier.padding(start = 9.dp).weight(1f, fill = false))
-        Spacer(Modifier.width(18.dp))
-        BasicText(status, style = statusStyle, maxLines = 1)
-      }
-    }
-    row.onStop?.let { stop -> IconButton("expui/run/stop.svg", "Stop", stop) }
-    if (row.onRemove != null && row.enabled) {
-      Box {
-        IconButton("expui/general/moreVertical.svg", "More") { menuOpen = true }
-        if (menuOpen) {
-          ProjectMenu(
-            onDismiss = { menuOpen = false },
-            items = listOf("Remove from Recent Projects" to row.onRemove),
-            styles,
+  val menu = projectMenu(row)
+  // Gateway gives an unreachable host's rows no menu.
+  ContextMenuArea(entries = { menu.takeIf { row.enabled } }) {
+    Row(
+      Modifier.fillMaxWidth()
+        .height(if (styles.twoLineRows) Gateway.twoLineRowHeight else Gateway.projectRowHeight)
+        .padding(start = Gateway.contentInset, end = Gateway.iconColumnEndInset),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(16.dp)) }
+      val title =
+        @Composable { modifier: Modifier ->
+          BasicText(
+            row.title,
+            style =
+              styles.body.copy(color = if (row.enabled) IslandsDark.link else Gateway.disabledText),
+            maxLines = 1,
+            overflow =
+              if (row.middleEllipsis) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
+            modifier = if (row.enabled) modifier.clickable(onClick = row.onOpen) else modifier,
           )
+        }
+      if (styles.twoLineRows) {
+        Column(Modifier.weight(1f).padding(start = 9.dp)) {
+          title(Modifier)
+          BasicText(status, style = statusStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+      } else {
+        // The status follows the path; the path gives way when both don't fit, and the icons stay
+        // on
+        // the right.
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+          title(Modifier.padding(start = 9.dp).weight(1f, fill = false))
+          Spacer(Modifier.width(18.dp))
+          BasicText(status, style = statusStyle, maxLines = 1)
+        }
+      }
+      row.onStop?.let { stop -> IconButton("expui/run/stop.svg", "Stop", stop) }
+      if (row.onRemove != null && row.enabled) {
+        Box {
+          IconButton("expui/general/moreVertical.svg", "More") { menuOpen = true }
+          if (menuOpen) ProjectMenu(onDismiss = { menuOpen = false }, items = menu, styles)
         }
       }
     }
@@ -632,15 +637,23 @@ internal fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
 }
 
 /**
- * Gateway's ⋮ menu: Open With, Remove from Recent Projects, Collect Host and Client Logs. Only
- * Remove applies here.
+ * A project row's menu, for its ⋮ button and for right click / long press. Gateway's ⋮ menu has
+ * Open With, Remove from Recent Projects and Collect Host and Client Logs; collecting logs needs
+ * the host's log folders and a zip, so it is shown greyed out.
+ */
+private fun projectMenu(row: ProjectRow): List<MenuItem> = buildList {
+  add(MenuItem("Open", onClick = row.onOpen))
+  row.onStop?.let { add(MenuItem("Stop", onClick = it)) }
+  row.onRemove?.let { add(MenuItem("Remove from Recent Projects", onClick = it)) }
+  add(MenuItem("Collect Host and Client Logs", enabled = false))
+}
+
+/**
+ * Gateway's ⋮ and gear popup, in its measured look; the items are the same ones the right-click /
+ * long-press menu shows ([projectMenu], the SSH host menu). Greyed-out items can't be clicked.
  */
 @Composable
-private fun ProjectMenu(
-  onDismiss: () -> Unit,
-  items: List<Pair<String, () -> Unit>>,
-  styles: ConnectStyles,
-) {
+private fun ProjectMenu(onDismiss: () -> Unit, items: List<MenuItem>, styles: ConnectStyles) {
   Popup(
     alignment = Alignment.TopEnd,
     offset = IntOffset(0, with(LocalDensity.current) { 28.dp.roundToPx() }),
@@ -653,19 +666,23 @@ private fun ProjectMenu(
         .border(1.dp, Gateway.menuBorder, Gateway.menuShape)
         .padding(vertical = 6.dp),
     ) {
-      items.forEach { (label, onClick) ->
+      items.forEach { item ->
         Box(
           Modifier.fillMaxWidth()
             .height(Gateway.menuRowHeight)
             .padding(horizontal = 8.dp)
-            .clickable {
+            .clickable(enabled = item.enabled) {
               onDismiss()
-              onClick()
+              item.onClick()
             }
             .padding(start = 12.dp),
           contentAlignment = Alignment.CenterStart,
         ) {
-          BasicText(label, style = styles.body)
+          BasicText(
+            item.label,
+            style =
+              if (item.enabled) styles.body else styles.body.copy(color = Gateway.disabledText),
+          )
         }
       }
     }

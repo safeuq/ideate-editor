@@ -344,7 +344,7 @@ questions come from IntelliJ's `messages/SshBundle.properties`.
 |---|---|---|
 | Sidebar | Connections: SSH (`expui/nodes/ssh.svg`), then Link | This phone (an inlined phone outline; IntelliJ has no phone icon) or This computer (`expui/nodes/desktop.svg`), SSH, Link. Portrait: three bottom tabs |
 | Header | "Recent SSH Projects", **New Project** split button | the same, without the drop-down |
-| Host group | `user@host` (`:port` unless 22), then at the right: red "Host unreachable" (Label.errorForeground, Red7 `#DB5C5C`) or "Connecting…" / "Getting projects…" / "Authenticate…"; Reconnect when unreachable, Open SSH Terminal, Open Project (+), the gear menu | the same, without Open SSH Terminal; the gear menu has Remove Host |
+| Host group | `user@host` (`:port` unless 22), then at the right: red "Host unreachable" (Label.errorForeground, Red7 `#DB5C5C`) or "Connecting…" / "Getting projects…" / "Authenticate…"; Reconnect when unreachable, Open SSH Terminal, Open Project (+), the gear menu | the same, without Open SSH Terminal; the gear menu (also on right click or long press of the host line) has Reconnect, Open Project, Remove Host |
 | Unreachable host | paths in disabledText (Gray6 `#5A5D63`), no status, no ⋮ | the same |
 | Project rows | link-blue path shortened in the middle, "Last active: 52 minutes ago", ⋮ with "Remove from Recent Projects" | the same (`TextOverflow.MiddleEllipsis`) |
 | No hosts | "SSH Connection", "Work with a project on a machine reachable using SSH", New Connection | the description and New Connection |

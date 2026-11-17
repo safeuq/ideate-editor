@@ -44,6 +44,7 @@ import androidx.compose.ui.window.DialogProperties
 import intellijandroid.client.ssh.LoginMethod
 import intellijandroid.client.ui.ClientFonts
 import intellijandroid.client.ui.IslandsDark
+import intellijandroid.client.ui.MenuItem
 import kotlinx.coroutines.delay
 
 /**
@@ -115,7 +116,12 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
               },
             )
           },
-        menu = listOf("Remove Host" to { actions.removeHost(host.entry) }),
+        menu =
+          listOf(
+            MenuItem("Reconnect") { actions.reconnect(host.entry) },
+            MenuItem("Open Project") { actions.newProjectOn(host.entry) },
+            MenuItem("Remove Host") { actions.removeHost(host.entry) },
+          ),
         status = status,
         statusColor = color,
         onStatusClick =

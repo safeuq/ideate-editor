@@ -376,6 +376,8 @@ A folder the shell can't read is printed as `11`, so it keeps its arrow and the 
 The connect screen copies JetBrains Gateway 2026.3's "Welcome to JetBrains Gateway" window and its project ⋮ menu,
 measured on 2x screenshots (pt = dp). Code: `compose/.../connect/ConnectScreen.kt`, object `Gateway`.
 
+Row menus (2026-11-17): a project row's ⋮ and its right-click / long-press menu (ContextMenuArea, section 13) show the same items: Open, Stop (a running Termux backend), Remove from Recent Projects, and Gateway's Collect Host and Client Logs greyed out (it needs the host's log folders zipped). An SSH host line has the gear menu's items. Rows of an unreachable host have no menu, as in Gateway.
+
 | Part | Gateway | Ours |
 |---|---|---|
 | Sidebar | 224 wide; "Connections" label, rows 33 high, icon 17 in; selected row full width `#2E436E` | Same; 32 % of the width, at least 132, on a narrow screen. Rows: This phone (`expui/nodes/ssh.svg`), divider, Link (Markdown plugin's chain icon) |
