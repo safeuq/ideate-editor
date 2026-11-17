@@ -104,10 +104,18 @@ object IslandsDark {
   val treeTopInset
     get() = byDensity(4.dp, 2.dp) // Tree.border top 4 (compact 2)
 
-  // Measured 12 on the real client in compact mode, so not Tree.border's 12 (compact 8).
-  val treeSideInset = 12.dp // also the selection's left/right inset
+  // The selection's left/right inset: measured 12 on the real client in compact mode, so not
+  // Tree.border's 12 (compact 8).
+  val treeSideInset = 12.dp
+
+  // Where a top-level row's chevron box starts: measured 9 in compact against Gateway
+  // (2026-11-17), Tree.border's 8 plus 1; normal is inferred the same way (12 + 1).
+  val treeChevronInset
+    get() = byDensity(13.dp, 9.dp)
+
   val treeIndent = 19.dp // leftChildIndent 7 → 8 + rightChildIndent 11
-  val treeIconTextGap = 2.dp
+  val treeIconTextGap = 2.dp // chevron box end to icon: measured
+  val treeTextGap = 3.dp // icon to text: measured against Gateway (2026-11-17)
   val treeHover = Color(0x10FFFFFF) // selection-bg-hovered
 
   val tabRowHeight = 32.dp // measured: editor tabs row
@@ -132,15 +140,37 @@ object IslandsDark {
     get() = UI_FONT_SIZE + byDensity(0f, -1f) // MainToolbar.fontSizeOffset.compact -1
 
   // Tool window bar: StripeToolbar.Button.size 37,40 (compact 32,32), iconSize 20 (compact 16).
-  // Our buttons are square, so normal takes the 40; the bar adds 4 on each side.
-  val stripeButton
+  // Width across the bar, length along it.
+  val stripeButtonWidth
+    get() = byDensity(37.dp, 32.dp)
+
+  val stripeButtonLength
     get() = byDensity(40.dp, 32.dp)
 
   val stripeIcon
     get() = byDensity(20.dp, 16.dp)
 
+  // The open window's highlight sits inside the button, inset by
+  // StripeToolbar.Button.leftStripeIcon.padding (top, left, bottom, right) 5,5,5,2 (compact
+  // 4,5,4,3): 30×30 (compact 24×24).
+  val stripeHighlightTop
+    get() = byDensity(5.dp, 4.dp)
+
+  val stripeHighlightStart = 5.dp
+
+  val stripeHighlightEnd
+    get() = byDensity(2.dp, 3.dp)
+
+  // Button.ToolWindow.arc 12 (compact 8), an arc diameter.
+  val stripeHighlightRadius
+    get() = byDensity(6.dp, 4.dp)
+
+  // ActionButton.pressedBackground = toolbar-bg-pressed = transparent-white-40: a shown window.
+  val stripeHighlight = Color(0x29FFFFFF)
+
+  // Measured 35 in compact against Gateway (2026-11-17): the button and 3 to the islands.
   val stripeThickness
-    get() = stripeButton + 8.dp
+    get() = stripeButtonWidth + 3.dp
 
   /** Editor.Gutter.emptyAnnotationAreaWidth: 4 (code default), compact 0. */
   val gutterEmptyAnnotationArea

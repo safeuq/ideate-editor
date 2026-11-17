@@ -524,3 +524,54 @@ Checked 2026-11-17 against the Mac backend (port 5992):
 - **Labels:** on the first version, labels shared the row's free space with the gap before the shortcut, so a
   long label was cut at half the width ("Remove from Recent Pr…", seen by the UI session). Now the label takes
   the room the menu has, and the shortcut sits at the right end.
+
+## 14. Tool window bar, tree indent and headers, measured against Gateway (2026-11-17)
+
+The user compared Gateway (JetBrains Client) with IDEate on the same phone backend, both in compact density, both
+screenshots at 2x. Measured in pixels, halved here to dp; code reading from IntelliJ 263 sources.
+
+**Tool window bar** (`SquareStripeButton`, `SquareStripeButtonLook`). IntelliJ paints the highlight inside the
+button minus the stripe's icon padding, not over the whole button:
+
+| | IntelliJ / Gateway | IDEate before | Key |
+|---|---|---|---|
+| Button | 37×40, compact 32×32; no gap between buttons | 40×40 / 32×32 plus 2 on each side (36 apart) | `StripeToolbar.Button.size` |
+| Highlight | button minus 5,5,5,2 (top, left, bottom, right), compact 4,5,4,3: 30×30, compact 24×24 | the whole button | `StripeToolbar.Button.leftStripeIcon.padding(.compact)` |
+| Corners | arc 12, compact 8 (diameters): radius 6 / 4 | radius 6 | `Button.ToolWindow.arc` (`JBUI.CurrentTheme.Toolbar.stripeButtonArc`) |
+| Colour of a shown window | `#FFFFFF29`, `#4A4A4F` on the bar | `#393B40` (hover's shade) | `ActionButton.pressedBackground` = `toolbar-bg-pressed` = `transparent-white-40` |
+| Bar width | 35 in compact: the button against the window edge, then 3 to the islands | 40, buttons centred | measured |
+| Separator | 1 dp `#FFFFFF21` (`#43454A` on the bar), as long as the highlight and lined up with it, 5 from the buttons on either side (an 11 gap) | `#393B40`, 20 long, 6 from the buttons | `toolbar-border`; measured |
+
+A focused tool window's button uses `ToolWindow.Button.selectedBackground` (`toolbar-selected-bg` = blue-60)
+instead; IDEate has no tool window focus yet, so every shown window gets the pressed colour, as Gateway showed.
+
+**Tree indent** (Project and Structure share `ProjectTreeView`). From the island's left edge, in px at 2x:
+
+| Row part | Gateway | IDEate before | IDEate now |
+|---|---|---|---|
+| Top-level chevron glyph | 26 | 32 | 26 |
+| Second-level chevron glyph | 67 | 73 | 67 |
+| Icon after the chevron | +33 | +33 | +33 |
+| Text after the chevron | +71 | +69 | +71 |
+
+So the chevron box starts at 9 dp in compact (Tree.border's 8 plus 1; normal assumed 13 = 12 + 1, not measured),
+not 12, and the text is 3 dp after the icon, not 2. The per-level step (19) was right. The selection band keeps
+its measured 12 dp inset (section 7).
+
+**Tool window title.** Bold in the new UI: `ComboContentLayout` and `TabContentLayout` create the name label as
+`BaseLabel(ui, ExperimentalUI.isNewUI())`, and `BaseLabel.getFont()` derives `Font.BOLD`. Drawn with Inter
+SemiBold (Inter has no Bold file), at the header size (13, compact 12).
+
+**Project avatar** (`AvatarUtils.generateColoredAvatar`, `AvatarUtils.initials`):
+
+| Part | Value |
+|---|---|
+| Letters | two capitals from camel case (`MyProject` → `MP`); else the first and last word split at the first of space, comma, `-`, `_`, `.`, quotes that gives two words (`xtool-web-app` → `XA`); else the camel case letters, one for a single lower-case word (`xtool` → `X`) |
+| Corners | `arcRatio` 0.4 of the size as arc diameter: radius 0.2 × size (3.2 at 16) |
+| Font | JetBrains Mono SemiBold (`WEIGHT_DEMIBOLD`) at `13 * size / 20` (16 → 10, 20 → 13) |
+| Colour | unchanged: `projectAvatarBrush` (theme gradients, picked like a non-local project) |
+
+**Git status and file colours.** See docs/split-protocol.md, "Project view rows: file status and scope colour".
+
+Not done (docs/pending.md): the backend's own tool window list and the ⋯ button, the "Project ▾" view selector,
+the project-colour tint on the main toolbar, and the title bar merged with the toolbar.

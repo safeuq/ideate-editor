@@ -927,6 +927,19 @@ Checked on the 5991 backend, desktop client: Big.java (4,505 lines) saved with i
 (line 150, `if (value > 0) {`). On reconnect it came back on line 150, shown near the top, with the backend
 accepting the move, and the saved offset stayed 2971.
 
+## Project view rows: file status and scope colour (2026-11-17)
+
+`RdProjectViewItemDescriptor` carries two fields the client used to drop:
+
+| Field | Example values (5991 `smoke` project made a git repo with `out/` and `build/` ignored) | Shown as |
+|---|---|---|
+| `fileStatus` | `NOT_CHANGED` (`src`, `.idea`), `UNKNOWN` (unversioned `.gitignore`, `smoke.iml`), `IDEA_FILESTATUS_IGNORED` (`build`, `out`) | the name's colour: the editor scheme's `FILESTATUS_<fileStatus>`, e.g. `FILESTATUS_IDEA_FILESTATUS_IGNORED` = `D69A6B` in Islands Dark; no such key (`NOT_CHANGED`) leaves the default text colour |
+| `scope` | `RdProjectScope(name=Non-Project Files, colorName=Yellow, color=-14082276)` on the excluded `out`; null elsewhere | the whole row's background: `color` is ARGB, `-14082276` = `0xFF291F1C`, the brown Gateway draws under `.gradle` and `build` in the user's xtool project |
+
+A fragment's own `fgColor` still wins over the status colour. `TreeNode.fileStatus` and `TreeNode.background`
+hold them; `ProjectTreeView(fileStatusColor = …)` looks the colour up in the scheme when the row is drawn, since
+the scheme can arrive after the first rows.
+
 ## Plan for the client that follows from this
 
 1. **Reuse:** rd-core, rd-framework (with `UnsafeBuffer` patched), rd-text, and the two generated model jars of the **exact** backend build (class version lowered, resource files kept). Plus kotlin-stdlib and kotlinx-coroutines.

@@ -1126,6 +1126,8 @@ class ClientSession(
         isDirectory = descriptor.isDirectory,
         path = descriptor.path,
         sortKey = descriptor.sortKey,
+        fileStatus = descriptor.fileStatus,
+        background = descriptor.scope?.color?.let { it.toLong() and 0xFFFFFFFFL },
       )
 
     private val unhandledIconTypes = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()

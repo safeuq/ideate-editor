@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -119,40 +121,74 @@ fun ToolWindowBar(
   @Composable
   fun Buttons() = groups.forEachIndexed { index, group ->
     if (index > 0) {
+      // Measured against Gateway (2026-11-17): a 1 dp line as long as the highlight and lined up
+      // with it, 5 dp from the buttons on either side.
+      val length =
+        IslandsDark.stripeButtonWidth -
+          IslandsDark.stripeHighlightStart -
+          IslandsDark.stripeHighlightEnd
       Box(
-        (if (vertical) Modifier.padding(vertical = 6.dp).size(Bars.separatorLength, 1.dp)
-          else Modifier.padding(horizontal = 6.dp).size(1.dp, Bars.separatorLength))
-          .background(Bars.separator),
+        (if (vertical)
+            Modifier.padding(start = IslandsDark.stripeHighlightStart, top = 5.dp, bottom = 5.dp)
+              .size(length, 1.dp)
+          else
+            Modifier.padding(start = 5.dp, end = 5.dp, bottom = IslandsDark.stripeHighlightStart)
+              .size(1.dp, length))
+          .background(IslandsDark.toolbarSeparator),
       )
     }
-    group.forEach { window -> StripeButton(window, window in open) { onClick(window) } }
+    group.forEach { window -> StripeButton(window, window in open, vertical) { onClick(window) } }
   }
   if (vertical) {
     Column(
       modifier.width(IslandsDark.stripeThickness).verticalScroll(rememberScrollState()),
-      horizontalAlignment = Alignment.CenterHorizontally,
+      // Buttons against the window edge; the bar's extra 3 dp face the islands.
+      horizontalAlignment = Alignment.Start,
     ) {
       Buttons()
     }
   } else {
     Row(
       modifier.height(IslandsDark.stripeThickness).horizontalScroll(rememberScrollState()),
-      verticalAlignment = Alignment.CenterVertically,
+      verticalAlignment = Alignment.Bottom,
     ) {
       Buttons()
     }
   }
 }
 
+/**
+ * IntelliJ's `SquareStripeButton`: the whole button takes taps; a shown window's highlight and the
+ * icon sit in the button minus the stripe's icon padding. A horizontal bar (under the islands)
+ * turns the left stripe's button on its side: the window edge is at the bottom, the islands at the
+ * top.
+ */
 @Composable
-private fun StripeButton(window: ToolWindow, selected: Boolean, onClick: () -> Unit) {
+private fun StripeButton(
+  window: ToolWindow,
+  selected: Boolean,
+  vertical: Boolean,
+  onClick: () -> Unit,
+) {
   val icon = LocalIcons.current.painter(window.icon)
-  Box(Modifier.padding(2.dp).size(IslandsDark.stripeButton), contentAlignment = Alignment.Center) {
-    Box(
-      Modifier.matchParentSize()
-        .background(if (selected) Bars.selected else Color.Transparent, Bars.buttonShape)
-        .clickable(onClick = onClick),
-    )
+  val across = IslandsDark.stripeButtonWidth
+  val along = IslandsDark.stripeButtonLength
+  val top = IslandsDark.stripeHighlightTop
+  val start = IslandsDark.stripeHighlightStart
+  val end = IslandsDark.stripeHighlightEnd
+  Box(
+    (if (vertical) Modifier.size(across, along) else Modifier.size(along, across))
+      .clickable(onClick = onClick)
+      .padding(
+        if (vertical) PaddingValues(start = start, top = top, end = end, bottom = top)
+        else PaddingValues(start = top, top = end, end = top, bottom = start),
+      )
+      .background(
+        if (selected) IslandsDark.stripeHighlight else Color.Transparent,
+        RoundedCornerShape(IslandsDark.stripeHighlightRadius),
+      ),
+    contentAlignment = Alignment.Center,
+  ) {
     icon?.let {
       Image(it, contentDescription = window.title, modifier = Modifier.size(IslandsDark.stripeIcon))
     }
@@ -182,18 +218,25 @@ fun MainToolbar(
       Modifier.weight(1f, fill = false).padding(end = 8.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      // The project widget's coloured square with the name's first letters; IntelliJ sizes it like
-      // the toolbar icons (RecentProject.Avatar.iconSize falls back to
-      // MainToolbar.Button.iconSize).
+      // The project widget's avatar as AvatarUtils.generateColoredAvatar draws it: sized like the
+      // toolbar icons (RecentProject.Avatar.iconSize falls back to MainToolbar.Button.iconSize),
+      // corners of arcRatio 0.4 (an arc diameter, so a radius of 0.2 × size), the initials in
+      // JetBrains Mono SemiBold at 13/20 of the size (16 → 10, 20 → 13).
+      val avatarSize = IslandsDark.toolbarIcon
       Box(
-        Modifier.size(IslandsDark.toolbarIcon)
-          .background(projectAvatarBrush(name), RoundedCornerShape(4.dp)),
+        Modifier.size(avatarSize)
+          .background(projectAvatarBrush(name), RoundedCornerShape(avatarSize * 0.2f)),
         contentAlignment = Alignment.Center,
       ) {
         BasicText(
           initials(name),
           style =
-            text.copy(color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+            TextStyle(
+              color = Color.White,
+              fontFamily = fonts.editor,
+              fontWeight = FontWeight.SemiBold,
+              fontSize = (avatarSize.value.toInt() * 13 / 20).sp,
+            ),
         )
       }
       BasicText(
@@ -267,9 +310,17 @@ fun ToolWindowPanel(
           }
         }
       }
+      // Bold in the new UI (ComboContentLayout: BaseLabel(ui, ExperimentalUI.isNewUI())). Inter
+      // has no Bold file; IntelliJ draws bold UI text with Inter SemiBold.
       BasicText(
         window.title,
-        style = fonts.label().copy(fontSize = IslandsDark.headerFontSize.sp),
+        style =
+          fonts
+            .label()
+            .copy(
+              fontSize = IslandsDark.headerFontSize.sp,
+              fontWeight = FontWeight.SemiBold,
+            ),
       )
     }
     // On a phone held upright (back chevron shown) the tool window covers the editor; a line under
@@ -279,13 +330,31 @@ fun ToolWindowPanel(
   }
 }
 
-/** `smoke` → `SM`, `xtool-web` → `XW`. */
+/**
+ * IntelliJ's `AvatarUtils.initials`: `xtool` → `X`, `MyProject` → `MP`, `xtool-web-app` → `XA`. Two
+ * capitals from camel case win; otherwise the first and last word, split at the first of space,
+ * comma, `-`, `_`, `.` or quotes that gives two words; otherwise the camel case letters (just one
+ * for a single lower-case word).
+ */
 internal fun initials(name: String): String {
-  val words = name.split('-', '_', ' ', '.').filter { it.isNotEmpty() }
-  return when {
-    words.size >= 2 -> "${words[0][0]}${words[1][0]}"
-    else -> name.take(2)
-  }.uppercase()
+  val camelCase =
+    name
+      .dropWhile { !it.isLetter() }
+      .takeWhile { it.isLetterOrDigit() }
+      .filterIndexed { index, character -> index == 0 || character.isUpperCase() }
+      .take(2)
+      .uppercase()
+  if (camelCase.length == 2) return camelCase
+  val trimmed = name.filter { !it.isSurrogate() }.trim()
+  val words =
+    listOf(" ", ",", "-", "_", ".", "`'\"").firstNotNullOfOrNull { delimiters ->
+      trimmed
+        .split(*delimiters.toCharArray())
+        .map { word -> word.filter { it.isLetterOrDigit() } }
+        .filter { it.isNotEmpty() }
+        .takeIf { it.size >= 2 }
+    } ?: return camelCase
+  return "${words.first().first()}${words.last().first()}".uppercase()
 }
 
 /**
@@ -323,9 +392,5 @@ private val AVATAR_GRADIENTS =
  * Colors and fixed sizes of the bars; the sizes that follow the UI density are in [IslandsDark].
  */
 private object Bars {
-  val buttonShape = RoundedCornerShape(6.dp)
-  val selected = Color(0xFF393B40)
-  val separator = Color(0xFF393B40)
-  val separatorLength = 20.dp
   val headerBorder = IslandsDark.toolWindowBorder // ToolWindow.Header.borderColor
 }

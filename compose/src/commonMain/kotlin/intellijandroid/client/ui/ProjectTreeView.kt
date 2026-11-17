@@ -1,6 +1,7 @@
 package intellijandroid.client.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -40,6 +41,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -101,6 +103,8 @@ fun ProjectTreeView(
   onMenu: ((TreeNode) -> Unit)? = null,
   /** The open menu's items; null while they load. */
   menuEntries: () -> List<MenuEntry>? = { null },
+  /** The name colour for a [TreeNode.fileStatus], or null for the default text colour. */
+  fileStatusColor: (String) -> Color? = { null },
 ) {
   val rows = remember(tree) { tree.visibleRows() }
   // Each laid-out row's right edge (text end plus the side inset), for the sideways scroll range.
@@ -179,6 +183,7 @@ fun ProjectTreeView(
       ) {
         TreeRow(
           node = node,
+          nameColor = node.fileStatus?.let(fileStatusColor) ?: IslandsDark.text,
           depth = depth,
           expanded = node.id in tree.expanded,
           selected = node.id == tree.selected,
@@ -211,6 +216,8 @@ private fun MenuArea(
 @Composable
 private fun TreeRow(
   node: TreeNode,
+  /** The colour of fragments that don't set their own. */
+  nameColor: Color,
   depth: Int,
   expanded: Boolean,
   selected: Boolean,
@@ -235,17 +242,20 @@ private fun TreeRow(
       hovered -> IslandsDark.treeHover
       else -> null
     }
-  val chevronX = IslandsDark.treeSideInset + IslandsDark.treeIndent * (depth - 1)
-  val rendererX = IslandsDark.treeSideInset + IslandsDark.treeIndent * depth
+  val chevronX = IslandsDark.treeChevronInset + IslandsDark.treeIndent * (depth - 1)
+  val rendererX = IslandsDark.treeChevronInset + IslandsDark.treeIndent * depth
   val iconX = rendererX + IslandsDark.treeIconTextGap
-  val textX = iconX + 16.dp + IslandsDark.treeIconTextGap
+  val textX = iconX + 16.dp + IslandsDark.treeTextGap
 
   Box(
-    Modifier.fillMaxWidth().height(IslandsDark.treeRowHeight).hoverable(interaction).pointerInput(
-      node.id,
-    ) {
-      detectTapGestures(onPress = { onPress() }, onDoubleTap = { onDoubleClick() })
-    },
+    Modifier.fillMaxWidth()
+      .height(IslandsDark.treeRowHeight)
+      // The scope's file colour fills the whole row, under the selection.
+      .then(node.background?.let { Modifier.background(Color(it)) } ?: Modifier)
+      .hoverable(interaction)
+      .pointerInput(node.id) {
+        detectTapGestures(onPress = { onPress() }, onDoubleTap = { onDoubleClick() })
+      },
   ) {
     // Selection and hover: a rounded rectangle inset 12 px from both sides, not indented with the
     // node.
@@ -300,14 +310,14 @@ private fun TreeRow(
         )
       }
       val label =
-        remember(node.fragments) {
+        remember(node.fragments, nameColor) {
           buildAnnotatedString {
             for (fragment in node.fragments) {
               withStyle(
                 SpanStyle(
                   color =
                     fragment.foreground?.let { androidx.compose.ui.graphics.Color(it) }
-                      ?: IslandsDark.text,
+                      ?: nameColor,
                   // Inter has no Bold file; IntelliJ draws "bold" UI text with Inter SemiBold.
                   fontWeight =
                     if (fragment.style and 1 != 0) FontWeight.SemiBold else FontWeight.Normal,

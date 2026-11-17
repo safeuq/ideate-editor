@@ -26,6 +26,13 @@ data class TreeNode(
   /** File path on the backend; null for virtual nodes such as "External Libraries". */
   val path: String?,
   val sortKey: Int,
+  /**
+   * `RdProjectViewItemDescriptor.fileStatus`, the git status that colours the name, e.g. `IGNORED`;
+   * null or `NOT_CHANGED` for the default colour.
+   */
+  val fileStatus: String? = null,
+  /** ARGB row background from the node's scope (Settings | Appearance | File Colors), or null. */
+  val background: Long? = null,
 )
 
 data class ProjectTree(

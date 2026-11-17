@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -268,6 +269,8 @@ private fun ToolWindowContent(
         scroll = scroll,
         onMenu = { session.projectMenu(it.id) },
         menuEntries = { state.contextMenu?.entries },
+        // The scheme's FILESTATUS_<id> colour, e.g. FILESTATUS_IDEA_FILESTATUS_IGNORED D69A6B.
+        fileStatusColor = { status -> state.scheme?.color("FILESTATUS_$status")?.let(::Color) },
       )
     ToolWindow.STRUCTURE ->
       StructureView(state, session, onNavigated, Modifier.fillMaxSize(), scroll)
