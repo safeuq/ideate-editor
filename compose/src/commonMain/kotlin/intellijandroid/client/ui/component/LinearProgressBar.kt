@@ -12,45 +12,57 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.unit.dp
-import intellijandroid.client.ui.theme.IslandsDark
 
 /**
- * IntelliJ's indeterminate `JProgressBar` (`DarculaProgressBarUI`), Jewel's
- * `IndeterminateHorizontalProgressBar`: a 4 dp rounded track with a segment a third of its width
- * sliding across, one pass every 1.6 s. Fills the width it is given, e.g.
- * `IndeterminateHorizontalProgressBar(Modifier.fillMaxWidth())`.
+ * IntelliJ's indeterminate `JProgressBar`, painted as `DarculaProgressBarUI.paintIndeterminate`
+ * does (not simplified): the whole 4 dp rounded bar filled with a mirrored gradient from
+ * `ProgressBar.indeterminateStartColor` to `indeterminateEndColor` that moves right in steps.
  *
- * IntelliJ paints the segment as a gradient from `ProgressBar.indeterminateStartColor` (blue-110)
- * to `indeterminateEndColor` (control-brand-bg); this draws it in one color, as Gateway's start
- * popup looked when measured.
+ * Values: 16 frames (`cycleTime` 800 ms / `repaintInterval` 50 ms), `step` 6 dp; the gradient runs
+ * from `frame * 12` dp to `16 * 6 + frame * 12` dp, mirrored (`GradientPaint(…, cyclic = true)`),
+ * so it moves 12 dp every 50 ms and one 800 ms cycle moves it one full period (192 dp), seamless.
+ * Fills the width it is given, e.g. `IndeterminateHorizontalProgressBar(Modifier.fillMaxWidth())`.
  */
 @Composable
 fun IndeterminateHorizontalProgressBar(modifier: Modifier = Modifier) {
-  val segment by
+  val time by
     rememberInfiniteTransition(label = "progress")
       .animateFloat(
-        initialValue = -ProgressBarLook.segment,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = 1600, easing = LinearEasing)),
-        label = "segment",
+        initialValue = 0f,
+        targetValue = ProgressBarLook.frames.toFloat(),
+        animationSpec =
+          infiniteRepeatable(tween(ProgressBarLook.cycleMillis, easing = LinearEasing)),
+        label = "frame",
       )
   Canvas(modifier.height(ProgressBarLook.height)) {
-    val radius = CornerRadius(size.height / 2)
-    drawRoundRect(ProgressBarLook.track, cornerRadius = radius)
-    val start = (segment * size.width).coerceAtLeast(0f)
-    val end = ((segment + ProgressBarLook.segment) * size.width).coerceAtMost(size.width)
-    if (end > start)
-      drawRoundRect(ProgressBarLook.fill, Offset(start, 0f), Size(end - start, size.height), radius)
+    // Swing repaints every 50 ms, so the gradient jumps a frame at a time rather than gliding.
+    val frame = time.toInt().coerceAtMost(ProgressBarLook.frames - 1)
+    val step = ProgressBarLook.step.toPx()
+    val start = frame * step * 2
+    drawRoundRect(
+      Brush.linearGradient(
+        listOf(ProgressBarLook.indeterminateStart, ProgressBarLook.indeterminateEnd),
+        start = Offset(start, 0f),
+        end = Offset(start + ProgressBarLook.frames * step, 0f),
+        tileMode = TileMode.Mirror,
+      ),
+      cornerRadius = CornerRadius(size.height / 2),
+    )
   }
 }
 
 private object ProgressBarLook {
   val height = 4.dp // DarculaProgressBarUI.DEFAULT_WIDTH
-  val track = Color(0xFF40434A) // ProgressBar.trackColor = control-bg-small = gray-50
-  val fill = IslandsDark.controlBrandBackground // ProgressBar.progressColor = control-brand-bg
-  /** Part of the bar the moving segment covers. */
-  const val segment = 0.3f
+  // ProgressBar.indeterminateStartColor = blue-110 (Islands Dark)
+  val indeterminateStart = Color(0xFF92B7FF)
+  // Islands Dark spells it "indeterminateendcolor"; UIManager keys match case, so the parent
+  // Experimental Dark's indeterminateEndColor = Blue5 applies.
+  val indeterminateEnd = Color(0xFF366ACE)
+  const val cycleMillis = 800 // CYCLE_TIME_DEFAULT
+  const val frames = 16 // cycleMillis / REPAINT_INTERVAL_DEFAULT (50)
+  val step = 6.dp
 }

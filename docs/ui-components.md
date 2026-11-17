@@ -300,7 +300,8 @@ the desktop app and the emulator before it's pushed.
   open it.
 - `IndeterminateHorizontalProgressBar(modifier)` (Jewel's name, file `LinearProgressBar.kt`): the
   4 dp track with a sliding segment from StartProgress. Single color; IntelliJ's gradient
-  (`indeterminateStartColor` blue-110 → `indeterminateEndColor`) is not done.
+  (`indeterminateStartColor` blue-110 → `indeterminateEndColor`) is not done. Replaced on
+  2026-11-17, see "Indeterminate bar and narrow StartProgress".
 - StartProgress's Cancel is step 2's `OutlinedButton`, focused when the popup opens (Gateway
   shows it with the focus ring; Enter cancels).
 - Checked: the component gallery (`CLIENT_GALLERY`), the desktop app (Project menu, toolbar) and
@@ -407,3 +408,25 @@ By file, so the two sessions never edit the same file at once (the "Who" column 
 | UI session | connect/SshPage.kt, connect/ConnectScreen.kt, connect/FolderChooser.kt, ui/MessageDialog.kt → ui/dialog, new ui/component files for steps 2 to 4 and 8, ui/dialog |
 
 Step 1 went first and alone; the rest run in parallel.
+
+## Indeterminate bar and narrow StartProgress (2026-11-17)
+
+User report with a phone screenshot: the start popup touched both sides of the screen, and the bar
+(a blue segment sliding over a grey track) didn't look like IntelliJ's.
+
+**The bar** now paints as `DarculaProgressBarUI.paintIndeterminate` (`IC/platform/platform-impl/src/com/intellij/ide/ui/laf/darcula/ui/DarculaProgressBarUI.java`, not simplified):
+no track and no segment; the whole rounded bar is one mirrored gradient that moves right in steps.
+
+| Value | IntelliJ | IDEate |
+| --- | --- | --- |
+| Frames | `CYCLE_TIME_DEFAULT` 800 ms / `REPAINT_INTERVAL_DEFAULT` 50 ms = 16 | the same; the frame changes every 50 ms, no gliding |
+| Gradient | `GradientPaint(x + frame·12, start, x + 16·6 + frame·12, end, cyclic = true)`, step 6 | `Brush.linearGradient(…, TileMode.Mirror)`, same offsets in dp |
+| Start color | `ProgressBar.indeterminateStartColor` = blue-110 | `#92B7FF` |
+| End color | Islands Dark writes `indeterminateendcolor` (lower case), which UIManager doesn't match, so Experimental Dark's `indeterminateEndColor` = Blue5 applies | `#366ACE` |
+
+One 800 ms cycle moves the gradient 192 dp, one full mirrored period, so the loop has no jump.
+
+**The popup** keeps Gateway's 459 dp when the window has 459 + 2 × 16 dp; narrower, it takes the
+width minus 16 dp each side and Cancel moves under the detail line, at the right end. Example: a
+411 dp phone held upright gives a 379 dp popup. Checked in the gallery: `CLIENT_GALLERY=<out>.png`
+now also writes `<out>-progress.png` (900 dp) and `<out>-progress-narrow.png` (411 dp).

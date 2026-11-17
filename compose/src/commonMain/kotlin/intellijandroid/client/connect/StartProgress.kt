@@ -1,6 +1,8 @@
 package intellijandroid.client.connect
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,7 +35,6 @@ import intellijandroid.client.ui.theme.label
  */
 @Composable
 fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: () -> Unit) {
-  val text = fonts.label()
   // Not dismissable by tapping outside or Back: Cancel is the only way out, as in Gateway.
   Dialog(
     onDismissRequest = {},
@@ -44,28 +45,58 @@ fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: (
         usePlatformDefaultWidth = false,
       ),
   ) {
-    Row(
-      Modifier.width(Popup.width)
-        .popupContainer(0.dp) // Gateway's popup is square (measured)
-        .padding(start = Popup.inset, end = Popup.inset, top = 10.dp, bottom = 12.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        BasicText(title, style = text)
-        IndeterminateHorizontalProgressBar(Modifier.fillMaxWidth())
-        BasicText(
-          detail,
-          style = text.copy(color = IslandsDark.textSecondary),
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
+    // Gateway's 459 dp when it fits with a 16 dp margin each side; narrower screens get the space
+    // left and Cancel moves under the text, at the right end. E.g. a 411 dp phone: 379 dp wide.
+    BoxWithConstraints {
+      val narrow = maxWidth < Popup.width + Popup.screenMargin * 2
+      val width = if (narrow) maxWidth - Popup.screenMargin * 2 else Popup.width
       // Gateway shows Cancel focused (its focus ring), so Enter cancels.
       val cancelFocus = remember { FocusRequester() }
-      OutlinedButton("Cancel", Modifier.focusRequester(cancelFocus), onClick = onCancel)
+      val cancel: @Composable () -> Unit = {
+        OutlinedButton("Cancel", Modifier.focusRequester(cancelFocus), onClick = onCancel)
+      }
+      val popup =
+        Modifier.width(width)
+          .popupContainer(0.dp) // Gateway's popup is square (measured)
+          .padding(start = Popup.inset, end = Popup.inset, top = 10.dp, bottom = 12.dp)
+      if (narrow) {
+        Column(popup, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          ProgressText(title, detail, fonts)
+          Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { cancel() }
+        }
+      } else {
+        Row(
+          popup,
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          ProgressText(title, detail, fonts, Modifier.weight(1f))
+          cancel()
+        }
+      }
       LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
     }
+  }
+}
+
+/** The title, the bar and the detail line. */
+@Composable
+private fun ProgressText(
+  title: String,
+  detail: String,
+  fonts: ClientFonts,
+  modifier: Modifier = Modifier,
+) {
+  val text = fonts.label()
+  Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    BasicText(title, style = text)
+    IndeterminateHorizontalProgressBar(Modifier.fillMaxWidth())
+    BasicText(
+      detail,
+      style = text.copy(color = IslandsDark.textSecondary),
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
   }
 }
 
@@ -73,4 +104,6 @@ fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: (
 private object Popup {
   val width = 459.dp
   val inset = 11.dp
+  /** Space kept between the popup and the screen's sides when the screen is narrow. */
+  val screenMargin = 16.dp
 }

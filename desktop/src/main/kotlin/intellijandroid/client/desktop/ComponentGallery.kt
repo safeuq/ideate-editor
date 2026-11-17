@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import intellijandroid.client.connect.StartProgress
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.MenuItem
 import intellijandroid.client.ui.MenuSeparator
@@ -67,9 +68,14 @@ object ComponentGallery {
   fun render(target: File, clientLib: File, fonts: ClientFonts) {
     val density = Density(SCALE)
     val icons = DesktopResources.JarIcons(clientLib, density)
-    fun page(file: File, content: @Composable () -> Unit) {
+    fun page(
+      file: File,
+      widthDp: Int = WIDTH,
+      heightDp: Int = HEIGHT,
+      content: @Composable () -> Unit,
+    ) {
       val scene =
-        ImageComposeScene((WIDTH * SCALE).toInt(), (HEIGHT * SCALE).toInt(), density) {
+        ImageComposeScene((widthDp * SCALE).toInt(), (heightDp * SCALE).toInt(), density) {
           CompositionLocalProvider(LocalClientFonts provides fonts, LocalIcons provides icons) {
             content()
           }
@@ -127,6 +133,11 @@ object ComponentGallery {
     page(File("$base-dialog.png")) { Backdrop { SampleDialog() } }
     page(File("$base-message.png")) { Backdrop { SampleMessage() } }
     page(File("$base-lux.png")) { Backdrop { SampleLuxDialog() } }
+    page(File("$base-progress.png")) { Backdrop { SampleProgress() } }
+    // A phone held upright (411 dp): Cancel moves under the bar.
+    page(File("$base-progress-narrow.png"), widthDp = 411, heightDp = 300) {
+      Backdrop { SampleProgress() }
+    }
   }
 }
 
@@ -149,6 +160,17 @@ private fun SampleDialog() {
     RadioButtonRow("IDEate key", selected = true) {}
     RadioButtonRow("Password", selected = false) {}
   }
+}
+
+/** StartProgress.kt: Gateway's "Starting the remote IDE Backend" popup. */
+@Composable
+private fun SampleProgress() {
+  StartProgress(
+    "Starting the remote IDE Backend",
+    "Running intellij-backend start for xtool; this takes up to a minute",
+    LocalClientFonts.current,
+    onCancel = {},
+  )
 }
 
 /** MessageDialog.kt: the SSH host key question. */
