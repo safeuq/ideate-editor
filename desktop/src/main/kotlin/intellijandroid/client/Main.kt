@@ -19,6 +19,7 @@ import intellijandroid.client.desktop.DesktopOpenSshFiles
 import intellijandroid.client.desktop.DesktopResources
 import intellijandroid.client.desktop.FileSecretStore
 import intellijandroid.client.desktop.Snapshots
+import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.LocalIcons
@@ -83,6 +84,7 @@ fun main(arguments: Array<String>) {
       history = ConnectionHistory(FileText(dataFolder.resolve("connection-history.json"))),
       lastLink = FileText(dataFolder.resolve("join-link.txt")),
       lastFile = FileText(dataFolder.resolve("open-file.txt")),
+      openEditors = OpenEditors(FileText(dataFolder.resolve("open-editors.json"))),
       termux = null,
       device = "This computer",
       ssh =

@@ -22,6 +22,7 @@ import intellijandroid.client.connect.ConnectionHistory
 import intellijandroid.client.connect.IdeateApp
 import intellijandroid.client.connect.SshSetup
 import intellijandroid.client.connect.StoredText
+import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.LocalBackHandler
 import intellijandroid.client.ui.LocalEditorTextInput
@@ -63,6 +64,7 @@ class MainActivity : ComponentActivity() {
         history = ConnectionHistory(preferenceText("connection-history", "entries")),
         lastLink = preferenceText("connection", "joinLink"),
         lastFile = preferenceText("connection", "openFile"),
+        openEditors = OpenEditors(preferenceText("connection", "openEditors")),
         termux = termux,
         device = "This phone",
         ssh =

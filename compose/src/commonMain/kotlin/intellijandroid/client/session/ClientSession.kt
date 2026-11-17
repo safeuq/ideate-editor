@@ -100,6 +100,8 @@ class ClientSession(
   private val initialFile: String?,
   /** A stored identity to use [link]'s join token again; null makes a new one. */
   private val identity: ClientCertificate? = null,
+  /** Where this project's open editors are kept between connections; null keeps none. */
+  private val savedEditors: OpenEditors.Slot? = null,
   /**
    * Called on the connect thread once the backend has accepted the connection, with the identity it
    * accepted.
@@ -130,6 +132,13 @@ class ClientSession(
   private var vfs: VfsModel? = null
   private var pane: RdProjectViewAsyncPane? = null
   private val compositeIds = mutableMapOf<String, RdFileEditorCompositeId>()
+  /**
+   * The tabs' order: files in the order they were asked to open, the reopened ones first in their
+   * saved order. Tabs appear as their documents arrive, which can be in any order.
+   */
+  private val tabOrder = mutableListOf<String>()
+  /** Saved editors still being reopened; [saveEditors] waits for them so it doesn't drop any. */
+  private val reopening = mutableSetOf<String>()
   private val editSessions = mutableMapOf<RdDocumentId, EditSession>()
   /**
    * Backend patches for a document that arrived before its editor existed (normally the editor
@@ -202,6 +211,7 @@ class ClientSession(
     mutableState.update { state ->
       state.copy(editors = state.editors.filterNot { it.path == path }, selectedEditor = next)
     }
+    tabOrder -= path
     val compositeId = compositeIds.remove(path)
     if (compositeId != null) {
       // The next selection must not name the closed editor as the old one.
@@ -209,6 +219,7 @@ class ClientSession(
       solution?.fileEditorsModel?.backendDeferredComposites?.remove(compositeId)
     }
     if (next != null && next != before.selectedEditor) showEditor(next)
+    saveEditors()
   }
 
   // Editing the selected file (docs/split-protocol.md, "Typing"). All local first, then confirmed
@@ -603,7 +614,9 @@ class ClientSession(
       createProjectView(solutionLifetime, newSolution)
       bindStructure(solutionLifetime, newSolution)
       newSolution.isLoaded.advise(solutionLifetime) { loaded ->
-        if (loaded && initialFile != null) openFile(initialFile)
+        if (!loaded) return@advise
+        reopenEditors()
+        if (initialFile != null) openFile(initialFile)
       }
     }
   }
@@ -682,15 +695,51 @@ class ClientSession(
     if (loadedChildren.add(nodeId)) currentPane.expand.start(lifetime, nodeId)
   }
 
-  private fun openFile(path: String) {
+  /**
+   * Reopens the editors open when this project was last left, in their tab order, and selects the
+   * one that was selected, as JetBrains Client does on connecting (see [OpenEditors]). A file that
+   * is gone is skipped and dropped from the saved list. [initialFile], when given, opens on top.
+   */
+  private fun reopenEditors() {
+    val saved = savedEditors?.read() ?: return
+    val files = saved.files.filter { it != initialFile }
+    if (files.isNotEmpty()) log("Reopening ${files.size} editors: ${files.joinToString()}")
+    reopening += files
+    tabOrder += files
+    for (path in files) openFile(path, select = path == saved.selected && initialFile == null)
+  }
+
+  /** Keeps the open editors and the selected one for the next connection. */
+  private fun saveEditors() {
+    val slot = savedEditors ?: return
+    if (reopening.isNotEmpty()) return
+    slot.save(
+      SavedEditors(tabOrder.filter { it in compositeIds }, mutableState.value.selectedEditor),
+    )
+  }
+
+  /** [path]'s open request ended, opened or not. */
+  private fun finishedOpening(path: String) {
+    reopening -= path
+    saveEditors()
+  }
+
+  /** Opens [path] in a tab; [select] makes it the selected tab. */
+  private fun openFile(path: String, select: Boolean = true) {
     val currentSolution = solution ?: return log("No project yet; cannot open $path")
     val fileSystem = vfs ?: return
+    if (path !in tabOrder) tabOrder += path
     fileSystem.findFile.start(lifetime, RdFindFileParams(null, path, false, false)).result.advise(
       lifetime,
     ) { found ->
-      val snapshot = found.unwrap() ?: return@advise log("Backend has no file $path")
+      val snapshot = found.unwrap()
+      if (snapshot == null) {
+        log("Backend has no file $path")
+        tabOrder -= path
+        return@advise finishedOpening(path)
+      }
       (snapshot.id as? RdFileIdNew)?.let { documentPaths[it.backendId] = path }
-      mutableState.update { it.copy(selectedEditor = path) }
+      if (select) mutableState.update { it.copy(selectedEditor = path) }
       currentSolution.fileEditorsModel.requestComposite
         .start(lifetime, RequestCompositeQuery(snapshot.id, "file://$path"))
         .result
@@ -698,11 +747,12 @@ class ClientSession(
           when (val composite = response.unwrap()) {
             is SuccessfulRequestComposite -> {
               compositeIds[path] = composite.compositeId
-              showEditor(path)
+              if (select) showEditor(path)
             }
             is FailedRequestComposite -> log("Backend could not open $path: $composite")
             else -> log("Unexpected answer opening $path: $composite")
           }
+          finishedOpening(path)
         }
     }
   }
@@ -725,6 +775,7 @@ class ClientSession(
     for ((id, deferred) in fileEditors.backendDeferredComposites) deferred.model.valueOrNull
       ?.visible
       ?.set(id == compositeId)
+    saveEditors()
   }
 
   private fun createEditSession(
@@ -894,10 +945,14 @@ class ClientSession(
       val editors =
         if (state.editors.any { it.path == file.path })
           state.editors.map { if (it.path == file.path) file else it }
-        else state.editors + file
+        else (state.editors + file).sortedBy { tabIndex(it.path) }
       state.copy(editors = editors, selectedEditor = state.selectedEditor ?: file.path)
     }
   }
+
+  /** Where [path]'s tab goes; a file opened some other way goes last. */
+  private fun tabIndex(path: String): Int =
+    tabOrder.indexOf(path).let { if (it < 0) Int.MAX_VALUE else it }
 
   private fun pathOf(documentId: RdDocumentId): String {
     val fileId = (documentId as? RdDocumentIdWithFileId)?.fileId as? RdFileIdNew

@@ -151,7 +151,8 @@ class SshActions(
  */
 class SshController(
   private val setup: SshSetup,
-  private val connect: (link: String, projectPath: String) -> Unit,
+  /** Opens [link]; `hostName` is the SSH host's name, e.g. `me@mac.local`. */
+  private val connect: (link: String, projectPath: String, hostName: String) -> Unit,
 ) {
   private val deviceName = setup.deviceName
   var state by mutableStateOf(SshPageState(offersOpenSsh = setup.openSsh != null))
@@ -619,7 +620,7 @@ class SshController(
         state = state.copy(progress = null)
         result.fold(
           // null: the user kept the other client's session.
-          onSuccess = { local -> local?.let { connect(it, projectPath) } },
+          onSuccess = { local -> local?.let { connect(it, projectPath, entry.name) } },
           onFailure = { failure ->
             state = state.copy(message = "${entry.name}: ${failure.message}")
           },

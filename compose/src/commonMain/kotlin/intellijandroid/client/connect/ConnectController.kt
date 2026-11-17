@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import intellijandroid.client.connection.ClientCertificate
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.session.ClientSession
+import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.LocalBackHandler
 import intellijandroid.client.ui.theme.ClientFonts
@@ -49,14 +50,23 @@ class ConnectController(
   /** The link and file last typed into the Link page. */
   private val lastLink: StoredText,
   private val lastFile: StoredText,
+  /** Each project's open editors, reopened on the next connection. */
+  private val openEditors: OpenEditors,
   private val termux: Termux?,
   private val device: String,
   ssh: SshSetup? = null,
 ) {
   /** The SSH page; it hands an opened project's forwarded link back to [connect]. */
   private val sshController = ssh?.let { setup ->
-    SshController(setup) { forwarded, projectPath ->
-      connect(ConnectionKind.SSH, forwarded, projectPath, openFile = null, identity = null)
+    SshController(setup) { forwarded, projectPath, hostName ->
+      connect(
+        ConnectionKind.SSH,
+        forwarded,
+        projectPath,
+        openFile = null,
+        identity = null,
+        sshHost = hostName,
+      )
     }
   }
 
@@ -107,6 +117,8 @@ class ConnectController(
     val project: String?,
     val openFile: String?,
     val resumed: Boolean,
+    /** Where this project's open editors are kept, from [editorsKey]. */
+    val editorsKey: String,
   ) {
     /** The identity the backend accepted (encoded); a reconnect presents it again. */
     var identity: String? = null
@@ -255,6 +267,8 @@ class ConnectController(
     openFile: String?,
     identity: String?,
     resumed: Boolean = false,
+    /** The SSH host's name, e.g. `me@mac.local`; SSH connections only. */
+    sshHost: String? = null,
   ) {
     val joinLink = runCatching {
       JoinLink.parse(text)
@@ -271,18 +285,51 @@ class ConnectController(
           return
         }
     }
-    val current = Attempt(kind, joinLink, text.trim(), project, openFile, resumed)
+    val current =
+      Attempt(
+        kind,
+        joinLink,
+        text.trim(),
+        project,
+        openFile,
+        resumed,
+        editorsKey(kind, joinLink, project, sshHost),
+      )
     attempt = current
     accepted = false
     message = null
     question = null
     session =
-      ClientSession(joinLink, openFile, certificate) { acceptedCertificate ->
+      ClientSession(
+          joinLink,
+          openFile,
+          certificate,
+          openEditors.slot(current.editorsKey),
+        ) { acceptedCertificate ->
           val encoded = acceptedCertificate.encode()
           main.launch { onAccepted(current, encoded) }
         }
         .also { it.start() }
   }
+
+  /**
+   * Which project a connection's editors belong to. E.g. `link:192.168.0.105:5990`,
+   * `termux:/data/data/com.termux/files/home/intellij/smoke`, `ssh:me@mac.local:/Users/me/smoke`.
+   * An SSH link's port is a local forward that changes each time, so SSH uses the host instead.
+   */
+  private fun editorsKey(
+    kind: ConnectionKind,
+    link: JoinLink,
+    project: String?,
+    sshHost: String?,
+  ): String =
+    when (kind) {
+      ConnectionKind.LINK -> "link:${link.host}:${link.port}"
+      ConnectionKind.TERMUX ->
+        "termux:${requireNotNull(project) { "A Termux connection has a project" }}"
+      ConnectionKind.SSH ->
+        "ssh:${requireNotNull(sshHost) { "An SSH connection has a host" }}:${requireNotNull(project) { "An SSH connection has a project" }}"
+    }
 
   private fun onAccepted(current: Attempt, identity: String) {
     if (attempt !== current) return
@@ -356,12 +403,25 @@ class ConnectController(
     certificate: ClientCertificate,
   ): Boolean {
     val current =
-      Attempt(lost.kind, lost.link, lost.text, lost.project, lost.openFile, resumed = true)
+      Attempt(
+        lost.kind,
+        lost.link,
+        lost.text,
+        lost.project,
+        lost.openFile,
+        resumed = true,
+        lost.editorsKey,
+      )
     current.identity = identity
     attempt = current
     val accepted = CompletableDeferred<Boolean>()
     val candidate =
-      ClientSession(current.link, current.openFile, certificate) { acceptedCertificate ->
+      ClientSession(
+        current.link,
+        current.openFile,
+        certificate,
+        openEditors.slot(current.editorsKey),
+      ) { acceptedCertificate ->
         val encoded = acceptedCertificate.encode()
         main.launch {
           onAccepted(current, encoded)

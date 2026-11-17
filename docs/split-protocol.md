@@ -873,6 +873,43 @@ The desktop client keeps identities the same way, in its history (`~/.ideate/`, 
 - ~~No automatic reconnect~~: since 2026-11-17 a dropped connection is retried with the same link and identity for 2 minutes, under JetBrains Client's "No connection to IDE Backend. Trying to reconnect…" ([`android-app.md`](android-app.md), "Screen off and reconnecting").
 - A history entry keeps the client's private key in the app's private storage. It is only useful with that backend's `jt`, until the backend restarts.
 
+## Reopening the last open editors (2026-11-17)
+
+Gateway (JetBrains Client) shows the tabs that were open when the project was last left. That list
+is the **frontend's** own: the backend sends nothing for it.
+
+| Where | What | Value in 263.7307.200 |
+| --- | --- | --- |
+| Registry `editor.rd.reopen.editors.on.frontend` (`util-8.jar`, `misc/registry.properties`) | who reopens editors when a client connects | `true`: the frontend |
+| Backend `FilesReopeningService.onControllerConnected` (`intellij.platform.backend.split.jar`) | reopens the files in `FilesOpenedOnControllerState` for the controller | skipped while the key is `true` ("skip opening N files") |
+| Frontend `EditorsSplitters` (`intellij.platform.ide.impl.jar`) | the usual `FileEditorManager` state, kept by JetBrains Client | what Gateway reopens |
+| `DeferredCompositeModel.isInitializationRequired` | `true` only for editors the backend opens by itself (`!isFrontendRequested` in `BackendFileEditorHost.sendDeferredComposite`) | none arrived on reconnect, checked on the 5991 backend |
+
+So IDEate keeps the list itself (`session/OpenEditors.kt`): one JSON object per device, keyed by
+project, written on every open, close and selection, and read when the project has loaded
+(`Solution.isLoaded`). Each file reopens through the normal open path (`vfsModel.findFile` by path,
+then `requestComposite`); only the saved selected one is selected. A file the backend no longer has
+is skipped and dropped from the list.
+
+| Connection | Key | Stored on |
+| --- | --- | --- |
+| Link | `link:127.0.0.1:5991` | desktop `~/.ideate/open-editors.json`, Android preferences `connection` / `openEditors` |
+| Termux | `termux:/data/data/com.termux/files/home/intellij/smoke` | the same |
+| SSH | `ssh:me@mac.local:/Users/me/smoke` (the forwarded port changes each time, so the SSH host name stands in) | the same |
+
+Example entry: `{"files": ["…/Other.java", "…/Util.kt", "…/Main.java"], "selected": "…/Util.kt"}`.
+
+Tabs appear as their documents arrive, which can be in any order (Main.java came before Other.java
+in one run), so the session keeps the tab order itself: reopened files first in their saved order,
+then files in the order they were opened.
+
+Checked on the isolated backend (port 5991), desktop client, four runs: Other.java opened and saved;
+Main.java opened with Other.java reopened behind it; no file given, both reopened with Main.java
+selected; a saved list of Other.java, Gone.java (missing), Util.kt and Main.java with Util.kt
+selected came back as three tabs in that order, Util.kt selected, Gone.java dropped.
+
+Not done: caret and scroll position per file (JetBrains Client keeps them too), split editors.
+
 ## Plan for the client that follows from this
 
 1. **Reuse:** rd-core, rd-framework (with `UnsafeBuffer` patched), rd-text, and the two generated model jars of the **exact** backend build (class version lowered, resource files kept). Plus kotlin-stdlib and kotlinx-coroutines.
