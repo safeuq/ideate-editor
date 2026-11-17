@@ -267,6 +267,13 @@ fun EditorView(
   val currentLines by rememberUpdatedState(lines)
   val currentFile by rememberUpdatedState(file)
 
+  // IntelliJ hides the completion popup when the editor stops showing (LookupImpl's hideNotify).
+  // The
+  // popup is a window of its own, so on a phone held upright it would float over the tool window
+  // page the pager slid to; the editor loses focus then, and with it the popup. Tapping a popup row
+  // doesn't take focus, so choosing an item still works.
+  LaunchedEffect(focused) { if (!focused && lookup != null) actions.lookupKey(LookupKey.CANCEL) }
+
   LaunchedEffect(caret, focused) {
     caretOn = true
     while (focused) {

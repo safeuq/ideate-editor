@@ -289,6 +289,10 @@ Autopopup is started by the **host**, not the frontend: `FrontendNewRdCompletion
 6. Selection moves (up/down): `LookupEvent{LookupStateChanged{requestId, selectedItemId:{value}, focusDegree?, sortedItemIds?}}` (from `uiRefreshed` and `currentItemChanged`; only sent when something changed). Also `ScheduleModCommand` for the newly selected item if `hasModCommand`. [Seen]
 7. Accept item: see 2.6 (`LookupEvent{ItemSelected}`); then the session ends: `CloseSession{sessionId}` is sent by `unregisterSession -> unregisterSessionOnBackend` when the session scope completes (lookup item selected / cancelled). [Seen]
 8. Dismiss (Esc, caret moved away): `LookupEvent{Cancel{projectId, requestId}}` (`lookupCanceled`), then `CloseSession{sessionId}`. [Seen]
+   IDEate also cancels when the editor loses focus (2026-11-17), the closest thing it has to IntelliJ's
+   `LookupImpl` hiding on `hideNotify` (the editor no longer showing). On a phone held upright the pager slides
+   the editor away and clears its focus; the popup is a window of its own and used to stay on screen over the
+   tool window page. Tapping a popup row doesn't take focus, so choosing still works.
 9. When the frontend reuses an old result (`FrontendResultCache.findUsable`: `Exact` -> reuse, `Stale` -> show stale items and issue a fresh request to swap) it may send `ReleaseRequests{sessionId, requestIds}` for dropped requests. Minimal client: always issue a fresh `StartRequest` and ignore this. [Seen]
 10. Write-action restart: the host may send `CompletionFinished{reason: RestartingAfterWriteAction{request: <new request>}}`. The frontend registers a "pending pickup" for the new request id, restarts its indicator and then consumes events of the new request id instead. Events can arrive for the new `requestId` (same `sessionId`) before you asked for it; keep a per-request buffer. [Seen]
 

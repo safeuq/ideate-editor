@@ -385,5 +385,7 @@ Limits:
   a paste.
 - The editor doesn't report its caret to the keyboard (`InputMethodManager.updateSelection`). Gboard reads
   the text before the caret when it needs it.
-- Not tried: other keyboards (SwiftKey, Samsung). Also not tried: a keyboard that sends
-  `performContextMenuAction(paste)`; Gboard's clip went through composing.
+- Not tried: other keyboards (SwiftKey, Samsung).
+- `performContextMenuAction`: Gboard's Text Editing panel (its ⋮ tiles, "Text Editing") has Paste, which
+  pasted the clipboard (`Main.java`) through the backend's paste (2026-11-17). Copy and Cut are wired the same
+  way. Select all (`android.R.id.selectAll`) isn't handled; the call returns false and nothing happens.
