@@ -619,9 +619,18 @@ hand-moved buttons on resize and full screen, and Compose content over a transpa
 | Keep clear of the system's parts (window buttons, app chip) | `rootWindowInsets.getBoundingRects(Type.captionBar())`: each rect counts against the nearer window edge |
 | Taps on the toolbar's controls reach the app, the rest drags the window | `Modifier.systemGestureExclusion()` as `TitleBarArea.control` |
 
-Outside desktop windowing the caption bar is 0 and nothing changes. Not run: no Android 15+ emulator image is
-installed (the download was blocked in this session). Checked on the API 34 emulator that the phone layout is
-unchanged apart from the gradient.
+Outside desktop windowing the caption bar is 0 and nothing changes. Checked on the API 34 emulator that the phone
+layout is unchanged apart from the gradient.
+
+Checked on Android 16 (2026-11-17, emulator `Tablet_API_36`: Pixel Tablet, `system-images;android-36;
+google_apis_tablet;arm64-v8a`, port 5558). Desktop windowing on: `adb root`, `setprop
+persist.wm.debug.desktop_mode_enabled true`, `settings put global enable_freeform_support 1` and
+`force_resizable_activities 1`, reboot; then `adb shell wm shell desktopmode moveTaskToDesk <taskId>` (the id from
+`am stack list`). Result:
+- the toolbar is in the caption bar, between the system's app menu (left) and minimise, maximise, close (right),
+  with light caption icons over the project gradient;
+- a tap on "Current File" reaches the app ("Run configurations isn't supported in this client yet");
+- a swipe from the empty part of the toolbar, (896, 178) to (1196, 378) px, moved the window by the same 300, 200.
 
 **Project gradient** (`drawProjectGradient` in `ui/TitleBar.kt`; `IslandsGradientPainter.renderFrameGradientImage`):
 painted on the window background behind the islands, so it tints the toolbar and the top of the tool window bar.
