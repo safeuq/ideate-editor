@@ -479,7 +479,9 @@ Repeated from the Pixel 3a emulator (API 34) at c54ac36, against the same Mac at
 
 Test hygiene: every backend run, the isolated ones too, writes status files into the user's
 `~/Library/Caches/JetBrains/RemoteDev/recent/`. Their rows then name the user's real IntelliJ for a
-scratchpad project, so they are deleted after each test (`grep -l /private/tmp/claude-501/ recent/*`).
+scratchpad project, so they are deleted after each test: only files of a scratchpad project whose pid (the
+name's first number, `recent/88906_154268843` → 88906) is no longer running. Another session's live backend
+keeps its `active/` file, which `remote-dev-server.sh status` reads.
 
 ### Taking over a running backend (2026-11-17)
 
