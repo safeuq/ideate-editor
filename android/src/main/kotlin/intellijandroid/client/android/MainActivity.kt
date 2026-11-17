@@ -4,8 +4,10 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.CompositionLocalProvider
@@ -42,7 +44,16 @@ class MainActivity : ComponentActivity() {
     registerForActivityResult(ActivityResultContracts.RequestPermission()) { controller.refresh() }
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    // The app's own backgrounds run behind the status and navigation bars on every Android version
+    // (Android 15+ does that anyway), with light bar icons over the dark UI and no grey contrast
+    // overlay under 3-button navigation; the content keeps clear of the bars (appInsets). Also lays
+    // out into a camera cutout on the short edges, so a phone held sideways has no black strip.
+    enableEdgeToEdge(
+      statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+      navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+    )
     super.onCreate(savedInstanceState)
+    window.isNavigationBarContrastEnforced = false
     // Lux dialogs' images (ui/lux/LuxImages.kt).
     pngDecoder = PngDecoder { bytes ->
       BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()

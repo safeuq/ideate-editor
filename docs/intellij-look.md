@@ -678,3 +678,21 @@ Checked on the desktop with a throwaway two-split window: the side-by-side borde
 to 0.445 (204 px of 1768 px room), the stacked one from 0.50 to 0.28; each border followed the pointer. Not
 checked: the pill (needs a finger on Android, once `ClientScreen` uses the split) and the pointer shapes
 (screenshots don't show the pointer).
+
+## 18. Android system bars (2026-11-18)
+
+The theme was `Theme.Material.NoActionBar` and the app never drew behind the system bars. On Android 14 and older
+both bars were black; Android 15+ forces drawing behind them, so they showed the IDE window's grey there.
+
+| Part | Before (API 34 emulator) | Now |
+|---|---|---|
+| Status and navigation bars | black `#000000` | transparent on every version (`enableEdgeToEdge` with `SystemBarStyle.dark(TRANSPARENT)`), light icons; no grey contrast overlay under 3-button navigation (`isNavigationBarContrastEnforced = false`) |
+| Behind them, connect screen | `#26282C` on Android 15+ (the IDE window's colour) | the connect screen's own `#191A1C` (`IdeateApp` paints `Gateway.background` before the insets padding) |
+| Behind them, IDE screen | `#26282C` | `#26282C`: the bottom tool window bar runs into the navigation bar |
+| Camera cutout, phone sideways | black strip | the background fills it (`enableEdgeToEdge` lays out into short-edge cutouts); content keeps clear (`safeDrawing`) |
+| Before the first frame | `Theme.Material`'s black | `Theme.Ideate`: window background and launch splash `#191A1C`, the connect screen's colour |
+
+Measured on the API 34 emulator (1080 × 2220): status bar rows 0–65 and navigation bar rows 2154–2219 were
+`#000000`; now `#191A1C` on the connect screen and `#26282C` on the IDE screen. Not checked: a cutout (the
+emulator has none). Still to do: the project tint behind the status bar, drawn from the screen's top as the
+macOS title bar does (needs `ClientScreen` to paint its background and gradient before the insets).

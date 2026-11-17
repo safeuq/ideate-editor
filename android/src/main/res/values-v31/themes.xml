@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+: the launch splash in the same colour as the window. -->
+    <style name="Theme.Ideate" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ideate_window</item>
+        <item name="android:windowSplashScreenBackground">@color/ideate_window</item>
+    </style>
+</resources>

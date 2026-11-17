@@ -714,8 +714,11 @@ class ConnectController(
  */
 @Composable
 fun IdeateApp(controller: ConnectController, fonts: ClientFonts, modifier: Modifier = Modifier) {
-  Box(Modifier.fillMaxSize().background(IslandsDark.windowBackground).then(modifier)) {
-    val current = controller.session
+  val current = controller.session
+  // Painted before [modifier]'s insets, so it also fills behind the system bars and a camera
+  // cutout: the connect screen's background, or the IDE window's.
+  val background = if (current == null) Gateway.background else IslandsDark.windowBackground
+  Box(Modifier.fillMaxSize().background(background).then(modifier)) {
     if (current == null) {
       LaunchedEffect(Unit) { controller.refresh() }
       Column {

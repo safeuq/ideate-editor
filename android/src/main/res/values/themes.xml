@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app draws everything itself; the window's own background is the connect screen's (Gateway.background =
+         layer-0-bg #191A1C), the first screen shown, so nothing flashes black or white before the first frame. The
+         system bars are made transparent in MainActivity (enableEdgeToEdge). -->
+    <style name="Theme.Ideate" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ideate_window</item>
+    </style>
+
+    <color name="ideate_window">#FF191A1C</color>
+</resources>
