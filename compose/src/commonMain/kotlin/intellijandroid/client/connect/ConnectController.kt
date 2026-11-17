@@ -14,13 +14,18 @@ import intellijandroid.client.connection.ClientCertificate
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.session.ClientSession
 import intellijandroid.client.ui.ClientScreen
+import intellijandroid.client.ui.LocalBackHandler
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import kotlin.concurrent.thread
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -66,6 +71,8 @@ class ConnectController(
   private var file by mutableStateOf(lastFile.read().orEmpty())
   private var message by mutableStateOf<String?>(null)
   private var busy by mutableStateOf<String?>(null)
+  /** `intellij-backend stop` is running for this project: the "Stopping IDE Backend" popup. */
+  private var stopping by mutableStateOf<String?>(null)
   private var page by
     mutableStateOf(if (termux?.isInstalled == true) ConnectPage.PHONE else ConnectPage.LINK)
   private var saved by mutableStateOf(history.entries())
@@ -84,6 +91,11 @@ class ConnectController(
 
   private val main = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+  private companion object {
+    /** How long a dropped connection is retried before the app shows the connect screen. */
+    const val RECONNECT_FOR_MILLIS = 120_000L
+  }
+
   /**
    * [resumed]: the saved link and identity of a Termux entry; if refused, the app asks Termux for a
    * fresh link.
@@ -95,7 +107,21 @@ class ConnectController(
     val project: String?,
     val openFile: String?,
     val resumed: Boolean,
-  )
+  ) {
+    /** The identity the backend accepted (encoded); a reconnect presents it again. */
+    var identity: String? = null
+  }
+
+  /**
+   * The connection dropped and IDEate is trying to get it back: the attempt number, shown under "No
+   * connection to IDE Backend. Trying to reconnect…". Null otherwise.
+   */
+  var reconnecting by mutableStateOf<Int?>(null)
+    private set
+
+  private var reconnectJob: Job? = null
+  /** The session a reconnect attempt is bringing up; shown once the backend accepts it. */
+  private var pending: ClientSession? = null
 
   val actions =
     ConnectActions(
@@ -138,6 +164,7 @@ class ConnectController(
       question,
       starting,
       sshController?.state ?: SshPageState(),
+      stopping,
     )
 
   /**
@@ -156,11 +183,32 @@ class ConnectController(
   }
 
   /**
+   * Back from the IDE screen: ends this client's session and shows the connect screen. The backend
+   * and its project keep running; the history entry reconnects.
+   */
+  fun leave() {
+    attempt = null
+    reconnectJob?.cancel()
+    reconnecting = null
+    pending?.stop()
+    pending = null
+    session?.stop()
+    session = null
+    message = "Disconnected. The backend keeps running; tap it under History to reconnect."
+  }
+
+  /**
    * The session ended: back to the connect screen, or on to Termux when our saved link was refused.
    */
   internal fun connectionLost(lost: String) {
     val failed = attempt
     session?.stop()
+    // Like JetBrains Client ("No connection to IDE Backend. Trying to reconnect…"): keep the screen
+    // and connect again with the same link and identity. Not when another client took the backend
+    // over (that asks "Take back").
+    val identity = failed?.identity
+    if (accepted && failed != null && identity != null && "Backend terminated the wire" !in lost)
+      return reconnect(failed, identity, lost)
     session = null
     // A join token works once: after another client (e.g. Gateway) took over, the saved one is
     // declined.
@@ -239,6 +287,7 @@ class ConnectController(
   private fun onAccepted(current: Attempt, identity: String) {
     if (attempt !== current) return
     accepted = true
+    current.identity = identity
     // The SSH page lists the host's projects itself; a forwarded link is no use after a restart.
     if (current.kind == ConnectionKind.SSH) return
     val previous = saved.firstOrNull { it.key == keyOf(current) }
@@ -263,6 +312,82 @@ class ConnectController(
       ),
     )
     saved = history.entries()
+  }
+
+  /**
+   * Tries [lost]'s link and identity again, after 1 s, 2 s, 4 s, … (at most 10 s apart) for 2
+   * minutes, while the old session's screen stays under the reconnect popup; the first session the
+   * backend accepts replaces it. The same identity is allowed to use the join token again
+   * (docs/split-protocol.md, "Same join token, same client id").
+   */
+  private fun reconnect(lost: Attempt, identity: String, reason: String) {
+    val certificate = runCatching { ClientCertificate.decode(identity) }.getOrNull()
+    if (certificate == null) {
+      session = null
+      message = "Connection lost: $reason. Tap it under History to reconnect."
+      return
+    }
+    reconnectJob?.cancel()
+    reconnectJob = main.launch {
+      val deadline = System.currentTimeMillis() + RECONNECT_FOR_MILLIS
+      var pause = 1_000L
+      var number = 0
+      while (System.currentTimeMillis() < deadline) {
+        number++
+        reconnecting = number
+        if (reconnectOnce(lost, identity, certificate)) {
+          reconnecting = null
+          return@launch
+        }
+        delay(pause)
+        pause = (pause * 2).coerceAtMost(10_000L)
+      }
+      reconnecting = null
+      session = null
+      message =
+        "Connection lost: $reason. Reconnecting didn't work for 2 minutes; tap it under History to try again."
+    }
+  }
+
+  /** One attempt: true once the backend accepted the new session, which then replaces the old. */
+  private suspend fun reconnectOnce(
+    lost: Attempt,
+    identity: String,
+    certificate: ClientCertificate,
+  ): Boolean {
+    val current =
+      Attempt(lost.kind, lost.link, lost.text, lost.project, lost.openFile, resumed = true)
+    current.identity = identity
+    attempt = current
+    val accepted = CompletableDeferred<Boolean>()
+    val candidate =
+      ClientSession(current.link, current.openFile, certificate) { acceptedCertificate ->
+        val encoded = acceptedCertificate.encode()
+        main.launch {
+          onAccepted(current, encoded)
+          accepted.complete(true)
+        }
+      }
+    pending = candidate
+    val failure = main.launch {
+      candidate.state.first { it.connectionLost != null }
+      accepted.complete(false)
+    }
+    candidate.start()
+    val connected =
+      try {
+        accepted.await()
+      } finally {
+        failure.cancel()
+        pending = null
+      }
+    if (!connected) {
+      candidate.stop()
+      return false
+    }
+    session?.stop()
+    session = candidate
+    return true
   }
 
   private fun keyOf(current: Attempt) =
@@ -393,10 +518,10 @@ class ConnectController(
 
   /** The red square next to a running project. */
   private fun stopTermux() {
-    if (busy != null) return
-    busy = "Stopping the backend in Termux…"
+    if (busy != null || stopping != null) return
+    stopping = localBackends.firstOrNull { it.joinLink != null }?.project ?: "Termux"
     requireTermux().run(listOf("stop")) { result ->
-      busy = null
+      stopping = null
       result.fold(
         onSuccess = { output ->
           if (output.exitCode != 0)
@@ -410,9 +535,10 @@ class ConnectController(
 
   /** Like Gateway's Cancel: stops the backend that `start` is bringing up. */
   private fun cancelStart() {
+    stopping = starting
     starting = null
-    message = "Start cancelled. Stopping the backend in Termux…"
     requireTermux().run(listOf("stop")) { result ->
+      stopping = null
       message =
         result.fold(
           onSuccess = { output ->
@@ -518,11 +644,22 @@ fun IdeateApp(controller: ConnectController, fonts: ClientFonts, modifier: Modif
       ConnectScreen(controller.screenState(), controller.actions, fonts)
     } else {
       val state by current.state.collectAsState()
+      // Back from the IDE screen: to the connect screen, not out of the app (the backend keeps
+      // running; another project or connection can be opened from there).
+      LocalBackHandler.current(true) { controller.leave() }
       LaunchedEffect(state.connectionLost) { state.connectionLost?.let(controller::connectionLost) }
       LaunchedEffect(state.projectName, controller.isAccepted) {
         state.projectName?.let(controller::projectNamed)
       }
       ClientScreen(state, current)
+      controller.reconnecting?.let { attemptNumber ->
+        StartProgress(
+          "No connection to IDE Backend",
+          "Trying to reconnect… (attempt $attemptNumber)",
+          fonts,
+          onCancel = controller::leave,
+        )
+      }
     }
   }
 }

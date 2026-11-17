@@ -43,3 +43,40 @@ adb shell "am start -S -n intellijandroid.client.android/.MainActivity --es join
 ```
 
 The client's log (connection steps, errors) goes to logcat under `System.out`: `adb logcat -s System.out`.
+
+## Screen off and reconnecting
+
+**Why the connection dropped with the screen off.** With the screen off the activity stops and the app is only
+"top sleeping". Once the phone dozes, Android cuts such an app off the network, even from a port on the same
+phone. The connection then hears nothing for 15 s and ends with `Nothing received for 15 s`. Reproduced on the
+emulator (2026-11-17): screen off, `dumpsys battery unplug`, `dumpsys deviceidle force-idle`, and 15 s later the
+app was back on the connect screen with that message. The cached-app freezer wasn't the cause: the app stayed
+"top sleeping", not frozen.
+
+**What keeps it.** `ConnectionService` is a foreground service that runs while a session is open, with a
+notification "Connected to <project>".
+- A UID with a foreground service keeps its network in Doze. On the emulator the same forced deep Doze then
+  ran for a minute with no drop.
+- On the phone (Samsung, Termux backend on 127.0.0.1:5990, 2026-11-17): locked and unplugged for about
+  20 minutes with light Doze IDLE, and the same connection was still up on unlock, with no reconnect. Deep
+  Doze never started there: battery saver was on (`low_power=1`), and even `dumpsys deviceidle force-idle deep`
+  stopped at `QUICK_DOZE_DELAY`.
+- Termux keeps its own backend alive the same way, with its own foreground service.
+- The type is `specialUse`: `dataSync` is limited to 6 hours a day from Android 15.
+- The app asks once for notification permission. Without it the service still runs, with no visible
+  notification.
+
+**When it still drops** (a network change, a backend on another machine, the backend killed), IDEate does what
+JetBrains Client does (`RdUiBundle`: "No connection to IDE Backend. Trying to reconnect…"):
+- The screen stays as it was, under that popup.
+- It connects again with the same link and client identity after 1 s, 2 s, 4 s, … (at most 10 s apart), for
+  2 minutes.
+- The first session the backend accepts replaces the old one. The Project tree reloads, and the editor
+  reopens the file it was opened with.
+- After 2 minutes, or on Cancel, it shows the connect screen, where the history entry still reconnects.
+- A backend taken over by another client isn't retried; that keeps its "Take back" question.
+- Tested on the emulator: the app was paused for 40 s (`kill -STOP` via `run-as`), so the backend closed the
+  wire. After the resume the app reconnected in under half a second.
+
+**Back.** Back from a tool window page (phone held upright) goes to the editor. Back from the editor goes to the
+connect screen: the session ends, the backend keeps running, and the history entry reconnects.

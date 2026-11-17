@@ -34,8 +34,9 @@ import intellijandroid.client.ui.theme.label
  * at the end, so the bar is indeterminate like IntelliJ's and the detail line names the project.
  */
 @Composable
-fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: () -> Unit) {
-  // Not dismissable by tapping outside or Back: Cancel is the only way out, as in Gateway.
+fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: (() -> Unit)?) {
+  // Not dismissable by tapping outside or Back: Cancel is the only way out, as in Gateway. With no
+  // [onCancel] (stopping a backend) it closes when the work is done.
   Dialog(
     onDismissRequest = {},
     properties =
@@ -53,7 +54,9 @@ fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: (
       // Gateway shows Cancel focused (its focus ring), so Enter cancels.
       val cancelFocus = remember { FocusRequester() }
       val cancel: @Composable () -> Unit = {
-        OutlinedButton("Cancel", Modifier.focusRequester(cancelFocus), onClick = onCancel)
+        if (onCancel != null) {
+          OutlinedButton("Cancel", Modifier.focusRequester(cancelFocus), onClick = onCancel)
+        }
       }
       val popup =
         Modifier.width(width)
@@ -62,7 +65,9 @@ fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: (
       if (narrow) {
         Column(popup, verticalArrangement = Arrangement.spacedBy(12.dp)) {
           ProgressText(title, detail, fonts)
-          Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { cancel() }
+          if (onCancel != null) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { cancel() }
+          }
         }
       } else {
         Row(
@@ -74,7 +79,7 @@ fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: (
           cancel()
         }
       }
-      LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
+      if (onCancel != null) LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
     }
   }
 }

@@ -83,6 +83,8 @@ data class ConnectScreenState(
   val starting: String?,
   /** The SSH page (SshController). */
   val ssh: SshPageState = SshPageState(),
+  /** `intellij-backend stop` is running for this project: the "Stopping IDE Backend" popup. */
+  val stopping: String? = null,
 )
 
 /** The sidebar's connection kinds: this device, Gateway's SSH and Link. */
@@ -191,6 +193,14 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
       "Running intellij-backend start for ${project.trimEnd('/').substringAfterLast('/')}; this takes up to 3 minutes",
       fonts,
       actions.cancelStart,
+    )
+  }
+  state.stopping?.let { project ->
+    StartProgress(
+      "Stopping IDE Backend",
+      "Running intellij-backend stop for ${project.trimEnd('/').substringAfterLast('/')}",
+      fonts,
+      onCancel = null,
     )
   }
   actions.ssh?.let { ssh -> SshOverlays(state.ssh, ssh, fonts) }

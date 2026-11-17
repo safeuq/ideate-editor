@@ -870,7 +870,7 @@ The desktop client keeps identities the same way, in its history (`~/.ideate/`, 
 
 - SSH history entries (the third kind in [`connections.md`](https://github.com/safeuq/intellij-backend-android/blob/main/docs/connections.md)).
 - The Termux entries' take-over path is built but not yet tried on the phone (it would drop the user's Gateway session).
-- No automatic reconnect: when the connection drops, the app goes back to the connect screen, and a tap on the history entry reconnects.
+- ~~No automatic reconnect~~: since 2026-11-17 a dropped connection is retried with the same link and identity for 2 minutes, under JetBrains Client's "No connection to IDE Backend. Trying to reconnect…" ([`android-app.md`](android-app.md), "Screen off and reconnecting").
 - A history entry keeps the client's private key in the app's private storage. It is only useful with that backend's `jt`, until the backend restarts.
 
 ## Plan for the client that follows from this

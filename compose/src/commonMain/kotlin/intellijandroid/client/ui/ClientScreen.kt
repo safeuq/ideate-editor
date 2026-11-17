@@ -120,6 +120,8 @@ fun ClientScreen(state: SessionState, session: ClientSession) {
     // A tool window covering the editor takes the keyboard away with it.
     val focusManager = LocalFocusManager.current
     LaunchedEffect(page) { if (page != Page.EDITOR) focusManager.clearFocus() }
+    // Back from a tool window page (phone held upright) returns to the editor first.
+    LocalBackHandler.current(page != Page.EDITOR) { page = Page.EDITOR }
 
     fun barClick(window: ToolWindow) {
       if (!window.supported) return unsupported(window.title)
