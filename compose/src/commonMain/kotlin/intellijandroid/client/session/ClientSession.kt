@@ -773,6 +773,18 @@ class ClientSession(
   }
 
   /**
+   * This project's tool window pane sizes as saved by name (`ui/PaneWeights.kt`), e.g. `{"left":
+   * 0.28}`. Empty when none were saved, and when this session keeps nothing ([savedEditors] null:
+   * snapshots and tests), which shows the defaults.
+   */
+  fun savedPanes(): Map<String, Float> = savedEditors?.readPanes().orEmpty()
+
+  /** Keeps the pane sizes for this project's next connection; nothing without [savedEditors]. */
+  fun savePanes(panes: Map<String, Float>) {
+    savedEditors?.savePanes(panes)
+  }
+
+  /**
    * Reopens the editors open when this project was last left, in their tab order, and selects the
    * one that was selected, as JetBrains Client does on connecting (see [OpenEditors]). A file that
    * is gone is skipped and dropped from the saved list. [initialFile], when given, opens on top.

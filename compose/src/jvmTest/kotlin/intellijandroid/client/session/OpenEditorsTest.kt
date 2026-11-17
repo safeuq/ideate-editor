@@ -31,4 +31,21 @@ class OpenEditorsTest {
     assertEquals(SavedEditors(emptyList(), null), store.read("link:127.0.0.1:5991"))
     assertNull(store.read("termux:/other"))
   }
+
+  @Test
+  fun keepsPanesAndEditorsTogether() {
+    val store = OpenEditors(MemoryText())
+    val project = "link:127.0.0.1:5991"
+    assertEquals(emptyMap(), store.readPanes(project))
+    store.savePanes(project, mapOf("left" to 0.28f, "leftSplit" to 0.6f))
+    val editors = SavedEditors(listOf("/p/A.java"), "/p/A.java")
+    store.save(project, editors)
+    assertEquals(mapOf("left" to 0.28f, "leftSplit" to 0.6f), store.readPanes(project))
+    store.savePanes(project, mapOf("left" to 0.4f))
+    assertEquals(editors, store.read(project))
+    // Nothing selected any more: "selected" goes, the panes stay.
+    store.save(project, SavedEditors(emptyList(), null))
+    assertEquals(SavedEditors(emptyList(), null), store.read(project))
+    assertEquals(mapOf("left" to 0.4f), store.readPanes(project))
+  }
 }

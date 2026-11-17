@@ -3,6 +3,7 @@ package intellijandroid.client
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -26,6 +27,8 @@ import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.LocalTitleBarArea
+import intellijandroid.client.ui.component.LocalResizePointers
+import intellijandroid.client.ui.component.ResizePointers
 import intellijandroid.client.ui.lux.PngDecoder
 import intellijandroid.client.ui.lux.pngDecoder
 import intellijandroid.client.ui.theme.IslandsDark
@@ -133,6 +136,14 @@ fun main(arguments: Array<String>) {
         LocalClientFonts provides fonts,
         LocalIcons provides icons,
         LocalTitleBarArea provides titleBar,
+        // IntelliJ's Splitter cursors.
+        LocalResizePointers provides
+          ResizePointers(
+            sideBySide =
+              PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.W_RESIZE_CURSOR)),
+            stacked =
+              PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.N_RESIZE_CURSOR)),
+          ),
       ) {
         IdeateApp(controller, fonts)
       }

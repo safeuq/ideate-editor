@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.core.content.edit
 import intellijandroid.client.connect.ConnectController
 import intellijandroid.client.connect.ConnectionHistory
@@ -23,6 +24,8 @@ import intellijandroid.client.ui.LocalBackHandler
 import intellijandroid.client.ui.LocalEditorTextInput
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.LocalTitleBarArea
+import intellijandroid.client.ui.component.LocalResizePointers
+import intellijandroid.client.ui.component.ResizePointers
 import intellijandroid.client.ui.lux.PngDecoder
 import intellijandroid.client.ui.lux.pngDecoder
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -79,6 +82,12 @@ class MainActivity : ComponentActivity() {
         LocalEditorTextInput provides ::editorTextInput,
         LocalBackHandler provides { enabled, onBack -> BackHandler(enabled, onBack) },
         LocalTitleBarArea provides rememberCaptionBar(),
+        // A mouse over a split's border (component/SplitPane.kt).
+        LocalResizePointers provides
+          ResizePointers(
+            sideBySide = PointerIcon(android.view.PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW),
+            stacked = PointerIcon(android.view.PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW),
+          ),
       ) {
         IdeateApp(controller, fonts, Modifier.windowInsetsPadding(appInsets()))
       }
