@@ -97,6 +97,8 @@ class Completion(
     var itemsFinished = false
     var focused = explicit
     var advertisement: String? = null
+    /** Characters typed while the popup was open (IntelliJ's `LookupOffsets.additionalPrefix`). */
+    var typedSinceOpen = 0
 
     /**
      * Items to show, in the backend's order (ascending weight). The backend's matched set wins: it
@@ -146,6 +148,7 @@ class Completion(
     }
     edit.type(character)
     current.prefix += character
+    current.typedSinceOpen++
     command("PrefixChanged") {
       put("requestId", id(current.requestId))
       put(
@@ -166,12 +169,24 @@ class Completion(
    */
   fun backspace(edit: EditSession): Boolean {
     val current = popup?.takeIf { it.edit === edit } ?: return false
-    if (current.prefix.isEmpty()) {
-      cancel()
-      return false
+    when (backspaceInLookup(current.prefix.length, current.typedSinceOpen)) {
+      BackspaceInLookup.HIDE -> {
+        cancel()
+        return false
+      }
+      BackspaceInLookup.RESTART -> {
+        // ponytail: a new popup rather than IntelliJ's restart in place; it may flicker once.
+        cancel()
+        edit.backspace()
+        val invocationCount = if (current.explicit) 1 else 0
+        edit.afterPendingEdits { if (popup == null) open(current.path, edit, invocationCount) }
+        return true
+      }
+      BackspaceInLookup.TRUNCATE -> Unit
     }
     edit.backspace()
     current.prefix = current.prefix.dropLast(1)
+    current.typedSinceOpen--
     command("PrefixChanged") {
       put("requestId", id(current.requestId))
       put("update", buildJsonObject { put("type", "$PROTOCOL.RpcPrefixUpdate.Truncate") })
@@ -395,6 +410,32 @@ class Completion(
 
   private fun id(value: String) = buildJsonObject { put("id", value) }
 }
+
+internal enum class BackspaceInLookup {
+  /** Drop the last character typed while the popup was open (`RpcPrefixUpdate.Truncate`). */
+  TRUNCATE,
+  /** Complete again for the shorter prefix. */
+  RESTART,
+  /** Close the popup; the caller deletes the character. */
+  HIDE,
+}
+
+/**
+ * What Backspace does to an open popup, as IntelliJ's lookup `BackspaceHandler` and
+ * `BaseCompletionLookupArranger.prefixTruncated` decide; JetBrains Client runs the same lookup. A
+ * character typed while the popup was open is truncated. Past those, completion restarts while the
+ * caret stays after the prefix's start, and the popup hides when it reaches it.
+ *
+ * Example: `psvm` with the popup opened after `p` (`svm` typed into it): three Backspaces truncate,
+ * the fourth deletes `p` and hides the popup. Ctrl+Space after `psvm`: Backspace restarts for
+ * `psv`, `ps` and `p`, then hides.
+ */
+internal fun backspaceInLookup(prefixLength: Int, typedSinceOpen: Int): BackspaceInLookup =
+  when {
+    typedSinceOpen > 0 -> BackspaceInLookup.TRUNCATE
+    prefixLength > 1 -> BackspaceInLookup.RESTART
+    else -> BackspaceInLookup.HIDE
+  }
 
 private fun toLookupItem(item: JsonObject): LookupItem {
   val presentation = item["presentation"]!!.jsonObject

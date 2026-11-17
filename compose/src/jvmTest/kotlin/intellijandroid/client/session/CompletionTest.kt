@@ -27,4 +27,22 @@ class CompletionTest {
       iconPath(buildJsonObject { put("serializedValue", blob) }),
     )
   }
+
+  @Test
+  fun backspaceFollowsIntellijsLookup() {
+    // Popup opened after "p", then "svm" typed into it.
+    assertEquals(
+      BackspaceInLookup.TRUNCATE,
+      backspaceInLookup(prefixLength = 4, typedSinceOpen = 3),
+    )
+    assertEquals(
+      BackspaceInLookup.TRUNCATE,
+      backspaceInLookup(prefixLength = 2, typedSinceOpen = 1),
+    )
+    assertEquals(BackspaceInLookup.HIDE, backspaceInLookup(prefixLength = 1, typedSinceOpen = 0))
+    // Ctrl+Space after "psvm".
+    assertEquals(BackspaceInLookup.RESTART, backspaceInLookup(prefixLength = 4, typedSinceOpen = 0))
+    // Popup opened on an empty prefix (after a '.').
+    assertEquals(BackspaceInLookup.HIDE, backspaceInLookup(prefixLength = 0, typedSinceOpen = 0))
+  }
 }
