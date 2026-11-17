@@ -53,24 +53,23 @@ emulator (2026-11-17): screen off, `dumpsys battery unplug`, `dumpsys deviceidle
 app was back on the connect screen with that message. The cached-app freezer wasn't the cause: the app stayed
 "top sleeping", not frozen.
 
-**What keeps it.** `ConnectionService` is a foreground service that runs while a session is open, with a
-notification "Connected to <project>".
-- A UID with a foreground service keeps its network in Doze. On the emulator the same forced deep Doze then
-  ran for a minute with no drop.
-- On the phone (Samsung, Termux backend on 127.0.0.1:5990, 2026-11-17): locked and unplugged for about
-  20 minutes with light Doze IDLE, and the same connection was still up on unlock, with no reconnect. Deep
-  Doze never started there: battery saver was on (`low_power=1`), and even `dumpsys deviceidle force-idle deep`
-  stopped at `QUICK_DOZE_DELAY`.
-- Termux keeps its own backend alive the same way, with its own foreground service.
-- The type is `specialUse`: `dataSync` is limited to 6 hours a day from Android 15.
-- The app asks once for notification permission. Without it the service still runs, with no visible
-  notification.
+**No keep-alive on purpose.** IDEate follows the normal Doze rules: with the screen off the connection may drop,
+and it is reconnected when the app comes back. A foreground service would keep the network on in Doze (tried
+2026-11-17: forced deep Doze on the emulator for a minute, and about 20 minutes locked on the phone, with no drop).
+It was taken out again: Android requires a visible notification for one, and it exempts the app from Doze for the
+whole session, using battery for a connection nobody is looking at. Termux keeps the backend itself running with
+its own foreground service.
 
-**When it still drops** (a network change, a backend on another machine, the backend killed), IDEate does what
-JetBrains Client does (`RdUiBundle`: "No connection to IDE Backend. Trying to reconnect…"):
-- The screen stays as it was, under that popup.
+**Reconnecting.** IDEate does what JetBrains Client does (`RdUiBundle`: "No connection to IDE Backend. Trying to
+reconnect…"):
+- While the app is in the background (the activity is stopped) nothing is tried: under Doze every attempt
+  would fail. Compose doesn't run the effect that notices the loss until the activity starts again either.
+- When the app is back, the screen stays as it was, under that popup, and the first attempt starts at once.
 - It connects again with the same link and client identity after 1 s, 2 s, 4 s, … (at most 10 s apart), for
-  2 minutes.
+  2 minutes of the app being in the foreground. Leaving the app during that pauses it; coming back restarts
+  the 2 minutes.
+
+For this and any other drop (a network change, a backend on another machine, the backend killed):
 - The first session the backend accepts replaces the old one. The Project tree reloads, and the editor
   reopens the file it was opened with.
 - After 2 minutes, or on Cancel, it shows the connect screen, where the history entry still reconnects.

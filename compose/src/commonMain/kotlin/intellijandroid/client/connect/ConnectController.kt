@@ -9,6 +9,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import intellijandroid.client.connection.ClientCertificate
 import intellijandroid.client.connection.JoinLink
@@ -132,6 +133,12 @@ class ConnectController(
     private set
 
   private var reconnectJob: Job? = null
+
+  /**
+   * False while the app is in the background (Android: the activity is stopped). A reconnect waits
+   * then: under Doze the network is off, so attempts would only fail and use up the 2 minutes.
+   */
+  var inForeground by mutableStateOf(true)
   /** The session a reconnect attempt is bringing up; shown once the backend accepts it. */
   private var pending: ClientSession? = null
 
@@ -363,7 +370,7 @@ class ConnectController(
 
   /**
    * Tries [lost]'s link and identity again, after 1 s, 2 s, 4 s, … (at most 10 s apart) for 2
-   * minutes, while the old session's screen stays under the reconnect popup; the first session the
+   * minutes of the app being in the foreground ([inForeground]), while the old session's screen stays under the reconnect popup; the first session the
    * backend accepts replaces it. The same identity is allowed to use the join token again
    * (docs/split-protocol.md, "Same join token, same client id").
    */
@@ -376,10 +383,16 @@ class ConnectController(
     }
     reconnectJob?.cancel()
     reconnectJob = main.launch {
-      val deadline = System.currentTimeMillis() + RECONNECT_FOR_MILLIS
+      var deadline = System.currentTimeMillis() + RECONNECT_FOR_MILLIS
       var pause = 1_000L
       var number = 0
       while (System.currentTimeMillis() < deadline) {
+        if (!inForeground) {
+          // Back in the foreground: try at once, with the full 2 minutes again.
+          snapshotFlow { inForeground }.first { it }
+          deadline = System.currentTimeMillis() + RECONNECT_FOR_MILLIS
+          pause = 1_000L
+        }
         number++
         reconnecting = number
         if (reconnectOnce(lost, identity, certificate)) {
