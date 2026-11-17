@@ -77,8 +77,11 @@ the bottom instead of Gateway's sidebar ([`intellij-look.md`](intellij-look.md) 
 - **Tool windows scroll sideways the same way** (since 2026-11-17, user report "A lengthy file name in the project
   window cannot be revealed by scrolling"). The Project and Structure trees scroll sideways when a row is wider than
   the panel: the row's content moves. The selection band stays 12 dp from the right side; its left side follows the
-  content (12 dp minus the scroll, down to 0), so after a scroll it still covers the shifted icon and name (user
-  report with a screenshot, 2026-11-17: the band had stayed 12 dp in and left the icon outside it). The scroll range is
+  content (12 dp minus the scroll, going negative), so after a scroll it still covers the shifted icon and name (user
+  report with a screenshot, 2026-11-17: the band had stayed 12 dp in and left the icon outside it). The row's edge
+  clips it, so the side touching the edge is square, not rounded, as the viewport clips IntelliJ's tree (user
+  report, 2026-11-17: the band stopped at 0 with its rounded corners at the edge). Example: scroll 40 dp draws the
+  band from -28 dp. The scroll range is
   the widest row seen so far plus the 12 dp side inset. Each tool window keeps its own `SidewaysScroll`, and the
   pager asks the one on the current page with the same rule as the editor:
   | Page | Finger moves left | Finger moves right |

@@ -251,12 +251,13 @@ private fun TreeRow(
     // node.
     if (highlight != null) {
       // Inset 12 from both sides; when the row is scrolled sideways, its left side follows the
-      // content out of view, so the band still covers the shifted icon and name. Drawn, not laid
+      // content out of view and the row's edge cuts it square, as the viewport clips IntelliJ's
+      // tree: scroll.x = 40 draws from -28, so no rounded corner shows at the edge. Drawn, not laid
       // out, so a sideways scroll only redraws it.
       Box(
-        Modifier.fillMaxSize().drawBehind {
+        Modifier.fillMaxSize().clipToBounds().drawBehind {
           val inset = IslandsDark.treeSideInset.toPx()
-          val left = maxOf(0f, inset - scroll.x)
+          val left = inset - scroll.x
           val radius = IslandsDark.treeSelectionRadius.toPx()
           drawRoundRect(
             highlight,
