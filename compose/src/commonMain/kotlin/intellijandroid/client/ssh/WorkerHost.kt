@@ -23,6 +23,8 @@ class WorkerHost(
 
   override fun remoteDevDir() = shell.remoteDevDir()
 
+  override fun home() = shell.home()
+
   override fun installedIdes(): List<InstalledIde> = call("installed-ides").data.mapNotNull(::ide)
 
   override fun recentProjects(): List<RecentProject> {
@@ -33,6 +35,21 @@ class WorkerHost(
         active.map { HostData.status(it).appPid }
     val raw = recent["rawStatuses"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }
     return HostData.recentProjects(raw + active, alive)
+  }
+
+  /**
+   * One `recent-projects-data`: its `rawStatuses`, `alivePids` and `installedIdes`. Unlike
+   * [recentProjects] it leaves out `active-projects`; a running backend writes its `recent/` file
+   * when it opens the project, so its project is there, and `alivePids` marks it running.
+   */
+  override fun projectsAndIdes(): HostProjects {
+    val data = Json.parseToJsonElement(call("recent-projects-data").single).jsonObject
+    val alive =
+      data["alivePids"]?.jsonArray.orEmpty().mapNotNull { it.jsonPrimitive.longOrNull }.toSet()
+    val raw = data["rawStatuses"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }
+    val ides =
+      data["installedIdes"]?.jsonArray.orEmpty().mapNotNull { ide(it.jsonObject.toString()) }
+    return HostProjects(HostData.recentProjects(raw, alive), ides)
   }
 
   override fun status(idePath: String, projectPath: String): HostStatus? {

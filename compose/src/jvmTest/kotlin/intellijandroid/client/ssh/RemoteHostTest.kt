@@ -161,29 +161,28 @@ class RemoteHostTest {
 
   private val worker =
     "/data/data/com.termux/files/home/.cache/JetBrains/RemoteDev/remote-dev-worker/remote-dev-worker_37fb36"
+  private val remoteDev = "/data/data/com.termux/files/home/.cache/JetBrains/RemoteDev"
 
-  private fun fakeWorker() =
+  /** RemoteHosts' probe answer (one login shell): OS, RemoteDev folder, the worker that passed. */
+  private fun probe(withWorker: Boolean) =
+    ExecResult(
+      0,
+      "@@OS@@\tLinux aarch64\n@@DIR@@\t$remoteDev\n" +
+        (if (withWorker) "@@WORKER@@\t$worker\n" else ""),
+      "",
+    )
+
+  private val ideEntry = buildJsonObject {
+    put("idePath", ide)
+    put("linkPath", link)
+    put("productInfo", productInfo)
+  }
+
+  private fun fakeWorker(withWorker: Boolean = true) =
     FakeHost(
       mapOf(
-        "uname -sm" to ExecResult(0, "Linux aarch64\n", ""),
-        "XDG_CACHE_HOME" to
-          ExecResult(0, "/data/data/com.termux/files/home/.cache/JetBrains/RemoteDev\n", ""),
-        "ls -t" to ExecResult(0, "remote-dev-worker_37fb36\n", ""),
-        "worker-check" to
-          ExecResult(
-            1,
-            "HELLO_STDOUT\nHELLO_STDERR\n{\"type\":\"error\",\"errorCode\":\"CommandError\",\"data\":\"ERROR_TEST Nothing to worry about\"}\n",
-            "",
-          ),
-        "installed-ides" to
-          multi(
-            buildJsonObject {
-              put("idePath", ide)
-              put("linkPath", link)
-              put("productInfo", productInfo)
-            }
-              .toString(),
-          ),
+        "@@WORKER@@" to probe(withWorker),
+        "installed-ides" to multi(ideEntry.toString()),
         "recent-projects-data" to
           single(
             buildJsonObject {
@@ -195,6 +194,7 @@ class RemoteHostTest {
                 },
               )
               put("alivePids", buildJsonArray { add(JsonPrimitive(30916)) })
+              put("installedIdes", buildJsonArray { add(ideEntry) })
             }
               .toString(),
           ),
@@ -204,14 +204,14 @@ class RemoteHostTest {
     )
 
   @Test
-  fun picksTheWorkerAndCallsItGatewaysWay() {
+  fun picksTheWorkerInOneCallAndCallsItGatewaysWay() {
     val fake = fakeWorker()
     val host = RemoteHosts.forCommands(fake::run)
     assertTrue(host is WorkerHost, "$host")
-    assertTrue(
-      fake.commands.any { it == "[ -x '$worker' ] && '$worker' worker-check" },
-      "${fake.commands}",
-    )
+    assertEquals(1, fake.commands.size, "${fake.commands}")
+    assertEquals(HostOs(HostOs.Os.LINUX, "aarch64"), host.os())
+    assertEquals(remoteDev, host.remoteDevDir())
+    assertEquals(1, fake.commands.size, "os and folder come from the probe: ${fake.commands}")
     assertEquals(listOf("IU"), host.installedIdes().map { it.productCode })
     assertEquals(
       listOf(xtool to true, smoke to false),
@@ -223,8 +223,17 @@ class RemoteHostTest {
 
   @Test
   fun fallsBackToTheShellWithoutAWorkingWorker() {
-    val fake = FakeHost(fakeWorker().replies - "worker-check")
-    assertTrue(RemoteHosts.forCommands(fake::run) is ShellHost)
+    assertTrue(RemoteHosts.forCommands(fakeWorker(withWorker = false)::run) is ShellHost)
+  }
+
+  @Test
+  fun projectsAndIdesIsOneWorkerCall() {
+    val fake = fakeWorker()
+    val host = WorkerHost(worker, fake::run)
+    val both = host.projectsAndIdes()
+    assertEquals(listOf("'$worker' recent-projects-data"), fake.commands)
+    assertEquals(host.recentProjects(), both.recent)
+    assertEquals(host.installedIdes(), both.ides)
   }
 
   @Test

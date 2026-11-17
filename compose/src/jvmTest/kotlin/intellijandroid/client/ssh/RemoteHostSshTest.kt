@@ -36,10 +36,18 @@ class RemoteHostSshTest {
   @Test
   fun answersAndAgreesWithTheShell() {
     open().use { session ->
-      val remote = RemoteHosts.forSession(session)
+      fun <T> timed(what: String, block: () -> T): T {
+        val start = System.nanoTime()
+        return block().also { println("Time $what: ${(System.nanoTime() - start) / 1_000_000} ms") }
+      }
+      timed("one login shell (true)") { session.execInLoginShell("true") }
+      val remote = timed("forSession") { RemoteHosts.forSession(session) }
       val shell = ShellHost(session::execInLoginShell)
-      val ides = remote.installedIdes()
-      val recent = remote.recentProjects()
+      val recent = timed("recentProjects") { remote.recentProjects() }
+      val ides = timed("installedIdes") { remote.installedIdes() }
+      val both = timed("projectsAndIdes") { remote.projectsAndIdes() }
+      assertEquals(HostProjects(recent, ides), both)
+      timed("home (from the probe)") { remote.home() }
       println(
         "Host ${remote.os()} via ${remote::class.simpleName}, RemoteDev ${remote.remoteDevDir()}",
       )

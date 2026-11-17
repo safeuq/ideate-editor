@@ -238,6 +238,37 @@ checks that on the phone.
 | `listFolders()` | through the shell (the worker's `list-files` has no project or has-folders flags) | `Termux.LIST_FOLDERS` |
 | `removeRecent()` | `remove-recent-project` | removes the `recent/` files whose one project is that path and whose `appVersion` starts with the product code |
 
+**One login shell per refresh (2026-11-17).** Every `execInLoginShell` starts the user's login shell, which costs
+0.3 to 2 s on the phone (zsh with oh-my-zsh). The SSH page's first load took about 20 s. So:
+- `RemoteHosts.forSession` runs one probe script (`RemoteHosts.PROBE`). It prints `uname -sm`, the RemoteDev
+  folder, `$HOME` and the newest worker that passes `worker-check`. Before, that was 4 login shells: `ls`,
+  `worker-check`, `uname` and the folder. `RemoteHost.home()` gives the probe's `$HOME`, so the page no longer
+  asks for it separately.
+- `RemoteHost.projectsAndIdes()` gives recent projects and IDEs in one call. `WorkerHost` uses a single
+  `recent-projects-data`, which already holds `rawStatuses`, `alivePids` and `installedIdes`. It leaves out
+  `active-projects`: a running backend writes its `recent/` file when it opens the project, and `alivePids`
+  marks it running. `ShellHost` runs `INSTALLED_IDES` and `RECENT_STATUSES` as one script.
+- Skipping `worker-check` when the same worker already passed isn't needed. It now runs inside the probe's one
+  login shell, and the worker itself starts in milliseconds.
+
+| | Login shells before | After |
+|---|---|---|
+| Connect (`forSession`) | 4 | 1 |
+| Refresh (SSH page, every 10 s) | 3 with the worker (`recent-projects-data`, `active-projects`, `installed-ides`), 2 with the shell | 1 |
+| New connection's `$HOME` | 1 | 0 (from the probe) |
+
+Measured on the phone from the desktop (`RemoteHostSshTest`, `WorkerHost`, 2026-11-17, three runs each):
+
+| | Before (home network) | After (Mac on the phone's hotspot) |
+|---|---|---|
+| One login shell (`true`) | 328 to 425 ms | 258 to 290 ms |
+| Connect (`forSession`) | 2351 to 3417 ms | 333 to 428 ms |
+| Refresh | `recentProjects` + `installedIdes`: 1107 to 1246 ms | `projectsAndIdes`: 279 to 440 ms (the old pair in the same runs: 948 to 1043 ms) |
+
+The networks differ, but a login shell costs about the same on both. Connecting is now about one login shell
+instead of three seconds, and a refresh about a third of what it was. Against the Linux container (a fast local
+shell), `forSession` took 11 to 30 ms, about one login shell (7 to 26 ms).
+
 Shared rules (`HostData`):
 - **Recent projects:** Gateway's `fromStatus`. Only statuses with exactly one project, dated by `dateLastOpened`;
   dropped without it. A project several backends served is listed once, with the newest date, running when any
@@ -387,7 +418,7 @@ Not checked yet: opening a project end to end. It needs `RemoteHosts` (step 2) a
 
 Test hosts:
 - **The Mac:** needs **Remote Login** switched on (System Settings → General → Sharing). That's the user's setting.
-- **Termux on the phone:** SSH on 8022, at 192.168.0.107 since 2026-11-17.
+- **Termux on the phone:** SSH on 8022. Its address changes with the network: 192.168.0.107 on the home Wi-Fi, 172.22.26.84 when the Mac is on the phone's hotspot (2026-11-17).
 - **A Linux container:** sshd in Docker on the Mac.
 
 ## Open questions

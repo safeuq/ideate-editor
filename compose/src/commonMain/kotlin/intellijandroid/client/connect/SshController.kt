@@ -234,8 +234,9 @@ class SshController(
     }
     work.execute {
       val result = runCatching {
-        val remote = remoteFor(entry, typed)
-        remote.recentProjects() to remote.installedIdes()
+        // One login shell per refresh (RemoteHost.projectsAndIdes).
+        val both = remoteFor(entry, typed).projectsAndIdes()
+        both.recent to both.ides
       }
       main.launch {
         result.fold(
@@ -448,8 +449,9 @@ class SshController(
     work.execute {
       val result = runCatching {
         val remote = remoteFor(entry, typed)
-        val home = sessions.getValue(entry.id).execInLoginShell("echo \"\$HOME\"").stdout.trim()
-        Triple(remote.installedIdes(), remote.recentProjects(), home)
+        // $HOME comes with RemoteHosts' probe; projects and IDEs are one more login shell.
+        val both = remote.projectsAndIdes()
+        Triple(both.ides, both.recent, remote.home())
       }
       main.launch {
         result.fold(

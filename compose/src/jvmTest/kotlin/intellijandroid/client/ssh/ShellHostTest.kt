@@ -91,6 +91,9 @@ class ShellHostTest {
       host.recentProjects(),
     )
 
+    // The SSH page's refresh: both in one script, the same answers.
+    assertEquals(HostProjects(host.recentProjects(), host.installedIdes()), host.projectsAndIdes())
+
     host.removeRecent("/work/xtool", "IU")
     assertEquals(listOf("/work/smoke"), host.recentProjects().map { it.projectPath })
   }
@@ -111,6 +114,26 @@ class ShellHostTest {
     repeat(50) { if (!launched.isFile) Thread.sleep(100) }
     assertEquals("run /work/smoke\n", launched.readText())
     assertTrue(File(HostData.logsDir(host.remoteDevDir(), "IU", "/work/smoke")).isDirectory)
+  }
+
+  @Test
+  fun theProbePicksAWorkerThatPassesItsCheck() {
+    val workers = File(host.remoteDevDir()).resolve("remote-dev-worker").apply { mkdirs() }
+    assertTrue(RemoteHosts.forCommands(::run) is ShellHost)
+    // Like Gateway's: HELLO_STDOUT and the test error on stdout, exit 1.
+    val worker =
+      workers.resolve("remote-dev-worker_0123abcd").apply {
+        writeText(
+          "#!/bin/sh\necho HELLO_STDOUT\necho HELLO_STDERR >&2\n" +
+            "echo '{\"type\":\"error\",\"errorCode\":\"CommandError\",\"data\":\"ERROR_TEST Nothing to worry about\"}'\nexit 1\n",
+        )
+      }
+    assertTrue(RemoteHosts.forCommands(::run) is ShellHost, "not executable yet")
+    worker.setExecutable(true)
+    val picked = RemoteHosts.forCommands(::run)
+    assertTrue(picked is WorkerHost, "$picked")
+    assertEquals(host.os(), picked.os())
+    assertEquals(host.remoteDevDir(), picked.remoteDevDir())
   }
 
   @Test

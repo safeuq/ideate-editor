@@ -16,6 +16,9 @@ interface RemoteHost {
    */
   fun remoteDevDir(): String
 
+  /** The user's `$HOME` on the host, e.g. `/data/data/com.termux/files/home`. */
+  fun home(): String
+
   /**
    * The worker's `installed-ides`: entries of `dist/` and `userProvidedDist/` with their
    * product-info.json.
@@ -27,6 +30,12 @@ interface RemoteHost {
    * served.
    */
   fun recentProjects(): List<RecentProject>
+
+  /**
+   * [recentProjects] and [installedIdes] in one command on the host, for the SSH page's refresh: a
+   * login shell costs about 0.3 to 2 s on a phone.
+   */
+  fun projectsAndIdes(): HostProjects
 
   /**
    * The worker's `host-status`: the backend for [projectPath] started from [idePath], or null when
@@ -104,6 +113,9 @@ data class RecentProject(
   /** A backend for it runs now (its `active/<pid>` file's pid is alive). */
   val running: Boolean,
 )
+
+/** What the SSH page shows for a host: its recent projects, newest first, and its IDEs. */
+data class HostProjects(val recent: List<RecentProject>, val ides: List<InstalledIde>)
 
 /** The parts of `UnattendedHostStatus` the client uses. */
 data class HostStatus(

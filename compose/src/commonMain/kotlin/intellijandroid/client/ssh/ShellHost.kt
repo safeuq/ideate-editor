@@ -8,9 +8,21 @@ import intellijandroid.client.ssh.SshSession.Companion.shellQuote
  * "Design"): reads the same RemoteDev files the worker reads. [run] runs one command line on the
  * host, e.g. [SshSession.execInLoginShell].
  */
-class ShellHost(private val run: (String) -> ExecResult) : RemoteHost {
-  private val hostOs by lazy { HostOs.parse(checked(run("uname -sm"), "uname").stdout) }
+class ShellHost(
+  private val run: (String) -> ExecResult,
+  /** Already known (RemoteHosts asks for both in its one probe), else asked on first use. */
+  knownOs: HostOs? = null,
+  knownRemoteDevDir: String? = null,
+  knownHome: String? = null,
+) : RemoteHost {
+  private val homeDir by lazy {
+    knownHome ?: checked(run("printf '%s\\n' \"\$HOME\""), "HOME").stdout.trim().lines().last()
+  }
+  private val hostOs by lazy {
+    knownOs ?: HostOs.parse(checked(run("uname -sm"), "uname").stdout)
+  }
   private val devDir by lazy {
+    if (knownRemoteDevDir != null) return@lazy knownRemoteDevDir
     val script =
       if (os().os == HostOs.Os.MAC) "printf '%s\\n' \"\$HOME/Library/Caches/JetBrains/RemoteDev\""
       else "printf '%s\\n' \"\${XDG_CACHE_HOME:-\$HOME/.cache}/JetBrains/RemoteDev\""
@@ -21,18 +33,29 @@ class ShellHost(private val run: (String) -> ExecResult) : RemoteHost {
 
   override fun remoteDevDir(): String = devDir
 
-  override fun installedIdes(): List<InstalledIde> =
-    records(runScript(INSTALLED_IDES, remoteDevDir()), IDE_RECORD).mapNotNull { (fields, body) ->
-      HostData.installedIde(fields[0], fields.getOrNull(1), body)
-    }
+  override fun home(): String = homeDir
 
-  override fun recentProjects(): List<RecentProject> {
-    val statuses = statusFiles()
-    return HostData.recentProjects(
+  override fun installedIdes(): List<InstalledIde> =
+    ides(records(runScript(INSTALLED_IDES, remoteDevDir())))
+
+  override fun recentProjects(): List<RecentProject> =
+    recent(statusFiles(records(runScript(RECENT_STATUSES, remoteDevDir()))))
+
+  override fun projectsAndIdes(): HostProjects {
+    val records = records(runScript("$INSTALLED_IDES\n$RECENT_STATUSES", remoteDevDir()))
+    return HostProjects(recent(statusFiles(records)), ides(records))
+  }
+
+  private fun ides(records: List<Record>) =
+    records
+      .filter { it.marker == IDE_RECORD }
+      .mapNotNull { HostData.installedIde(it.fields[0], it.fields.getOrNull(1), it.body) }
+
+  private fun recent(statuses: List<StatusFile>) =
+    HostData.recentProjects(
       statuses.map { it.text },
       statuses.filter { it.alive }.map { it.pid }.toSet(),
     )
-  }
 
   override fun status(idePath: String, projectPath: String): HostStatus? {
     val result =
@@ -68,7 +91,7 @@ class ShellHost(private val run: (String) -> ExecResult) : RemoteHost {
 
   override fun removeRecent(projectPath: String, productCode: String) {
     val files =
-      statusFiles()
+      statusFiles(records(runScript(RECENT_STATUSES, remoteDevDir())))
         .filter { it.file.startsWith("recent/") }
         .filter { status ->
           val parsed = runCatching { HostData.status(status.text) }.getOrNull()
@@ -96,14 +119,15 @@ class ShellHost(private val run: (String) -> ExecResult) : RemoteHost {
     val text: String,
   )
 
-  private fun statusFiles(): List<StatusFile> =
-    records(runScript(RECENT_STATUSES, remoteDevDir()), STATUS_RECORD).mapNotNull { (fields, body)
-      ->
-      val file = fields[0]
-      val pid = file.substringAfterLast('/').substringBefore('_').toLongOrNull()
-      if (pid == null || body.isBlank()) null
-      else StatusFile(file, pid, fields.getOrNull(1) == "1", body)
-    }
+  private fun statusFiles(records: List<Record>): List<StatusFile> =
+    records
+      .filter { it.marker == STATUS_RECORD }
+      .mapNotNull { record ->
+        val file = record.fields[0]
+        val pid = file.substringAfterLast('/').substringBefore('_').toLongOrNull()
+        if (pid == null || record.body.isBlank()) null
+        else StatusFile(file, pid, record.fields.getOrNull(1) == "1", record.body)
+      }
 
   private fun runScript(script: String, vararg arguments: String) =
     run("sh -c ${shellQuote(script)} sh " + arguments.joinToString(" ") { shellQuote(it) })
@@ -151,23 +175,31 @@ for file in recent/* active/*; do
 done"""
 
     /**
-     * Splits a script's output into records: the tab-separated fields after [marker], and the lines
-     * up to the next record.
+     * A script's record: the marker line's tab-separated fields, and the lines up to the next
+     * record.
      */
-    internal fun records(result: ExecResult, marker: String): List<Pair<List<String>, String>> {
-      checked(result, marker)
-      val records = mutableListOf<Pair<List<String>, String>>()
-      var fields: List<String>? = null
+    internal data class Record(val marker: String, val fields: List<String>, val body: String)
+
+    private val RECORD_LINE = Regex("^(@@[A-Z]+@@)\t(.*)$")
+
+    /** Splits a script's output into [Record]s; lines before the first marker are dropped. */
+    internal fun records(result: ExecResult): List<Record> {
+      checked(result, "Host script")
+      val records = mutableListOf<Record>()
+      var current: Pair<String, List<String>>? = null
       val body = StringBuilder()
       fun flush() {
-        fields?.let { records += it to body.toString().trim() }
+        current?.let { (marker, fields) ->
+          records += Record(marker, fields, body.toString().trim())
+        }
         body.clear()
       }
       for (line in result.stdout.lines()) {
-        if (line.startsWith("$marker\t")) {
+        val match = RECORD_LINE.find(line)
+        if (match != null) {
           flush()
-          fields = line.removePrefix("$marker\t").split('\t')
-        } else if (fields != null) body.appendLine(line)
+          current = match.groupValues[1] to match.groupValues[2].split('\t')
+        } else if (current != null) body.appendLine(line)
       }
       flush()
       return records
