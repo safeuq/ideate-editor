@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.label
@@ -222,18 +223,13 @@ fun MainToolbar(
           "expui/general/moreVertical.svg" to "More actions",
         )
         .forEach { (path, label) ->
-          Box(
-            Modifier.size(IslandsDark.toolbarButton).clickable { onUnsupported(label) },
-            contentAlignment = Alignment.Center,
-          ) {
-            icons.painter(path)?.let {
-              Image(
-                it,
-                contentDescription = label,
-                modifier = Modifier.size(IslandsDark.toolbarIcon),
-              )
-            }
-          }
+          IconButton(
+            path,
+            label,
+            onClick = { onUnsupported(label) },
+            size = IslandsDark.toolbarButton,
+            iconSize = IslandsDark.toolbarIcon,
+          )
         }
     }
   }
