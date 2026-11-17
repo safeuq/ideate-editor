@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import intellijandroid.client.session.Lookup
 import intellijandroid.client.session.LookupItem
 import intellijandroid.client.session.matchedIndices
+import intellijandroid.client.ui.component.popupContainer
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.UiDensity
@@ -107,13 +108,8 @@ internal fun LookupPopup(lookup: Lookup, onChoose: (String) -> Unit) {
       )
     }
   }
-  val shape = RoundedCornerShape(Lookups.radius)
-
   Column(
-    Modifier.width(width)
-      .background(Lookups.background, shape)
-      .border(1.dp, Lookups.border, shape)
-      .padding(top = Lookups.verticalPadding),
+    Modifier.width(width).popupContainer(Lookups.radius).padding(top = Lookups.verticalPadding),
   ) {
     LazyColumn(
       state = listState,
@@ -256,8 +252,7 @@ internal val LOOKUP_PREFIX_INSET
 
 /** Popup metrics (measured on JetBrains Client 263.7307.200, Islands Dark) and colours. */
 private object Lookups {
-  val background = IslandsDark.popupBackground
-  val border = IslandsDark.popupBorder // also the group separator
+  val border = IslandsDark.popupBorder // the group separator, as the popup's border
   val foreground = Color(0xFFBCBEC4) // CompletionPopup.foreground = editor-text
   val match = Color(0xFF538AF9) // CompletionPopup.matchForeground
   val selection = IslandsDark.selectionBackground // after the user moved the selection
