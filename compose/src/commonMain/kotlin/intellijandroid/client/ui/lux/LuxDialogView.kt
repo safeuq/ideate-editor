@@ -2,6 +2,7 @@ package intellijandroid.client.ui.lux
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +38,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -90,8 +93,8 @@ fun LuxDialogs(dialogs: List<LuxDialog>, session: ClientSession) {
 /**
  * One backend dialog: IntelliJ's title row (macOS draws it in the title bar; the backend paints
  * only the content), then the content the backend paints, replayed onto a bitmap, with [popups]
- * over it. A backend pixel is a dp; a dialog wider than the screen is scaled down to fit, and input
- * scaled back.
+ * over it. A backend pixel is a dp; a dialog wider than the screen is scaled down to fit (see
+ * [dialogFit]), and input scaled back.
  */
 @Composable
 private fun LuxDialogWindow(dialog: LuxDialog, session: ClientSession, popups: List<LuxDialog>) {
@@ -106,9 +109,10 @@ private fun LuxDialogWindow(dialog: LuxDialog, session: ClientSession, popups: L
       ),
   ) {
     BoxWithConstraints {
-      val fit = if (dialog.width == 0) 1f else min(1f, (maxWidth.value - 16f) / dialog.width)
+      val room = maxWidth.value - 16f
+      val fit = dialogFit(room, dialog.width)
       // As wide as the backend laid the dialog out; the title row mustn't widen it.
-      Column(Modifier.width((dialog.width * fit).dp).dialogFrame()) {
+      Column(Modifier.width(min(dialog.width * fit, room).dp).dialogFrame()) {
         if (!dialog.popup && !dialog.undecorated)
           Box(
             Modifier.fillMaxWidth()
@@ -118,7 +122,8 @@ private fun LuxDialogWindow(dialog: LuxDialog, session: ClientSession, popups: L
           ) {
             BasicText(dialog.title, style = fonts.label().copy(fontWeight = FontWeight.SemiBold))
           }
-        Box {
+        // A finger pans what is still wider than the window; a mouse drag stays the backend's.
+        Box(Modifier.horizontalScroll(rememberScrollState())) {
           LuxSurface(dialog, session, fit, ::send, softKeyboard = !dialog.popup)
           for (popup in popups) key(popup.id) { LuxPopup(popup, dialog, fit, session) }
         }
@@ -126,6 +131,18 @@ private fun LuxDialogWindow(dialog: LuxDialog, session: ClientSession, popups: L
     }
   }
 }
+
+/**
+ * The scale for a dialog [dialogWidth] dp wide in [room] dp: whole when it fits, shrunk to fit when
+ * not, but never below [LEAST_FIT]; past that the content pans. Examples for a phone with 395 dp of
+ * room: Rename (358 dp) 1, IntelliJ's alert (440 dp) 0.9, Refactoring's "Error" with a long jar
+ * path (1920 dp, the whole screen the backend was told about) 0.75, so 1,440 dp to pan across.
+ */
+internal fun dialogFit(room: Float, dialogWidth: Int): Float =
+  if (dialogWidth == 0) 1f else (room / dialogWidth).coerceIn(LEAST_FIT, 1f)
+
+/** About 10 dp text from IntelliJ's 13: still readable. */
+internal const val LEAST_FIT = 0.75f
 
 /**
  * [popup] over its [owner] dialog at the backend's offset between the two, scaled as the dialog is.
@@ -205,18 +222,134 @@ private fun LuxContent(
   // caret is (`inputLocation`), as JetBrains Client turns input methods on and off with it. A new
   // focus node each time, since the keyboard connects when the node gains focus.
   val wantsKeyboard = softKeyboard && dialog.acceptsText
-  key(wantsKeyboard) {
-    LuxCanvas(
-      dialog,
-      bitmap,
-      painted,
-      fit,
-      send,
-      keyboard,
-      if (wantsKeyboard) textInput(keyboard) else Modifier,
-    )
+  val focus = remember(dialog.id) { FocusRequester() }
+  Box(Modifier.luxPointer(dialog, fit, send, focus)) {
+    key(wantsKeyboard) {
+      LuxCanvas(
+        dialog,
+        bitmap,
+        painted,
+        fit,
+        keyboard,
+        focus,
+        if (wantsKeyboard) textInput(keyboard) else Modifier,
+      )
+    }
   }
 }
+
+/**
+ * Pointer input for [dialog]'s content, sent to the backend in its pixels. It sits outside the
+ * canvas that [LuxContent] rebuilds when the soft keyboard comes or goes, so a gesture survives the
+ * rebuild: e.g. a finger pressing a checkbox while a text field had the focus, then panning.
+ */
+private fun Modifier.luxPointer(
+  dialog: LuxDialog,
+  fit: Float,
+  send: (LxEvent) -> Unit,
+  focus: FocusRequester,
+): Modifier =
+  pointerInput(dialog.id, fit) {
+    val toBackend = 1f / (density * fit)
+    var lastPress = 0L
+    var lastPressAt = Offset.Zero
+    var clicks = 0
+    var downAt = Offset.Zero
+    var inside = false
+    var panned = false
+    awaitPointerEventScope {
+      while (true) {
+        // After the pan around the content, which takes a finger's drag once it passes the
+        // touch slop.
+        val event = awaitPointerEvent(PointerEventPass.Final)
+        val change = event.changes.firstOrNull() ?: continue
+        val x = (change.position.x * toBackend).roundToInt()
+        val y = (change.position.y * toBackend).roundToInt()
+        val touch = change.type == PointerType.Touch
+        // xAbs/yAbs: the point on the screen the backend was told about.
+        fun mouse(
+          type: LxMouseEventType,
+          count: Int,
+          modifiers: Int,
+          atX: Int = x,
+          atY: Int = y,
+        ) =
+          send(
+            LxMouseEvent(
+              type,
+              atX,
+              atY,
+              dialog.x + atX,
+              dialog.y + atY,
+              count,
+              touch,
+              BUTTON1,
+              false,
+              modifiers,
+            ),
+          )
+        when (event.type) {
+          PointerEventType.Move ->
+            if (panned) Unit
+            else if (touch && change.pressed && change.isConsumed) {
+              // The finger pans the dialog: let go of what it pressed without a click, as
+              // dragging off a Swing button and releasing there does. Swing disarms the button
+              // when the drag leaves it (an Exited for the window alone doesn't); e.g. a
+              // checkbox pressed at (300, 90) is dragged to (-10000, -10000) and released there.
+              panned = true
+              inside = false
+              mouse(LxMouseEventType.Moved, 0, BUTTON1_DOWN, atX = OFF_WINDOW, atY = OFF_WINDOW)
+              mouse(LxMouseEventType.Released, clicks, 0, atX = OFF_WINDOW, atY = OFF_WINDOW)
+              mouse(LxMouseEventType.Exited, 0, 0, atX = OFF_WINDOW, atY = OFF_WINDOW)
+            } else mouse(LxMouseEventType.Moved, 0, if (change.pressed) BUTTON1_DOWN else 0)
+          PointerEventType.Enter -> {
+            inside = true
+            mouse(LxMouseEventType.Entered, 0, 0)
+          }
+          PointerEventType.Exit -> {
+            inside = false
+            mouse(LxMouseEventType.Exited, 0, 0)
+          }
+          PointerEventType.Press -> {
+            runCatching { focus.requestFocus() }
+            panned = false
+            // A finger has no hover: enter the window and move to the point first, as a mouse
+            // would. Swing ignores a press in a window the pointer never entered, and
+            // IntelliJ's
+            // list popups (`ListPopupImpl.isMouseMoved`) take the first move only as a start,
+            // so the move comes twice, 1 px apart along the row: e.g. (52, 140) then (53, 140)
+            // selects the Scope list's item under the finger before the press.
+            if (touch) {
+              if (!inside) mouse(LxMouseEventType.Entered, 0, 0)
+              inside = true
+              mouse(LxMouseEventType.Moved, 0, 0, atX = if (x > 0) x - 1 else x + 1)
+              mouse(LxMouseEventType.Moved, 0, 0)
+            }
+            val near = (change.position - lastPressAt).getDistance() < 8 * density
+            clicks =
+              if (near && change.uptimeMillis - lastPress < DOUBLE_CLICK_MILLIS) clicks + 1 else 1
+            lastPress = change.uptimeMillis
+            lastPressAt = change.position
+            downAt = change.position
+            mouse(LxMouseEventType.Pressed, clicks, BUTTON1_DOWN)
+          }
+          PointerEventType.Release ->
+            if (!panned) {
+              mouse(LxMouseEventType.Released, clicks, 0)
+              if ((change.position - downAt).getDistance() < 8 * density)
+                mouse(LxMouseEventType.Clicked, clicks, 0)
+              // The finger leaves, so nothing stays hovered.
+              if (touch) {
+                inside = false
+                mouse(LxMouseEventType.Exited, 0, 0)
+              }
+            }
+          else -> Unit
+        }
+        event.changes.forEach { it.consume() }
+      }
+    }
+  }
 
 @Composable
 private fun LuxCanvas(
@@ -224,98 +357,16 @@ private fun LuxCanvas(
   bitmap: ImageBitmap,
   painted: Int,
   fit: Float,
-  send: (LxEvent) -> Unit,
   keyboard: LuxKeyboard,
+  focus: FocusRequester,
   textInput: Modifier,
 ) {
-  val density = LocalDensity.current
-  val focus = remember { FocusRequester() }
   Canvas(
     Modifier.size((dialog.width * fit).dp, (dialog.height * fit).dp)
       .focusRequester(focus)
       .then(textInput)
       .focusable()
-      .onKeyEvent { event -> keyboard.key(event) }
-      .pointerInput(dialog.id, fit) {
-        val toBackend = 1f / (density.density * fit)
-        var lastPress = 0L
-        var lastPressAt = Offset.Zero
-        var clicks = 0
-        var downAt = Offset.Zero
-        var inside = false
-        awaitPointerEventScope {
-          while (true) {
-            val event = awaitPointerEvent()
-            val change = event.changes.firstOrNull() ?: continue
-            val x = (change.position.x * toBackend).roundToInt()
-            val y = (change.position.y * toBackend).roundToInt()
-            val touch = change.type == PointerType.Touch
-            // xAbs/yAbs: the point on the screen the backend was told about.
-            fun mouse(type: LxMouseEventType, count: Int, modifiers: Int, atX: Int = x) =
-              send(
-                LxMouseEvent(
-                  type,
-                  atX,
-                  y,
-                  dialog.x + atX,
-                  dialog.y + y,
-                  count,
-                  touch,
-                  BUTTON1,
-                  false,
-                  modifiers,
-                ),
-              )
-            when (event.type) {
-              PointerEventType.Move ->
-                mouse(LxMouseEventType.Moved, 0, if (change.pressed) BUTTON1_DOWN else 0)
-              PointerEventType.Enter -> {
-                inside = true
-                mouse(LxMouseEventType.Entered, 0, 0)
-              }
-              PointerEventType.Exit -> {
-                inside = false
-                mouse(LxMouseEventType.Exited, 0, 0)
-              }
-              PointerEventType.Press -> {
-                runCatching { focus.requestFocus() }
-                // A finger has no hover: enter the window and move to the point first, as a mouse
-                // would. Swing ignores a press in a window the pointer never entered, and
-                // IntelliJ's
-                // list popups (`ListPopupImpl.isMouseMoved`) take the first move only as a start,
-                // so the move comes twice, 1 px apart along the row: e.g. (52, 140) then (53, 140)
-                // selects the Scope list's item under the finger before the press.
-                if (touch) {
-                  if (!inside) mouse(LxMouseEventType.Entered, 0, 0)
-                  inside = true
-                  mouse(LxMouseEventType.Moved, 0, 0, atX = if (x > 0) x - 1 else x + 1)
-                  mouse(LxMouseEventType.Moved, 0, 0)
-                }
-                val near = (change.position - lastPressAt).getDistance() < 8 * density.density
-                clicks =
-                  if (near && change.uptimeMillis - lastPress < DOUBLE_CLICK_MILLIS) clicks + 1
-                  else 1
-                lastPress = change.uptimeMillis
-                lastPressAt = change.position
-                downAt = change.position
-                mouse(LxMouseEventType.Pressed, clicks, BUTTON1_DOWN)
-              }
-              PointerEventType.Release -> {
-                mouse(LxMouseEventType.Released, clicks, 0)
-                if ((change.position - downAt).getDistance() < 8 * density.density)
-                  mouse(LxMouseEventType.Clicked, clicks, 0)
-                // The finger leaves, so nothing stays hovered.
-                if (touch) {
-                  inside = false
-                  mouse(LxMouseEventType.Exited, 0, 0)
-                }
-              }
-              else -> Unit
-            }
-            event.changes.forEach { it.consume() }
-          }
-        }
-      },
+      .onKeyEvent { event -> keyboard.key(event) },
   ) {
     painted // read, so a painted batch redraws
     drawImage(bitmap, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()))
@@ -509,6 +560,8 @@ private const val ALT = 512 // ALT_DOWN_MASK
 private const val BUTTON1 = 1 // MouseEvent.BUTTON1
 private const val BUTTON1_DOWN = 1024 // BUTTON1_DOWN_MASK
 private const val DOUBLE_CLICK_MILLIS = 500L
+/** A point well outside any dialog, where a press is let go of without a click. */
+private const val OFF_WINDOW = -10000
 
 /** The platform's shortcut modifier, as for ⌘V / Ctrl+V and ⌘A / Ctrl+A. */
 private val PASTE_MODIFIER = if (intellijandroid.client.ui.IS_MAC) META else CTRL

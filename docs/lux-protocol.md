@@ -365,7 +365,24 @@ platform's `pngDecoder` (set at startup: Skia on the desktop, `BitmapFactory` on
   dialogs such as IntelliJ's alerts, which paint their own title) over the backend's content.
   - The content is a bitmap at screen density that the painter replays batches into, in order, on
     the UI thread.
-  - A dialog wider than the screen is scaled down to fit, and the input is scaled back.
+  - A dialog wider than the screen is scaled down to fit, and the input is scaled back, but never below
+    0.75 (`LEAST_FIT`, about 10 dp text). Past that a finger pans the content sideways; the title row
+    stays put. Examples on a phone with 395 dp of room: Rename (358 dp) 1, IntelliJ's alert (440 dp)
+    0.9, a Rename of a class with a 128-letter name (1175 dp) 0.75.
+    - Why dialogs get that wide: IntelliJ doesn't wrap some messages. `RefactoringMessageDialog`
+      (Refactoring's "Error", e.g. "File …/jackson-databind-2.22.0.jar!/…/HandlerInstantiator.class is
+      located in a read-only container") and `RenameDialog`'s "Rename class '…' and its usages to:" are
+      plain `JLabel`s. `DialogWrapperPeerImpl` only trims the dialog to the screen
+      (`ScreenUtil.fitToScreen`), so a long path makes it 1920 dp, the screen IDEate reports. Reporting
+      the phone's own width instead would only cut the text off at the phone's edge. IntelliJ's
+      alerts (`AlertMessagesManager`) do wrap, at 450 px.
+    - A pan doesn't click: once the content scrolls under the finger, IDEate drags the press off the
+      window to (-10000, -10000) and releases it there, as dragging off a Swing button before letting
+      go does. An `Exited` alone doesn't disarm the button, since it reaches the window, not the
+      button. Mouse drags don't pan; they stay the backend's (text selection).
+    - The pointer input sits outside the canvas that is rebuilt when the soft keyboard comes or goes.
+      Before, pressing a checkbox while the name field had the focus rebuilt the canvas
+      mid-gesture, and the release from the new canvas ticked the checkbox.
 - **Input:**
   - Pointer: `LxMouseEvent` Moved / Pressed / Released / Clicked, button 1, with
     `BUTTON1_DOWN_MASK` while pressed and the click count. A finger sends Moved before Pressed, so
