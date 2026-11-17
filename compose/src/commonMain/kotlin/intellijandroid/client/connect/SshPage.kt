@@ -42,10 +42,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import intellijandroid.client.ssh.LoginMethod
-import intellijandroid.client.ui.DialogButton
 import intellijandroid.client.ui.MenuItem
 import intellijandroid.client.ui.MessageDialog
 import intellijandroid.client.ui.MessageOption
+import intellijandroid.client.ui.component.DefaultButton
+import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import kotlinx.coroutines.delay
@@ -69,7 +70,7 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
     }
   }
   Header("Recent SSH Projects", styles) {
-    OutlinedButton("New Project", styles, actions.newConnection)
+    OutlinedButton("New Project", onClick = actions.newConnection)
   }
   SearchRow(search, { search = it }, styles)
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -77,7 +78,7 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
     if (state.hosts.isEmpty()) {
       Notice("Work with a project on a machine reachable using SSH", styles)
       Box(Modifier.padding(horizontal = Gateway.contentInset)) {
-        OutlinedButton("New Connection", styles, actions.newConnection)
+        OutlinedButton("New Connection", onClick = actions.newConnection)
       }
     }
     state.hosts.forEachIndexed { index, host ->
@@ -225,7 +226,7 @@ private fun NewConnectionDialog(
         val clipboard = LocalClipboardManager.current
         BasicText(publicKey, style = styles.code, modifier = Modifier.padding(start = 24.dp))
         Box(Modifier.padding(start = 24.dp)) {
-          DialogButton("Copy Public Key", styles.label, primary = false) {
+          OutlinedButton("Copy Public Key") {
             clipboard.setText(AnnotatedString(publicKey))
           }
         }
@@ -276,12 +277,10 @@ private fun NewConnectionDialog(
     }
     dialog.error?.let { BasicText(it, style = styles.error) }
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-      DialogButton("Cancel", styles.label, primary = false, onClick = actions.cancelDialog)
+      OutlinedButton("Cancel", onClick = actions.cancelDialog)
       Spacer(Modifier.width(8.dp))
-      DialogButton(
+      DefaultButton(
         if (dialog.checking) "Checking Connection…" else "Check Connection and Continue",
-        styles.label,
-        primary = true,
       ) {
         if (!dialog.checking) actions.checkAndContinue()
       }
@@ -316,18 +315,13 @@ private fun ChooseIdeDialog(
         InputField(dialog.projectPath, actions.projectPathChanged, styles)
       }
       Spacer(Modifier.width(6.dp))
-      DialogButton("…", styles.label, primary = false, onClick = onBrowse)
+      OutlinedButton("…", onClick = onBrowse)
     }
     dialog.error?.let { BasicText(it, style = styles.error) }
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-      DialogButton("Cancel", styles.label, primary = false, onClick = actions.cancelDialog)
+      OutlinedButton("Cancel", onClick = actions.cancelDialog)
       Spacer(Modifier.width(8.dp))
-      DialogButton(
-        "Start IDE and Connect",
-        styles.label,
-        primary = true,
-        onClick = actions.startAndConnect,
-      )
+      DefaultButton("Start IDE and Connect", onClick = actions.startAndConnect)
     }
   }
 }
@@ -346,9 +340,9 @@ private fun AuthenticateDialog(
     LabeledField(dialog.prompt, typed, { typed = it }, styles, secret = true)
     dialog.error?.let { BasicText(it, style = styles.error) }
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-      DialogButton("Cancel", styles.label, primary = false, onClick = actions.cancelDialog)
+      OutlinedButton("Cancel", onClick = actions.cancelDialog)
       Spacer(Modifier.width(8.dp))
-      DialogButton("Authenticate", styles.label, primary = true) { actions.authenticate(typed) }
+      DefaultButton("Authenticate") { actions.authenticate(typed) }
     }
   }
 }

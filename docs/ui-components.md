@@ -154,7 +154,7 @@ the desktop app and the emulator before it's pushed.
 | Step | What | Who | Status |
 |---|---|---|---|
 | 1 | `theme/IslandsDark.kt` (moved) with semantic colors, `theme/Typography.kt`; per-file colors switch to theme values | me | done (see below) |
-| 2 | `component/Button.kt`: both `DialogButton`s (now one, in MessageDialog.kt), `OutlinedButton`, StartProgress's Cancel | UI session | to do |
+| 2 | `component/Button.kt`: both `DialogButton`s (now one, in MessageDialog.kt), `OutlinedButton`, StartProgress's Cancel | UI session | done, except StartProgress's Cancel (its file is yours: use `OutlinedButton`) |
 | 3 | `component/TextField.kt`: `InputField`, `Field`, the FolderChooser path field. `LabeledField` becomes `Column { Text(label); TextField() }` at the call site (Kotlin UI DSL `row(label)`) | UI session | to do |
 | 4 | `component/RadioButton.kt` + `Checkbox.kt`: `Choice`, with IntelliJ's `radio*.svg`/`checkBox*.svg` (look in the client dist's `lib/*.jar` first; `IconJar` can take a second jar) | UI session | to do |
 | 5 | `component/IconButton.kt`: `IconButton`, `ToolbarIcon`, `TabCloseButton` | me (ConnectScreen and FolderChooser call sites: UI session) | to do |
@@ -187,6 +187,28 @@ the desktop app and the emulator before it's pushed.
 - Checked: desktop app (IDE screen, editor context menu, connect screen) and the emulator (Project
   menu by long press). The visible change is in the menus: disabled items are dimmer
   (`#4C4F56`, was Darcula's `#777777`). Not yet compared with a screenshot of real IntelliJ.
+
+### Step 2 (done)
+
+- `ui/component/Button.kt`: `DefaultButton(text, modifier, enabled, onClick)` and
+  `OutlinedButton(...)`, after Jewel's `Button.kt` and `IntUiBridgeButton.kt`. `onClick` is last so
+  callers can pass a trailing lambda.
+- Values from the theme:
+
+  | Value | Theme key |
+  |---|---|
+  | border `#40434A` | `Button.startBorderColor` |
+  | default `#3871E1`, text white | `Button.default.startBackground` / `.foreground` |
+  | disabled text `#4C4F56`, border `#33353B` | `*.disabledText` / `*.disabledBorderColor` |
+  | corner 4 dp | `Button.arc` 8 |
+  | minimum 72 × 28, compact 72 × 24 | `Button.minimumSize` |
+  | padding 14 | `DarculaButtonUI.HORIZONTAL_PADDING` |
+  | focused: 2 px `#3871E1` ring outside, border `#191A1C` | `Component.focusColor`, `Button.focusedBorderColor` |
+
+- Callers moved: SshPage (Copy Public Key, Cancel, Check Connection and Continue, Start IDE and
+  Connect, Authenticate, …), MessageDialog, FolderChooser (OK, Cancel), ConnectScreen
+  (`OutlinedButton` removed). Buttons are now 28 high at normal density (were 24 or 27).
+- Checked: desktop, the SSH page and its Connect to SSH dialog.
 
 ## 5. Split
 

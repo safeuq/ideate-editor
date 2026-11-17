@@ -43,6 +43,8 @@ import intellijandroid.client.session.TextFragment
 import intellijandroid.client.session.TreeNode
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.ProjectTreeView
+import intellijandroid.client.ui.component.DefaultButton
+import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 
@@ -282,36 +284,10 @@ fun FolderChooser(
           ),
         horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
       ) {
-        DialogButton(
-          "OK",
-          text.copy(color = Color.White, fontWeight = FontWeight.SemiBold),
-          Modifier.background(Chooser.accent, Chooser.buttonShape),
-        ) {
-          onChoose(path.trim().trimEnd('/'))
-        }
-        DialogButton(
-          "Cancel",
-          text,
-          Modifier.border(1.dp, Chooser.buttonBorder, Chooser.buttonShape),
-          onCancel,
-        )
+        DefaultButton("OK") { onChoose(path.trim().trimEnd('/')) }
+        OutlinedButton("Cancel", onClick = onCancel)
       }
     }
-  }
-}
-
-@Composable
-private fun DialogButton(
-  label: String,
-  style: TextStyle,
-  decoration: Modifier,
-  onClick: () -> Unit,
-) {
-  Box(
-    decoration.width(Chooser.buttonWidth).height(Chooser.buttonHeight).clickable(onClick = onClick),
-    contentAlignment = Alignment.Center,
-  ) {
-    BasicText(label, style = style)
   }
 }
 
@@ -343,10 +319,6 @@ private object Chooser {
   val accent = IslandsDark.controlBrandBackground // focused field ring and the OK button
   val treeInset = 12.dp // tree panel: 12.5 pt from the dialog's side
   val treeBorder = Color(0xFF2B2D30)
-  val buttonWidth = 72.dp
-  val buttonHeight = 24.dp
-  val buttonShape = RoundedCornerShape(4.dp)
-  val buttonBorder = IslandsDark.controlBorder
   val bottomInset = 11.dp
 }
 

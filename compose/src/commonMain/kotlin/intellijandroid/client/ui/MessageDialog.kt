@@ -3,14 +3,11 @@ package intellijandroid.client.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import intellijandroid.client.ui.component.DefaultButton
+import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 
@@ -117,12 +116,8 @@ fun MessageDialog(
           horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
         ) {
           shown.forEach { option ->
-            DialogButton(
-              option.label,
-              label,
-              primary = option === options.first(),
-              onClick = option.onClick,
-            )
+            if (option === options.first()) DefaultButton(option.label, onClick = option.onClick)
+            else OutlinedButton(option.label, onClick = option.onClick)
           }
         }
       }
@@ -131,28 +126,8 @@ fun MessageDialog(
   LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 }
 
-/** IntelliJ's dialog button: the default one filled with the accent, the others outlined. */
-@Composable
-fun DialogButton(label: String, style: TextStyle, primary: Boolean, onClick: () -> Unit) {
-  Box(
-    Modifier.height(24.dp)
-      .then(
-        if (primary) Modifier.background(Alert.accent, Alert.buttonShape)
-        else Modifier.border(1.dp, Alert.buttonBorder, Alert.buttonShape),
-      )
-      .clickable(onClick = onClick)
-      .padding(horizontal = 14.dp),
-    contentAlignment = Alignment.Center,
-  ) {
-    BasicText(label, style = style)
-  }
-}
-
 private object Alert {
   val background = IslandsDark.popupBackground // AlertDialog.background = popup-bg
   val border = IslandsDark.popupBorder
   val shape = RoundedCornerShape(10.dp)
-  val accent = IslandsDark.controlBrandBackground
-  val buttonBorder = IslandsDark.controlBorder
-  val buttonShape = RoundedCornerShape(4.dp)
 }

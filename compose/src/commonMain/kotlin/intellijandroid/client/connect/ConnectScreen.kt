@@ -44,6 +44,7 @@ import intellijandroid.client.ui.ContextMenuArea
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.MenuItem
 import intellijandroid.client.ui.MessageKind
+import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import java.time.Instant
@@ -316,7 +317,7 @@ private fun PhonePage(
     if (state.termux != null) "Recent Termux Projects" else "Backends on ${state.device}",
     styles,
   ) {
-    if (termuxReady) OutlinedButton("New Project", styles, onNewProject)
+    if (termuxReady) OutlinedButton("New Project", onClick = onNewProject)
   }
   SearchRow(search, { search = it }, styles)
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -330,7 +331,7 @@ private fun PhonePage(
       TermuxAccess.NO_PERMISSION -> {
         Notice("This app needs permission to run intellij-backend in Termux.", styles)
         Box(Modifier.padding(horizontal = Gateway.contentInset)) {
-          OutlinedButton("Allow", styles, actions.allowTermux)
+          OutlinedButton("Allow", onClick = actions.allowTermux)
         }
       }
       TermuxAccess.READY,
@@ -426,7 +427,7 @@ private fun LinkPage(state: ConnectScreenState, actions: ConnectActions, styles:
       Field(state.link, actions.linkChanged, styles)
       BasicText("File to open, optional (absolute path on the backend)", style = styles.secondary)
       Field(state.file, actions.fileChanged, styles)
-      OutlinedButton("Connect", styles, actions.connectLink)
+      OutlinedButton("Connect", onClick = actions.connectLink)
     }
     Notices(state, actions, styles)
     // Grouped by address, like Gateway groups by user@host; LINK names are `<project> ·
@@ -466,8 +467,8 @@ private fun Notices(state: ConnectScreenState, actions: ConnectActions, styles: 
       Modifier.padding(horizontal = Gateway.contentInset),
       horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      OutlinedButton(question.confirm, styles, actions.answerQuestion)
-      OutlinedButton("Cancel", styles, actions.cancelQuestion)
+      OutlinedButton(question.confirm, onClick = actions.answerQuestion)
+      OutlinedButton("Cancel", onClick = actions.cancelQuestion)
     }
   }
 }
@@ -720,19 +721,6 @@ internal fun Field(value: String, onChange: (String) -> Unit, styles: ConnectSty
   )
 }
 
-@Composable
-internal fun OutlinedButton(text: String, styles: ConnectStyles, onClick: () -> Unit) {
-  Box(
-    Modifier.height(Gateway.buttonHeight)
-      .border(1.dp, Gateway.buttonBorder, Gateway.buttonShape)
-      .clickable(onClick = onClick)
-      .padding(horizontal = 14.dp),
-    contentAlignment = Alignment.Center,
-  ) {
-    BasicText(text, style = styles.body)
-  }
-}
-
 /**
  * `/data/data/com.termux/files/home/intellij/smoke` → `~/intellij/smoke`: the full path doesn't fit
  * a phone.
@@ -817,7 +805,6 @@ internal object Gateway {
   val projectRowHeight = 39.dp
   val iconStep = 25.5.dp // trailing icons, one every 25.5 pt
   val iconColumnEndInset = 32.dp // last icon centred 44.5 pt from the right
-  val buttonHeight = 27.dp
   val buttonBorder = IslandsDark.controlBorder
   val buttonShape = RoundedCornerShape(4.dp)
   val menuWidth = 237.dp
