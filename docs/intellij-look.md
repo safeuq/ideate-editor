@@ -448,3 +448,36 @@ Checked 2026-11-17 on the desktop against a Mac backend (snapshots with `CLIENT_
 | Click | caret to the scope's start offset, `scrollToCaret(RELATIVE)` | caret there, then the line is scrolled to just under the pinned lines above it; the editor takes focus once the session has the new caret |
 
 Checked on the desktop against the Mac backend (port 5992), `Big.java`: scrolled into `method1`, `public class Big {` (line 3) and `int method1(final int value) {` (line 16) were pinned, with the border under them. Tapping the pinned `method3` line put the caret on `method3` with line 40 right under the pinned class line. Tapping the class line put line 3 at the top.
+
+## 13. Context menus (2026-11-17)
+
+`ContextMenuArea` in `ui/ContextMenu.kt` gives any composable IntelliJ's popup menu. When it opens:
+
+| Trigger | Where the menu opens |
+|---|---|
+| Right click (desktop, Android with a mouse) | at the pointer; moved left or up when there's no room, like a desktop menu |
+| Right click on a phone (smallest window side under 600 dp, Android's `sw600dp` line) | in the middle of the window, as there is little room |
+| Long press with a finger (phone and tablet) | in the middle of the window, rows 40 dp high for a finger (24 otherwise) |
+
+The gesture is watched in Compose's `Initial` pass, before the content sees it. A right click or a long press is
+consumed, so it doesn't also become a tap, a drag or a text selection underneath. A long press is a touch held for
+the long-press time (`viewConfiguration.longPressTimeoutMillis`) without moving past the touch slop.
+
+Look, Islands Dark (theme keys from `darcula.theme.json` → `expUI_dark` → `ManyIslandsDark`, code defaults from
+`JBUI.CurrentTheme.PopupMenu`):
+
+| Part | Value | Key |
+|---|---|---|
+| Background | `#26282C` | `PopupMenu.background` = `popup-bg` |
+| Border | 1 px `#33353B`, radius 8 | `Popup.borderColor` = `popup-border`, `PopupMenu.borderCornerRadius` 8 |
+| Space above and below the items | 6 | `PopupMenu.borderInsets` 6,1,6,1 |
+| Hovered row | a band inset 1 top and bottom and 7 from the sides, radius 4, `#2E436E` (the band color is not measured) | `PopupMenu.Selection.outerInsets` 1,7, `.arc` 8 |
+| Item text | 6 inside the band, after an 18 px icon column; 13 px Inter | `PopupMenu.Selection.innerInsets` 0,6 (New UI), `Menu.maxGutterIconWidth` 18 |
+| Shortcut | right-aligned, `#73767C` | |
+| Disabled item | `#777777` | `MenuItem.disabledForeground` |
+| Separator | 9 high, a 1 px line in the border color, 10 from the sides | `PopupMenuSeparator.height` 9, `.withToEdge` 10 |
+
+Submenus open in place of the menu, with a row at the top to go back. IntelliJ opens them to the side instead;
+in place also works with a finger and in a centred menu. Items are plain data (`MenuItem`, `SubMenu`,
+`MenuSeparator`), so they can come from the backend later. `entries` is read while the menu shows, and null shows
+"Loading…".
