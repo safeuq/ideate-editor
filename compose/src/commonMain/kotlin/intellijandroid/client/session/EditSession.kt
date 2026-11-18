@@ -229,6 +229,11 @@ class EditSession(
    * since the last one isn't counted in them.
    */
   private var undoSizesKnown = false
+
+  /**
+   * Stays true when the edit is later dropped (a failure, or a second retry in [rebase]): Undo can
+   * then show enabled with nothing to undo, which does no harm.
+   */
   private var editedSinceUndoSizes = false
 
   /** Undo may do something: unknown counts as yes (the backend may hold older history). */

@@ -266,28 +266,6 @@ fun ClientScreen(
         back =
           if (editorCovered) ToolbarBack(pointsRight = page == Page.LEFT, onClick = ::backToEditor)
           else null,
-        // IntelliJ's Edit menu entries, for a screen without a keyboard.
-        moreActions =
-          state.editors
-            .firstOrNull { it.path == state.selectedEditor }
-            .let { file ->
-              listOf(
-                MenuItem(
-                  "Undo",
-                  shortcut("⌘Z", "Ctrl+Z"),
-                  enabled = file?.canUndo == true,
-                  iconPath = "expui/general/undo.svg",
-                  onClick = session::undo,
-                ),
-                MenuItem(
-                  "Redo",
-                  shortcut("⇧⌘Z", "Ctrl+Shift+Z"),
-                  enabled = file?.canRedo == true,
-                  iconPath = "expui/general/redo.svg",
-                  onClick = session::redo,
-                ),
-              )
-            },
       )
       when (layout) {
         ScreenLayout.PORTRAIT -> {
