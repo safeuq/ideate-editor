@@ -796,3 +796,21 @@ automation used here cannot capture).
 | List | at most 600 high, and at most 60% of the window | `BigPopup.maxListHeight` |
 | Nothing found | "Nothing found." in `#73767C` | `SeEmptyResultInfo` |
 
+## 22. Editor tab row: one scrolling row and the hidden-tabs list (2026-11-19)
+
+IntelliJ's default editor tab placement is one row (`ScrollableSingleRowLayout`): tabs keep their full width and the
+row scrolls sideways; JBTabsImpl scrolls the selected tab into view. When some tabs don't fully show, a ▾
+(`TabListAction`, `AllIcons.Toolbar.Expand` = `expui/general/chevronDownLarge.svg`) appears at the row's right end;
+in the new UI it opens a list popup (`JBTabsImpl.showListPopup`, `HiddenInfosListPopupStep`) of the hidden tabs with
+their icons, a separator between those cut off on the left and those on the right. Choosing one selects it.
+
+IDEate (`ClientScreen.EditorTabs`):
+- the row scrolls with a finger, a trackpad or the wheel; names stay on one line (they wrapped before, and the last
+  tab lost its ×);
+- a tab counts as hidden when any part of it is outside the visible row, measured on a wrapper around each tab (the
+  context menu area would otherwise be the parent and every tab would read as at 0);
+- on a phone held upright, a sideways drag that starts on the tab row scrolls the tabs until they reach that end;
+  only then does it switch pages (`TabRowScroll`, given to the page swiper with the drag's start point);
+- not yet: the × on hover in the list, and the ⋮ after the ▾ (IntelliJ's editor tab actions). Desktop: checked
+  only on the emulator; the mouse wheel on the row is untested.
+

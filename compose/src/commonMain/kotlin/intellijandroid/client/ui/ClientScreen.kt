@@ -3,11 +3,13 @@ package intellijandroid.client.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -32,6 +35,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -56,6 +62,12 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -67,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import intellijandroid.client.session.ClientSession
 import intellijandroid.client.session.SearchTab
 import intellijandroid.client.session.SessionState
+import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.component.SplitPane
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -169,6 +182,7 @@ fun ClientScreen(
     // One per screen, shared by the layouts: the pager asks it whether a sideways swipe scrolls the
     // editor or switches to a tool window.
     val editorScroll = remember { SidewaysScroll() }
+    val tabRow = remember { TabRowScroll() }
     // One per tool window, so each keeps its position; the pager asks the ones on screen.
     val windowScrolls = remember { mutableMapOf<ToolWindow, SidewaysScroll>() }
     fun scrollOf(window: ToolWindow) = windowScrolls.getOrPut(window) { SidewaysScroll() }
@@ -287,7 +301,7 @@ fun ClientScreen(
     }
 
     @Composable
-    fun Editor(modifier: Modifier) = EditorIsland(state, session, editorScroll, modifier)
+    fun Editor(modifier: Modifier) = EditorIsland(state, session, editorScroll, tabRow, modifier)
 
     Column(Modifier.fillMaxSize()) {
       MainToolbar(
@@ -318,11 +332,15 @@ fun ClientScreen(
               page = target
             },
             canShow = { side -> windows.canShow(side) },
-            canScroll = { onPage, dragX ->
+            canScroll = { onPage, dragX, down ->
               when (onPage) {
                 Page.LEFT -> scrolls(Side.LEFT, dragX)
                 Page.MIDDLE ->
-                  if (bottomShown) scrolls(Side.BOTTOM, dragX) else editorScroll.canScroll(dragX)
+                  when {
+                    bottomShown -> scrolls(Side.BOTTOM, dragX)
+                    tabRow.contains(down) -> tabRow.canScroll(dragX)
+                    else -> editorScroll.canScroll(dragX)
+                  }
                 Page.RIGHT -> scrolls(Side.RIGHT, dragX)
               }
             },
@@ -547,10 +565,11 @@ private fun SwipePager(
   page: Page,
   onPage: (Page) -> Unit,
   /**
-   * Whether a sideways drag of this many px would scroll the content of this page
-   * (SidewaysScroll.canScroll): the editor's text or a tool window's tree.
+   * Whether a sideways drag of this many px, started at this point (in the window), would scroll
+   * the content of this page (SidewaysScroll.canScroll): the editor's text, its tab row or a tool
+   * window's tree.
    */
-  canScroll: (Page, Float) -> Boolean,
+  canScroll: (Page, Float, Offset) -> Boolean,
   /** Whether a swipe may show that side's page: it has windows open or to open again. */
   canShow: (Side) -> Boolean,
   left: @Composable () -> Unit,
@@ -577,6 +596,8 @@ private fun SwipePager(
   val gap by animateDpAsState(if (rounded) IslandsDark.islandGap else 0.dp)
   val radius by animateDpAsState(if (rounded) IslandsDark.islandRadius else 0.dp)
 
+  // The pager's top left in the window, so a drag's start can be compared with the tab row's.
+  var origin by remember { mutableStateOf(Offset.Zero) }
   BoxWithConstraints(modifier.clipToBounds()) {
     val density = LocalDensity.current
     val gapPx = with(density) { gap.toPx() }
@@ -585,65 +606,69 @@ private fun SwipePager(
     val width = constraints.maxWidth.toFloat() - gapPx
 
     Box(
-      Modifier.fillMaxSize().pointerInput(page) {
-        val range =
-          when (page) {
-            Page.LEFT -> 0f..1f
-            Page.MIDDLE ->
-              (if (canShow(Side.RIGHT)) -1f else 0f)..(if (canShow(Side.LEFT)) 1f else 0f)
-            Page.RIGHT -> -1f..0f
-          }
-        awaitEachGesture {
-          val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-          val velocity = VelocityTracker()
-          var travelled = Offset.Zero
-          var swiping = false
-          try {
-            while (true) {
-              val change =
-                awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
-                  ?: break
-              if (!change.pressed) break
-              val delta = change.positionChange()
-              if (!swiping) {
-                travelled += delta
-                if (travelled.getDistance() < viewConfiguration.touchSlop) continue
-                // Mostly sideways: a swipe. Anything else belongs to the content (scrolling, taps).
-                if (abs(travelled.x) < 2 * abs(travelled.y)) return@awaitEachGesture
-                // A sideways swipe scrolls the page's content (editor text, tool window tree)
-                // unless it is already at that edge. Decided once here, so one swipe never turns
-                // from scrolling into switching.
-                if (canScroll(page, travelled.x)) return@awaitEachGesture
-                swiping = true
-                dragging = true
-              }
-              change.consume()
-              velocity.addPosition(change.uptimeMillis, change.position)
-              val pageWidth = size.width.toFloat()
-              scope.launch {
-                position.snapTo((position.value + delta.x / pageWidth).coerceIn(range))
-              }
+      Modifier.fillMaxSize()
+        .onGloballyPositioned { origin = it.positionInRoot() }
+        .pointerInput(page) {
+          val range =
+            when (page) {
+              Page.LEFT -> 0f..1f
+              Page.MIDDLE ->
+                (if (canShow(Side.RIGHT)) -1f else 0f)..(if (canShow(Side.LEFT)) 1f else 0f)
+              Page.RIGHT -> -1f..0f
             }
-            if (!swiping) return@awaitEachGesture
-            // Past a third of the screen, or a quick flick, moves one page; otherwise it springs
-            // back.
-            val flick = velocity.calculateVelocity().x
-            val moved = position.value - positionOf(page)
-            val target =
-              when {
-                moved > 1f / 3 || flick > 1000f ->
-                  if (page == Page.RIGHT) Page.MIDDLE else Page.LEFT
-                moved < -1f / 3 || flick < -1000f ->
-                  if (page == Page.LEFT) Page.MIDDLE else Page.RIGHT
-                else -> page
-              }.takeIf { positionOf(it) in range } ?: page
-            if (target == page) scope.launch { position.animateTo(positionOf(page)) }
-            else onPage(target)
-          } finally {
-            dragging = false
+          awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val velocity = VelocityTracker()
+            var travelled = Offset.Zero
+            var swiping = false
+            try {
+              while (true) {
+                val change =
+                  awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull {
+                    it.id == down.id
+                  } ?: break
+                if (!change.pressed) break
+                val delta = change.positionChange()
+                if (!swiping) {
+                  travelled += delta
+                  if (travelled.getDistance() < viewConfiguration.touchSlop) continue
+                  // Mostly sideways: a swipe. Anything else belongs to the content (scrolling,
+                  // taps).
+                  if (abs(travelled.x) < 2 * abs(travelled.y)) return@awaitEachGesture
+                  // A sideways swipe scrolls the page's content (editor text, tool window tree)
+                  // unless it is already at that edge. Decided once here, so one swipe never turns
+                  // from scrolling into switching.
+                  if (canScroll(page, travelled.x, origin + down.position)) return@awaitEachGesture
+                  swiping = true
+                  dragging = true
+                }
+                change.consume()
+                velocity.addPosition(change.uptimeMillis, change.position)
+                val pageWidth = size.width.toFloat()
+                scope.launch {
+                  position.snapTo((position.value + delta.x / pageWidth).coerceIn(range))
+                }
+              }
+              if (!swiping) return@awaitEachGesture
+              // Past a third of the screen, or a quick flick, moves one page; otherwise it springs
+              // back.
+              val flick = velocity.calculateVelocity().x
+              val moved = position.value - positionOf(page)
+              val target =
+                when {
+                  moved > 1f / 3 || flick > 1000f ->
+                    if (page == Page.RIGHT) Page.MIDDLE else Page.LEFT
+                  moved < -1f / 3 || flick < -1000f ->
+                    if (page == Page.LEFT) Page.MIDDLE else Page.RIGHT
+                  else -> page
+                }.takeIf { positionOf(it) in range } ?: page
+              if (target == page) scope.launch { position.animateTo(positionOf(page)) }
+              else onPage(target)
+            } finally {
+              dragging = false
+            }
           }
-        }
-      },
+        },
     ) {
       CompositionLocalProvider(LocalIslandRadius provides radius) {
         listOf(Page.LEFT to left, Page.MIDDLE to middle, Page.RIGHT to right).forEach {
@@ -667,6 +692,7 @@ private fun EditorIsland(
   state: SessionState,
   session: ClientSession,
   editorScroll: SidewaysScroll,
+  tabRow: TabRowScroll,
   modifier: Modifier,
 ) {
   val fonts = LocalClientFonts.current
@@ -677,7 +703,7 @@ private fun EditorIsland(
   }
   Column(modifier.island(LocalIslandRadius.current)) {
     val selected = state.editors.firstOrNull { it.path == state.selectedEditor }
-    EditorTabs(state, session)
+    EditorTabs(state, session, tabRow)
     val scheme = state.scheme
     if (selected != null && scheme != null) {
       val actions =
@@ -731,7 +757,7 @@ private fun EditorIsland(
  * right, by default (`UISettings.showCloseButton`, `closeTabButtonOnTheRight`).
  */
 @Composable
-private fun EditorTabs(state: SessionState, session: ClientSession) {
+private fun EditorTabs(state: SessionState, session: ClientSession, tabRow: TabRowScroll) {
   if (state.editors.isEmpty()) return
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
@@ -772,44 +798,130 @@ private fun EditorTabs(state: SessionState, session: ClientSession) {
     )
   }
 
+  // IntelliJ's single-row tabs (ScrollableSingleRowLayout): one row that scrolls sideways, names on
+  // one line, and the ▾ (TabListAction) listing the tabs that don't fully show.
+  val scroll = rememberScrollState()
+  tabRow.scroll = scroll
+  // Each tab's left edge and width in the scrolling row, in px.
+  val placed = remember { mutableStateMapOf<String, Pair<Int, Int>>() }
+  var viewport by remember { mutableIntStateOf(0) }
+  fun shown(path: String): Boolean {
+    val (left, width) = placed[path] ?: return true
+    return left >= scroll.value && left + width <= scroll.value + viewport
+  }
+  // The selected tab scrolls into view, as JBTabsImpl does on selection.
+  LaunchedEffect(state.selectedEditor, placed[state.selectedEditor], viewport) {
+    val (left, width) = placed[state.selectedEditor] ?: return@LaunchedEffect
+    when {
+      left < scroll.value -> scroll.animateScrollTo(left)
+      left + width > scroll.value + viewport -> scroll.animateScrollTo(left + width - viewport)
+    }
+  }
   Row(
-    Modifier.fillMaxWidth().height(IslandsDark.tabRowHeight).padding(start = 4.dp),
+    Modifier.fillMaxWidth().height(IslandsDark.tabRowHeight),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    for (editor in state.editors) {
-      val selected = editor.path == state.selectedEditor
-      val iconPath =
-        state.tree.nodes.values.firstOrNull { it.path == editor.path }?.iconPaths?.firstOrNull()
-          ?: "expui/fileTypes/text.svg"
-      val pill = RoundedCornerShape(IslandsDark.tabRadius)
-      ContextMenuArea(entries = { tabMenu(editor.path, editor.name) }) {
+    Row(
+      Modifier.weight(1f)
+        .onGloballyPositioned { tabRow.bounds = it.boundsInRoot() }
+        .onSizeChanged { viewport = it.width }
+        .horizontalScroll(scroll)
+        .padding(start = 4.dp, end = 4.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      for (editor in state.editors) {
+        val selected = editor.path == state.selectedEditor
+        val iconPath = fileIconPath(state, editor.path)
+        val pill = RoundedCornerShape(IslandsDark.tabRadius)
+        // Measured on this wrapper: the row is its parent.
         Box(
-          Modifier.height(IslandsDark.tabHeight)
-            .clip(pill)
-            .then(
-              if (selected)
-                Modifier.background(IslandsDark.tabSelectedBackground)
-                  .border(1.dp, IslandsDark.tabSelectedBorder, pill)
-              else Modifier,
-            )
-            .clickable { session.selectEditor(editor.path) }
-            .padding(start = 8.dp, end = 4.dp),
+          Modifier.onPlaced { coordinates ->
+            placed[editor.path] = coordinates.positionInParent().x.toInt() to coordinates.size.width
+          },
         ) {
-          Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
-            icons.painter(iconPath)?.let { Image(it, null, Modifier.size(16.dp)) }
-            Spacer(Modifier.width(6.dp))
-            BasicText(
-              editor.name,
-              style = fonts.label(),
-            )
-            Spacer(Modifier.width(2.dp))
-            TabCloseButton(editor.name) { session.closeEditor(editor.path) }
+          ContextMenuArea(entries = { tabMenu(editor.path, editor.name) }) {
+            Box(
+              Modifier.height(IslandsDark.tabHeight)
+                .clip(pill)
+                .then(
+                  if (selected)
+                    Modifier.background(IslandsDark.tabSelectedBackground)
+                      .border(1.dp, IslandsDark.tabSelectedBorder, pill)
+                  else Modifier,
+                )
+                .clickable { session.selectEditor(editor.path) }
+                .padding(start = 8.dp, end = 4.dp),
+            ) {
+              Row(
+                Modifier.align(Alignment.Center),
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                icons.painter(iconPath)?.let { Image(it, null, Modifier.size(16.dp)) }
+                Spacer(Modifier.width(6.dp))
+                BasicText(editor.name, style = fonts.label(), maxLines = 1, softWrap = false)
+                Spacer(Modifier.width(2.dp))
+                TabCloseButton(editor.name) { session.closeEditor(editor.path) }
+              }
+            }
+          }
+        }
+      }
+    }
+    val hidden = state.editors.filterNot { shown(it.path) }
+    if (scroll.maxValue > 0 && hidden.isNotEmpty()) {
+      var open by remember { mutableStateOf(false) }
+      Box {
+        IconButton(
+          "expui/general/chevronDownLarge.svg",
+          "Show Hidden Tabs",
+          onClick = { open = true },
+          modifier = Modifier.padding(horizontal = 4.dp),
+          size = IslandsDark.tabHeight,
+          iconSize = 16.dp,
+        )
+        if (open) {
+          // HiddenInfosListPopupStep: tabs cut off on the left, a separator, then those on the
+          // right.
+          val firstOnRight = hidden.indexOfFirst { (placed[it.path]?.first ?: 0) >= scroll.value }
+          DropDownMenu(
+            hidden.flatMapIndexed { index, editor ->
+              listOfNotNull(
+                MenuSeparator.takeIf { index == firstOnRight && index > 0 },
+                MenuItem(editor.name, iconPath = fileIconPath(state, editor.path)) {
+                  session.selectEditor(editor.path)
+                },
+              )
+            },
+            beside = false,
+          ) {
+            open = false
           }
         }
       }
     }
   }
 }
+
+/**
+ * The editor's tab row for the page swiper: a sideways drag that starts on it scrolls the tabs
+ * until they reach that end, as [SidewaysScroll] does for the editor's text.
+ */
+class TabRowScroll {
+  internal var scroll: ScrollState? = null
+  internal var bounds = Rect.Zero
+
+  fun contains(point: Offset) = bounds.contains(point)
+
+  fun canScroll(dragX: Float): Boolean {
+    val current = scroll ?: return false
+    return if (dragX > 0) current.value > 0 else current.value < current.maxValue
+  }
+}
+
+/** The file's icon from the Project tree, or the plain text icon. */
+private fun fileIconPath(state: SessionState, path: String) =
+  state.tree.nodes.values.firstOrNull { it.path == path }?.iconPaths?.firstOrNull()
+    ?: "expui/fileTypes/text.svg"
 
 /** IntelliJ's tab close button: `closeSmall`, `closeSmallHovered` under the pointer. */
 @Composable
