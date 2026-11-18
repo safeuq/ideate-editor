@@ -24,7 +24,7 @@ or run. **[Open]** = not known yet; the step that settles it is named.
 | 2 | Cmd+Click | backend resolves and navigates | rd `HyperlinkHighlightingModel` + `RdCallActionRequest("GotoDeclaration")` | follow a backend selection change; the usages popup | medium |
 | 3 | Find in the editor | IDEate, on its own copy of the text | none for Find; rd `RdApplyPatchRequest` for Replace | none | medium |
 | 4 | Find in Files | backend searches, IDEate lists | Fleet RPC `FindInFilesApi` | serialize `FindModel`; file ids | medium |
-| 5 | Search Everywhere | backend searches, IDEate lists | Fleet RPC `SeRemoteApi` | **a Rhizome shared entity for the session** | large |
+| 5 | Search Everywhere | backend searches, IDEate lists | Fleet RPC `SeRemoteApi` | **the Rhizome database client (JetBrains' library)** | large |
 
 Suggested order: 1, 3, 2, 4, 5. 1 and 3 need nothing new from the backend. 5 has the one real unknown, so it
 starts with a spike.
@@ -409,16 +409,41 @@ The backend looks the entity up for every item (`SeItemEntity.createWith`: `sess
 ?: return null`), so a made-up id gives **no results**. [Seen code]
 
 IDEate has no Rhizome database: completion and Structure only needed ids that came over rd
-(`completion-protocol.md` section 5). To make a session IDEate has to send one shared transaction itself:
+(`completion-protocol.md` section 5).
 
-- Service `fleet.reserved.RemoteKernel` (IC `fleet/rhizomedb.transactor.rebase/srcCommonMain/fleet/kernel/
-  rebase/RemoteKernel.kt`): `transact(frontendTxs: ReceiveChannel<Transaction>)`, with
-  `Transaction(id: UID, instructions: List<SharedInstruction>, origin: UID, index: Long)`.
-- One transaction that creates a `SeSessionEntity` with a new `uid`; the `DurableRef` then names that `uid`.
-  On close, one that retracts it (the backend drops the session's items with it, `CASCADE_DELETE_BY`).
+**Decided 2026-11-18: bring up the real database client, with JetBrains' own library**, as IDEate does for rd.
+A hand-made "create session" transaction was the first idea and is dropped: it would write to a database it never
+reads, couldn't see a rejected transaction, and more features will need the database.
 
-The rd `GotoModel` in the model jar is not an alternative: no IDEA backend jar refers to it (it is Rider's).
-[Seen code: searched `lib/` and the remote-dev plugins]
+How JetBrains Client starts it [Seen code, decompiled `remdev-plugin.jar` and
+`intellij.platform.kernel.base.frontend.split.jar`]:
+
+```kotlin
+// FrontendRemoteApiProviderService: one Fleet RPC client over the rd model FleetRpcModel
+val client = fleetClient(ClientId(UID.random()), RdTransportFactory.client { protocol },
+                         abortOnError = …, requestInterceptor = ClientCausalityRequestInterceptor)
+fun <A> resolve(d: RemoteApiDescriptor<A>) = client.asServiceProxy().proxy(d, route, InstanceId(d.apiFqn))
+
+// FrontendKernelService: the database, kept in step with the backend's
+withKernel(middleware) {                                   // withTransactor { withRete { … } }
+  withRebaseLoop(async { resolve(remoteApiDescriptor<RemoteKernel>()) }, CommonInstructionSet,
+                 reconnectWhenBroken = true) {
+    handleEntityTypes(transactor(), this)                  // registers every plugin's entity types
+    …
+  }
+}
+```
+
+- `fleet.rpc.jar`, `fleet.rhizomedb.jar`, `fleet.rhizomedb.transactor.jar` and
+  `fleet.rhizomedb.transactor.rebase.jar` are in JetBrains Client's `lib` (about 6 MB), with their sources in IC
+  under `fleet/`. `RemoteKernel` (service id `fleet.reserved.RemoteKernel`) is
+  `subscribeWithChunkedSnapshot(author)` → the snapshot, a vector clock and a flow of transactions, plus
+  `transact(frontendTxs)` for the client's own.
+- `ClientCausalityRequestInterceptor` adds the client's vector clock to each call and waits until the local
+  database has caught up with the answer's.
+- The session entity type is `SeSessionEntity` (`DurableEntityType`, ident
+  `com.intellij.platform.searchEverywhere.SeSessionEntity`). IDEate declares a type with the same ident instead
+  of loading IntelliJ's platform jars.
 
 ### What IDEate has
 
@@ -448,11 +473,13 @@ The rd `GotoModel` in the model jar is not an alternative: no IDEA backend jar r
 
 ### Steps
 
-1. **Spike (go / no-go).** Record JetBrains Client's `RemoteKernel.transact` when it opens Search Everywhere,
-   then send the same from IDEate and call `getItems` for the Files tab. Done when `Main` returns
-   `Main.java` on the Mac backend. If the backend needs IDEate to subscribe to the database first
-   (`subscribeWithChunkedSnapshot`), the spike grows into a small read-only Rhizome client: only the vector
-   clock and acknowledgements, no entity store.
+1. **Spike on the desktop (go / no-go), in three parts:**
+   1. JetBrains' Fleet RPC client over IDEate's `FleetRpcModel`: resolve `RemoteKernel` and read the snapshot.
+   2. The database: `withTransactor`, `withRete`, `withRebaseLoop`; log how many entities arrive and stay in
+      step.
+   3. Create a `SeSessionEntity`, call `getItems` for the Files tab. Done when `Main` returns `Main.java` on
+      the Mac backend.
+   Then the same on Android (the jars need the ART patching the rd jars get).
 2. Popup with the Files tab end to end, including opening the result.
 3. Classes, Symbols, All (merging, groups, "more").
 4. Actions (running one is `itemSelected`; results that open dialogs come over Lux).
@@ -460,8 +487,11 @@ The rd `GotoModel` in the model jar is not an alternative: no IDEA backend jar r
 
 ### Unknown
 
-- **[Open]** The transaction's JSON (`SharedInstruction` for creating an entity, how `DurableRef` is
-  written) and whether the backend accepts a transaction from a client that never subscribed. Step 1.
+- **[Open]** Whether JetBrains' Fleet jars run outside IntelliJ: they are built against JetBrains' coroutines
+  fork and may reach for platform classes (logging, tracing). Step 1.
+- **[Open]** Whether two RPC clients (IDEate's hand-written `FleetRpc` and JetBrains') can share one
+  `FleetRpcModel`, or completion and Structure must move onto JetBrains' client first. Step 1.
+- **[Open]** Android: the jars' size and whether they run on ART.
 - **[Open]** `dataContextId`: JetBrains Client registers its data context and sends an id. Whether `null` or
   the editor's context from rd is enough for `getAvailableProviderIds`. Step 1.
 - **[Open]** If the spike fails: the fallback is the backend's own Search Everywhere popup over Lux, which
