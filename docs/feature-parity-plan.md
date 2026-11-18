@@ -72,8 +72,8 @@ starts with a spike.
 3. **Touch.** Three places, all greyed out when the stack is empty:
    - Android's own undo: Gboard and hardware keyboards send `android.R.id.undo` / `redo` through
      `InputConnection.performContextMenuAction`. `EditorTextTarget` gets `undo()` and `redo()`.
-   - An on-screen entry in IntelliJ's place for it, the main menu's Edit menu. Not the main toolbar's ⋮: that is
-     the run widget's More Actions.
+   - On screen: the keyboard bar, an extra bar below the tool window bar while the virtual keyboard is open
+     (decided 2026-11-18, built later). Not the main toolbar's ⋮: that is the run widget's More Actions.
    - Later, with the phone's key row over the keyboard (not part of this plan), two buttons there.
 4. **While the answer is pending** the editor shows nothing new (IDEate has no local undo history). That is the
    existing behaviour and stays. Local (speculative) undo is not planned.
@@ -83,7 +83,7 @@ starts with a spike.
 1. `onKey`: use the platform modifier. Test: hardware Ctrl+Z on the emulator undoes one typed word.
 2. `canUndo` / `canRedo` in `EditorFile`, from the stack sizes; unit test with recorded `RdStackSizeItem`s.
 3. `EditorTextTarget.undo/redo` and the Android input connection.
-4. An on-screen entry (open: where; not the run widget's ⋮).
+4. The keyboard bar's Undo and Redo buttons (later).
 5. Device test: type, paste, complete, then undo and redo each; undo across a reconnect.
 
 ### Done (2026-11-18)
@@ -103,8 +103,8 @@ Steps 1 to 4 are built.
 
 - **Touch:** Android's `android.R.id.undo` / `redo` input actions call the same. There is no on-screen Undo yet:
   bdd3abf put Undo and Redo under the main toolbar's ⋮, which is the run widget's More Actions (run
-  configurations), so they were taken out again (user, 2026-11-18). Where they go is open; IntelliJ has them in
-  the main menu's Edit menu.
+  configurations), so they were taken out again (user, 2026-11-18). Decided the same day: they go in a **keyboard bar**, an
+  extra bar below the tool window bar that shows while the virtual keyboard is open. Not built yet.
 - **Checked** on the emulator against the Mac backend: typed `hello`, Undo removed it, the enabled states
   followed (Undo greyed, Redo enabled), Redo brought it back and hardware Ctrl+Z removed it again (through the
   ⋮ menu that has since been removed).
@@ -249,7 +249,7 @@ Everything runs in IDEate, as in JetBrains Client.
 3. **Highlights**: matches painted with the scheme's `TEXT_SEARCH_RESULT_ATTRIBUTES`, the current one with
    `SEARCH_RESULT_ATTRIBUTES` plus IntelliJ's border, and marks in the scrollbar when IDEate has one.
 4. **Keys**: ⌘F / Ctrl+F, ⌘R / Ctrl+R, Enter, Shift+Enter, Esc, ⌘G / F3 and ⇧⌘G / Shift+F3. On touch the bar
-   opens from an on-screen entry still to be placed (not the run widget's ⋮) and the soft keyboard's action key is "next".
+   opens from the keyboard bar (section 1; later) and the soft keyboard's action key is "next".
 5. **Replace**: a new `EditSession.replace(range, text)`: a local document change in a command named as
    IntelliJ names it ("Replace"), sent as `RdApplyPatchRequest`, rebased like any pending edit. **Replace
    All** is one command with the changes from the last match to the first, so it is one undo step.
@@ -478,4 +478,4 @@ The rd `GotoModel` in the model jar is not an alternative: no IDEA backend jar r
 | `EditSession.replace(range, text)` as `RdApplyPatchRequest` | 3, 4 | one command, one undo step |
 | Text with matched ranges bold | 2 (usages), 4, 5 | completion already paints camel-hump matches |
 | A recording of JetBrains Client doing each feature | 2, 3, 4, 5 | one session, recorded as in `split-protocol.md`, "A recorded session" |
-| Touch entries: a magnifier in the main toolbar; a main menu for Undo, Redo, Find…, Replace…, Find in Files… (not the run widget's ⋮) | 1, 3, 4, 5 | IntelliJ's own places for them; the main menu is open |
+| Touch entries: a magnifier in the main toolbar; the keyboard bar (below the tool window bar while the virtual keyboard is open) for Undo, Redo, Find…, Replace… | 1, 3, 4, 5 | the keyboard bar is decided, built later; never the run widget's ⋮ |
