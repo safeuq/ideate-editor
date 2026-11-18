@@ -4,6 +4,7 @@ import com.intellij.platform.split.protocol.DefaultSplitMarshallersProvider
 import com.jetbrains.codeWithMe.model.RdFindFileParams
 import com.jetbrains.codeWithMe.model.RdProjectViewAsyncPane
 import com.jetbrains.codeWithMe.model.RdProjectViewItem
+import com.jetbrains.codeWithMe.model.RdProjectViewNavigation
 import com.jetbrains.codeWithMe.model.SyntaxHighlighterModel
 import com.jetbrains.codeWithMe.model.VfsModel
 import com.jetbrains.codeWithMe.model.editorTabsModel
@@ -250,6 +251,18 @@ class ClientSession(
     } else {
       openFile(path)
     }
+  }
+
+  /**
+   * A Project tree row's file. A file inside a jar or the JDK image (`…/21.0.6-tem!/java.base/…`)
+   * isn't found by path, so the backend opens that row itself, as JetBrains Client's double-click
+   * does; IDEate then follows its editor selection.
+   */
+  fun openNode(nodeId: Int, path: String) = onRd {
+    if ("!/" !in path) return@onRd open(path)
+    val current = pane ?: return@onRd log("No Project tree; cannot open $path")
+    log("Backend opens $path")
+    current.navigate.start(lifetime, RdProjectViewNavigation(listOf(nodeId), true, false))
   }
 
   fun selectEditor(path: String) = onRd { showEditor(path) }

@@ -507,7 +507,7 @@ private fun ToolWindowContent(
           node.path
             ?.takeIf { !node.isDirectory }
             ?.let { path ->
-              session.open(path)
+              session.openNode(node.id, path)
               onNavigated()
             }
         },

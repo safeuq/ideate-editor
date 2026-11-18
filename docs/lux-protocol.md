@@ -520,3 +520,28 @@ Checked on the emulator with a test build whose paste text was fixed to `pasted�
 clipboard was touched (the Mac's is shared with the emulator). Ctrl+V in Rename's name field: the backend
 got the one `LxInputMethodEvent` with all 15 characters. The field replaced the selected `Other` with
 `pastedText 123` (it drops the tab) and showed its own "not a valid identifier" check.
+
+## 12. A dialog's size follows every preferred size (2026-11-19)
+
+The decompiler's licence dialog ("JetBrains Decompiler - …String.class") showed 555 × 158 with its buttons
+cut off. The backend's log for that dialog:
+
+```
+DialogWrapper - The size of the dialog 'JetBrains Decompiler - …String.class' has changed after showing,
+set width = 555, height = 158, now width = 555, height = 389, resetting it back
+```
+
+IDEate wrote `size` back only for the first `preferredSize` and drew the dialog at `size`. JetBrains Client
+(`LuxFrontendPanelAdapter`, [Seen code]) handles every `preferredSize`: `panel.setPreferredSize`, then, for a
+window, `pack()`, `ScreenUtil.fitToScreen` and `setBounds`; the resized panel writes its size back
+(`updateSizeForModel`). It never takes its window size from `size`. IDEate now does the same: each
+`preferredSize` sets the drawn width and height and is written back as `size`; `size` from the backend no
+longer resizes the dialog.
+
+Not yet seen on the licence dialog itself: on the test backend the decompiler stopped asking. Its
+`IdeaDecompiler.LegalBurden` asks from `FileEditorManagerListener.Before.beforeFileOpened`; it keeps
+`showNotice = true` per process and saves `decompiler.legal.notice.accepted` only on Accept ("Decide later"
+saves nothing, "Decline and disable" disables the plugin). Since the backend restart at 18:40 on 2026-11-18,
+right after that dialog, the backend log has no `beforeFileOpened` line at all (it had one for every open
+before, e.g. `beforeFileOpened Main.java`), though "Opening remote editor" still appears for each file.
+Same JVM options and plugins before and after; cause open.

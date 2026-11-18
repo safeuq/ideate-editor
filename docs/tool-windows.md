@@ -71,3 +71,16 @@ The selector lists the panes by weight, with a pane's sub ids in its place, as I
 ## 4. Editors the backend opens itself
 
 Such an editor arrives like any other (`backendDeferredComposites`, then its document), but IDEate never asked for its path. `FileEditorCompositeModel.fileId` (an `RdFileIdNew`, e.g. backendId 938) gives it: `vfsModel.findFile` with `RdFindFileParams(id = fileId, path = null)` answers an `RdFileSnapshot` whose `properties.path` is the file's path. Until that answer the tab is named `document-938`. `vfsModel.startSyncing` with the id doesn't add the file to `vfsModel.files`.
+
+## 5. Library files from the Project tree (2026-11-19)
+
+A Project tree row under External Libraries carries the path of a file inside the JDK image or a jar,
+e.g. `/Users/…/.sdkman/candidates/java/21.0.6-tem!/java.base/java/util/ArrayList.class`. `vfsModel.findFile`
+with that path answers null (IDEate showed "Backend has no file …"): a path alone is looked up on disk.
+
+IDEate now asks the Project pane to open such a row, as JetBrains Client's double-click does:
+`RdProjectViewAsyncPane.navigate(RdProjectViewNavigation(ids = [nodeId], requestFocus = true,
+openInRightSplit = false))`. The backend opens the editor itself (`GuestFileEditorManager` logs "Opening
+remote editor for file=ArrayList.class … selectAsCurrent=true"), and IDEate follows it as in section 4.
+Files on disk (no `!/` in the path) still open through `findFile` and `requestComposite`. Checked on the Mac
+backend: `ArrayList.class` opened from External Libraries ▸ < 21 > ▸ java.base.

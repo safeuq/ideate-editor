@@ -126,12 +126,16 @@ internal class LuxDialogs(
         dialog.y = position.y.toInt()
       }
       component.preferredSize.advise(componentLifetime) { preferred ->
-        // Like LuxFrontendDialog: the window takes the size the backend laid out, and says so.
-        if (component.size.valueOrNull == null) component.size.set(preferred)
+        // Like LuxFrontendPanelAdapter: every preferred size packs the window again, also after it
+        // shows, and is written back as its size. The backend's own window size is not taken: for
+        // the decompiler's licence dialog its DialogWrapper kept 555 × 158 ("has changed after
+        // showing … resetting it back") while the content needed 555 × 389, which cut the buttons
+        // off.
+        dialog.width = preferred.width
+        dialog.height = preferred.height
+        if (component.size.valueOrNull != preferred) component.size.set(preferred)
       }
-      component.size.advise(componentLifetime) { size ->
-        dialog.width = size.width
-        dialog.height = size.height
+      component.size.advise(componentLifetime) {
         if (component.position.valueOrNull == null) component.position.set(LxPoint(0.0, 0.0))
         if (component.graphicsConfiguration.valueOrNull == null)
           component.graphicsConfiguration.set(CONFIGURATION)
