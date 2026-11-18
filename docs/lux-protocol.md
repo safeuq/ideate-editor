@@ -538,10 +538,20 @@ window, `pack()`, `ScreenUtil.fitToScreen` and `setBounds`; the resized panel wr
 `preferredSize` sets the drawn width and height and is written back as `size`; `size` from the backend no
 longer resizes the dialog.
 
-Not yet seen on the licence dialog itself: on the test backend the decompiler stopped asking. Its
-`IdeaDecompiler.LegalBurden` asks from `FileEditorManagerListener.Before.beforeFileOpened`; it keeps
-`showNotice = true` per process and saves `decompiler.legal.notice.accepted` only on Accept ("Decide later"
-saves nothing, "Decline and disable" disables the plugin). Since the backend restart at 18:40 on 2026-11-18,
-right after that dialog, the backend log has no `beforeFileOpened` line at all (it had one for every open
-before, e.g. `beforeFileOpened Main.java`), though "Opening remote editor" still appears for each file.
-Same JVM options and plugins before and after; cause open.
+Checked 2026-11-19 on the Mac backend: ⌘-click on `greeting.length()` opened the licence dialog in full,
+text and the three buttons (Decide later, Decline and disable, Accept). The backend logged the same
+"has changed after showing … 158 … 389" warning; IDEate first showed 555 × 158 and grew it to 389 on the next
+`preferredSize`. "Decide later" closed it and `String.class` opened; no setting was saved.
+
+How the decompiler asks ([Seen code], `IdeaDecompiler.LegalBurden`, a `FileEditorManagerListener.Before`):
+`beforeFileOpened` returns early when its `showNotice` is false (true at every backend start), when the file
+isn't a `.class`, when `decompiler.legal.notice.accepted` is set (saved only by Accept), or when the file's
+decompiler isn't `IdeaDecompiler`. Answers: Accept saves the setting, "Decline and disable" disables the
+plugin, "Decide later" saves nothing, so it asks again on the next `.class` open.
+
+The test backend's settings folder (`scratchpad/mac-backend`) stopped calling any `beforeFileOpened` after
+its restart at 18:40 on 2026-11-18, right after the first licence dialog: its log has the line for every
+open before (e.g. `beforeFileOpened Main.java`), none after, while "Opening remote editor" still appears.
+Same JVM options and plugins. A backend with empty config, system, log and plugins folders (only
+`options/jdk.table.xml` copied, so the project's JDK resolves) calls it again. Cause in the old folder not
+found; use a fresh folder when a test needs the decompiler's question.
