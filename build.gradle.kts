@@ -48,6 +48,32 @@ val protocolJars by
     ),
   )
 
+/**
+ * JetBrains' Fleet RPC client and Rhizome database (the kernel spike, docs/feature-parity-plan.md
+ * section 5), file names in [jetbrainsClientLib], used like [protocolJars].
+ */
+val fleetJars by
+  extra(
+    listOf(
+      "fleet.rpc.jar",
+      "fleet.rhizomedb.jar",
+      "fleet.rhizomedb.transactor.jar",
+      "fleet.rhizomedb.transactor.rebase.jar",
+      "fleet.util.core.jar",
+      "fleet.util.serialization.jar",
+      "fleet.util.logging.api.jar",
+      "fleet.util.codepoints.jar",
+      "fleet.multiplatform.shims.jar",
+      "fleet.reporting.api.jar",
+      "fleet.reporting.shared.jar",
+      "fleet.bifurcan.jar",
+      "fleet.fastutil.jar",
+      "fleet.openmap.jar",
+      "fleet.radixTrie.jar",
+      "intellij.libraries.kotlinx.collections.immutable.jar",
+    ),
+  )
+
 subprojects {
   apply(plugin = "com.diffplug.spotless")
 

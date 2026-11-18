@@ -1,4 +1,4 @@
-package intellijandroid.client.desktop
+package intellijandroid.client.kernel
 
 import fleet.util.logging.BaseLogger
 import fleet.util.logging.KLogger

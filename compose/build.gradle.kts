@@ -8,6 +8,7 @@ plugins {
 
 val jetbrainsClientLib: String by rootProject.extra
 val protocolJars: List<String> by rootProject.extra
+val fleetJars: List<String> by rootProject.extra
 
 val protocolJarFiles = protocolJars.map { name ->
   file("$jetbrainsClientLib/$name").also { jar ->
@@ -32,6 +33,7 @@ kotlin {
   sourceSets {
     commonMain.dependencies {
       compileOnly(files(protocolJarFiles))
+      compileOnly(files(fleetJars.map { "$jetbrainsClientLib/$it" }))
       // 1.84: the version SSHJ 0.41.2 is built against (it brings bcprov 1.84 itself).
       implementation("org.bouncycastle:bcpkix-jdk18on:1.84")
       // SSH connections (docs/ssh-connections.md): the library JetBrains Gateway uses.

@@ -1,4 +1,4 @@
-package intellijandroid.client.desktop
+package intellijandroid.client.kernel
 
 import com.jetbrains.rd.ide.model.FleetRpcModel
 import com.jetbrains.rd.ide.model.FleetTransportMessage

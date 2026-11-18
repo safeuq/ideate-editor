@@ -481,7 +481,7 @@ withKernel(middleware) {                                   // withTransactor { w
       the Mac backend.
    Then the same on Android (the jars need the ART patching the rd jars get).
 
-   **Spike results, 2026-11-18, desktop against the Mac backend** (`desktop/…/KernelSpike.kt`, run with
+   **Spike results, 2026-11-18, desktop against the Mac backend** (`compose/…/kernel/KernelSpike.kt`, run with
    `CLIENT_KERNEL_SPIKE=1`; `ClientSession.fleetModelListener` hands it the rd `FleetRpcModel`):
 
    | Part | Result |
@@ -531,7 +531,17 @@ withKernel(middleware) {                                   // withTransactor { w
   fork and may reach for platform classes (logging, tracing). Step 1.
 - **[Answered 2026-11-18: they can]** Whether two RPC clients (IDEate's hand-written `FleetRpc` and JetBrains') can share one
   `FleetRpcModel`, or completion and Structure must move onto JetBrains' client first. Step 1.
-- **[Open]** Android: the jars' size and whether they run on ART.
+- **[Answered 2026-11-18]** Android: they run on ART. The same spike on the Pixel 3a emulator (API 34) against the Mac
+  backend returned `Main.java` for "Main", and the editor kept working beside it. Turned on with
+  `adb shell am start -n intellijandroid.client.android/.MainActivity --ez kernelSpike true`. What it took:
+  - The Fleet jars go through `prepareProtocolJars` like the rd jars (class version lowered to 61 for D8).
+    None of them needed the `sun.misc.Unsafe` shim.
+  - `kotlinx-coroutines-android` 1.11.0, as on the desktop.
+  - The APK leaves out each jar's `entityTypes.txt` ("used for validation only"), `__index__` and
+    `META-INF/MANIFEST.mf`: they share names across jars and only JetBrains' build tools read them.
+  - The APK grew from 49.0 MB to 52.5 MB.
+  - The spike code moved to `compose` (`intellijandroid.client.kernel`); both apps register `FleetLoggerFactory`
+    in `META-INF/services`. One jar list, `fleetJars` in the root build script.
 - **[Answered 2026-11-18]** `dataContextId`: `null` gets no results; a data context naming only the project is
   enough for the Files tab (spike part 3b). The editor's context (`EditSession.actionTimestamps()`) is the next
   thing to send, for tabs that look at the current file.

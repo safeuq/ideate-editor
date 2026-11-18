@@ -22,6 +22,7 @@ plugins {
 // and its JBR (fonts).
 val jetbrainsClientLib: String by rootProject.extra
 val protocolJars: List<String> by rootProject.extra
+val fleetJars: List<String> by rootProject.extra
 
 fun clientFile(path: String): File =
   file("$jetbrainsClientLib/$path").also {
@@ -183,7 +184,7 @@ abstract class PrepareProtocolJars : DefaultTask() {
 
 val prepareProtocolJars by
   tasks.registering(PrepareProtocolJars::class) {
-    jars.from(protocolJars.map(::clientFile))
+    jars.from((protocolJars + fleetJars).map(::clientFile))
     shimClasses.from(compileArtShim)
     outputDirectory = layout.buildDirectory.dir("protocol-jars")
   }
@@ -275,7 +276,16 @@ android {
 
   packaging {
     resources.excludes +=
-      listOf("META-INF/versions/**", "META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
+      listOf(
+        "META-INF/versions/**",
+        "META-INF/*.SF",
+        "META-INF/*.RSA",
+        "META-INF/*.DSA",
+        // Each Fleet jar has these; JetBrains' build tools read them, the code doesn't.
+        "META-INF/MANIFEST.mf",
+        "entityTypes.txt",
+        "__index__",
+      )
   }
 }
 
@@ -290,11 +300,15 @@ dependencies {
   implementation(project(":compose"))
   implementation(
     files(
-      protocolJars.map { name -> prepareProtocolJars.flatMap { it.outputDirectory.file(name) } },
+      (protocolJars + fleetJars).map { name ->
+        prepareProtocolJars.flatMap { it.outputDirectory.file(name) }
+      },
     ),
   )
   implementation(platform("androidx.compose:compose-bom:2026.09.00"))
   implementation("androidx.compose.foundation:foundation")
   implementation("androidx.activity:activity-compose:1.13.0")
   implementation("com.caverock:androidsvg-aar:1.4")
+  // JetBrains' Fleet jars are built against coroutines 1.11 (see desktop/build.gradle.kts).
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 }
