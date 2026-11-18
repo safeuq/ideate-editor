@@ -187,6 +187,13 @@ object IslandsDark {
   val gutterEmptyAnnotationArea
     get() = byDensity(4.dp, 0.dp)
 
+  /**
+   * Editor.Gutter.gapAfterVcsMarkersWidth, gapAfterLineNumbersWidth and gapAfterIconsWidth: 4 each
+   * (code default), compact 2 (darcula.theme.json).
+   */
+  val gutterGap
+    get() = byDensity(4.dp, 2.dp)
+
   const val UI_FONT_SIZE = 13f // Inter 13 (user setting)
   const val EDITOR_FONT_SIZE = 12f // JetBrains Mono 12 (user setting)
   const val LINE_NUMBER_FONT_SIZE = 11f // editor size - 1

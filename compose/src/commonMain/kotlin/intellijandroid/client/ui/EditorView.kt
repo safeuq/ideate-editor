@@ -217,11 +217,16 @@ fun EditorView(
                 .toFloat(),
             ),
           )
-        // Gutter as measured on the real client (Islands Dark, no VCS markers): numbers, 4, icons
-        // 17, 4,
-        // folding 11, 6. With two-digit line numbers that is 56 px, text starting right after.
+        // IntelliJ's new UI gutter (EditorGutterLayout.createNewUILayout): the empty annotation
+        // area and the gap after the VCS markers, the line numbers right-aligned, a gap, the icons
+        // (17), a gap, folding 11, 6. Normal density, two-digit numbers: 4 + 4 + 14 + 4 + 17 + 4 +
+        // 11 + 6 = 64, text right after.
+        val numbersLeft =
+          IslandsDark.gutterEmptyAnnotationArea.toPx() + IslandsDark.gutterGap.toPx()
+        val lineNumbersRight = numbersLeft + lineNumberWidth
+        val iconAreaLeft = lineNumbersRight + IslandsDark.gutterGap.toPx()
         val gutterWidth =
-          lineNumberWidth + 4.dp.toPx() + 17.dp.toPx() + 4.dp.toPx() + 11.dp.toPx() + 6.dp.toPx()
+          iconAreaLeft + 17.dp.toPx() + IslandsDark.gutterGap.toPx() + 11.dp.toPx() + 6.dp.toPx()
         EditorMetrics(
           lineHeight = lineHeight,
           baseline = sample.firstBaseline + extra,
@@ -229,9 +234,9 @@ fun EditorView(
           caretHeight = fontHeight,
           charWidth = sample.size.width / 100f,
           gutterWidth = gutterWidth,
-          lineNumbersRight = lineNumberWidth,
-          // Icons area (17 px) after the line numbers and their 4 px gap.
-          iconAreaLeft = lineNumberWidth + 4.dp.toPx(),
+          lineNumbersRight = lineNumbersRight,
+          // Icons area (17 px) after the line numbers and their gap.
+          iconAreaLeft = iconAreaLeft,
         )
       }
     }

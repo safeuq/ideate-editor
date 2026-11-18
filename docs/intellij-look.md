@@ -183,6 +183,13 @@ Total (git project, markers shown) = 4+4+L+4+10+17+4+0+11+9 = **63 + L**: 77 wit
 Line numbers are **right-aligned**: right edge x = 4 + 4 + L (left of "gap after line numbers"), font 11 px JBM plain, baseline = line top + the editor's ascent' (not the 11 px font's), color per 2.1. Text area starts at gutter width (separate component, no extra padding; the 3 px strip before the separator is inside the gutter). Fold chevron icon `expui/gutter/fold(_dark).svg` is only drawn on hover (alpha context) in New UI.
 Line numbers area on a non-real editor without numbers: 14 wide.
 
+IDEate (`EditorView`, 2026-11-19): items 1, 2, 4 and 7 follow the density (`IslandsDark.gutterEmptyAnnotationArea`,
+`gutterGap`); before that the numbers started at the island's edge (items 1 and 2 left out) and items 4 and 7 were
+always 4. Items 5 (no git markers yet), 8 and 10 are not drawn; the folding area is 11 + 6. Normal density, two-digit
+numbers: numbers from 8, text at 64; compact: numbers from 2, text at 54. The desktop takes the density from the
+newest `IntelliJIdea*/options/ui.lnf.xml`; JetBrains Client keeps its own settings and runs at normal density when
+it has none, so it can show the normal gaps while the desktop IntelliJ (and IDEate) is compact.
+
 ## 3. Project tool window (Islands Dark colors resolved)
 
 ### 3.1 Colors (Seen, aliases resolved from `colors` in ManyIslandsDark.theme.json)
