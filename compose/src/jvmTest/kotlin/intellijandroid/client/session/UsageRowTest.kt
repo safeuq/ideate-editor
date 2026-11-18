@@ -23,7 +23,13 @@ class UsageRowTest {
       null,
       listOf(
         RdUsageGroup("com.intellij.usages.impl.rules.MethodGroupingRule", "call()", null, 0, false),
-        RdUsageGroup("com.intellij.usages.impl.rules.FileGroupingRule", "Caller.java", null, 0, false),
+        RdUsageGroup(
+          "com.intellij.usages.impl.rules.FileGroupingRule",
+          "Caller.java",
+          null,
+          0,
+          false,
+        ),
       ),
       null,
       false,
@@ -31,7 +37,10 @@ class UsageRowTest {
 
   @Test
   fun aRowHasTheTrimmedLineWithTheUsageMarked() {
-    assertEquals(UsageRow(1, "Caller.java", 5, "return twice(new Other().next());", 7, 12), usageRow(usage(11)))
+    assertEquals(
+      UsageRow(1, "Caller.java", 5, "return twice(new Other().next());", 7, 12),
+      usageRow(usage(11)),
+    )
   }
 
   @Test
@@ -43,7 +52,9 @@ class UsageRowTest {
   fun theTitleLosesItsHtml() {
     assertEquals(
       "Method twice(int) of demo.Caller",
-      plainText("<b>Method</b>&nbsp;<b>twice(int)</b>&nbsp;<font color=\"#73767c\">of demo.Caller</font>"),
+      plainText(
+        "<b>Method</b>&nbsp;<b>twice(int)</b>&nbsp;<font color=\"#73767c\">of demo.Caller</font>",
+      ),
     )
   }
 }

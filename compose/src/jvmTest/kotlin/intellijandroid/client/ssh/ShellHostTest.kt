@@ -133,9 +133,12 @@ class ShellHostTest {
       val logs = host.launch(ide.path, project)
       // Until the exit line is in: the in-use message comes a moment before it.
       repeat(100) {
-        host.launchFailure(logs)?.takeIf { it.exitCode != null }?.let {
-          return it
-        } ?: Thread.sleep(100)
+        host
+          .launchFailure(logs)
+          ?.takeIf { it.exitCode != null }
+          ?.let {
+            return it
+          } ?: Thread.sleep(100)
       }
       return null
     }

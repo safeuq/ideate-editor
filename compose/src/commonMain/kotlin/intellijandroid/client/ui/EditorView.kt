@@ -152,7 +152,9 @@ class EditorActions(
   val openMenu: () -> Unit = {},
   /** Run a backend action at the caret by id, as its shortcut does, e.g. `GotoDeclaration`. */
   val runAction: (String) -> Unit = {},
-  /** The range a ⌘-click (Ctrl-click) at this offset would go to, for the underline; null for none. */
+  /**
+   * The range a ⌘-click (Ctrl-click) at this offset would go to, for the underline; null for none.
+   */
   val linkAt: (Int, (IntRange?) -> Unit) -> Unit = { _, found -> found(null) },
   /** Keys for the usages popup while it is open. */
   val usagesKey: (LookupKey) -> Unit = {},
@@ -239,7 +241,11 @@ fun EditorView(
     remember(scheme) {
       scheme.style(listOf(listOf("CTRL_CLICKABLE"))).let {
         if (it.effect != null) it
-        else it.copy(effect = TextEffect.LINE_UNDERSCORE, effectColor = it.foreground ?: scheme.foreground)
+        else
+          it.copy(
+            effect = TextEffect.LINE_UNDERSCORE,
+            effectColor = it.foreground ?: scheme.foreground,
+          )
       }
     }
   val shownHighlights =
@@ -525,7 +531,9 @@ fun EditorView(
         Key.Enter -> actions.usagesKey(LookupKey.ACCEPT)
         Key.Escape -> actions.usagesKey(LookupKey.CANCEL)
         else -> null
-      }?.let { return true }
+      }?.let {
+        return true
+      }
     }
     if (lookup != null) {
       when (key) {
@@ -777,14 +785,18 @@ fun EditorView(
           .focusable()
           .onPreviewKeyEvent { event ->
             // Letting go of ⌘ (Ctrl) drops the underline, as in IntelliJ.
-            if (event.type == KeyEventType.KeyUp && !(if (IS_MAC) event.isMetaPressed else event.isCtrlPressed)) {
+            if (
+              event.type == KeyEventType.KeyUp &&
+                !(if (IS_MAC) event.isMetaPressed else event.isCtrlPressed)
+            ) {
               link = null
             }
             event.type == KeyEventType.KeyDown && onKey(event)
           }
           .pointerHoverIcon(if (link != null) PointerIcon.Hand else PointerIcon.Default)
           .pointerInput(file.path, metrics) {
-            // ⌘ (Ctrl) held over a symbol: ask the backend for its range and underline it. Starts on
+            // ⌘ (Ctrl) held over a symbol: ask the backend for its range and underline it. Starts
+            // on
             // the next pointer move after the key goes down.
             awaitPointerEventScope {
               var asked = -1
@@ -793,7 +805,9 @@ fun EditorView(
                 val change = event.changes.first()
                 val modifiers = event.keyboardModifiers
                 val held = if (IS_MAC) modifiers.isMetaPressed else modifiers.isCtrlPressed
-                if (!held || change.type != PointerType.Mouse || event.type == PointerEventType.Exit) {
+                if (
+                  !held || change.type != PointerType.Mouse || event.type == PointerEventType.Exit
+                ) {
                   asked = -1
                   link = null
                   continue
