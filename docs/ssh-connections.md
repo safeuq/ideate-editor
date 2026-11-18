@@ -365,11 +365,50 @@ Dialogs, drawn like IntelliJ's (the folder chooser's frame: 475 dp wide, 32 dp t
 
 Opening a project (`SshController.openProject`):
 1. `status`.
-2. If it isn't ready, `launch`, then `status` every second, for up to 3 minutes.
+2. If it isn't ready, `launch`, then `status` every second, for up to 3 minutes. Each time the backend isn't ready
+   yet, `launchFailure` reads the launch's logs and stops the wait if the launch has ended (below).
 3. Take the join link.
 4. Forward its port (`SshSession.forward`).
 5. Rewrite the link to `tcp://127.0.0.1:<local port>#<same fragment>`.
 6. Connect with `ConnectionKind.SSH`.
+
+### A launch that ends early (2026-11-18)
+
+Opening `xtool` over SSH to this Mac (`localhost`) sat at "Waiting for the IDE Backend to start" until the
+3-minute limit. IntelliJ IDEA was open on the Mac. `remote-dev-server.sh` with the default paths uses the desktop
+IDE's own settings folder (`IntelliJIdea2026.3`), and IntelliJ allows one process per settings folder, so the
+launcher hands its command to the open IDE. The open IDE's `idea.log`:
+
+```
+11:27:38  External command line: remoteDevStatus /Users/safeuq/Files/Projects/XFlow/xtool
+          UnattendedHostStatusStarter - {"backendUnresponsive":false,"modalDialogIsOpened":false}
+11:27:39  External command line: remoteDevHost /Users/safeuq/Files/Projects/XFlow/xtool
+          Processing command with ...UnattendedHostUnavailableStarter
+```
+
+| Command | Expected | What happened |
+|---|---|---|
+| `run xtool` | a backend process that runs until it's stopped | the launch log says `The command 'remoteDevHost' requires Remote Development backend`; the launcher exits 1 after about 2 s |
+| `status xtool` | `STATUS:` with a `joinLink` once ready | the open IDE answers `{"backendUnresponsive":false,"modalDialogIsOpened":false}`, no link, every time |
+
+So `ShellHost.launch` now records how the launch ends. It writes `@@IDEATE_LAUNCH@@` to `stdout.log` and
+`stderr.log` (they're appended to across launches), runs the launcher under `sh -c '… run "$0"; echo
+"@@IDEATE_EXIT@@ $?"'`, and returns the log folder. The launcher runs as long as the backend does (on Termux too:
+`intellij-backend internal-run` waits for it), so an exit line means the backend is gone.
+`RemoteHost.launchFailure(logs)` reads the last 200 lines of both logs after the newest start line:
+
+| Log after the start line | Result | Message |
+|---|---|---|
+| nothing yet, or the backend's banner | null: keep waiting | |
+| `… requires Remote Development backend` | `settingsInUse` | "IntelliJ IDEA is already open there with the same settings, so it can't start a backend. Quit it, then open the project again." |
+| `@@IDEATE_EXIT@@ 1` and other output | the exit code and the last 5 lines | "The IDE Backend stopped before it was ready (exit code 1): <lines>" |
+
+`WorkerHost` (Gateway's worker starts the backend) writes the start lines too, but the worker writes no exit line,
+so there only the settings message is recognised.
+
+The launch command groups the background job, `… && { nohup sh -c … & }`: with a plain trailing `&` the shell
+puts the whole `&&` list in the background, and that subshell keeps the command's output open until the backend
+exits (found by `ShellHostTest`: `launch` took the fake backend's full 3 s).
 
 SSH connections are not saved in history: the SSH page lists the host's projects itself, and a forwarded port
 is gone after a restart.

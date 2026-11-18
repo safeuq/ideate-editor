@@ -146,6 +146,41 @@ internal object HostData {
   fun logsDir(remoteDevDir: String, productCode: String, projectPath: String) =
     "$remoteDevDir-$productCode/${projectPath.replace('/', '_')}/log"
 
+  /** Written to `stdout.log` and `stderr.log` before each launch: the logs are appended to. */
+  const val LAUNCH_START = "@@IDEATE_LAUNCH@@"
+  /** `@@IDEATE_EXIT@@ <code>` in `stdout.log` once `remote-dev-server.sh run` has returned. */
+  const val LAUNCH_EXIT = "@@IDEATE_EXIT@@"
+  /** Between `stdout.log` and `stderr.log` in [launchFailure]'s input. */
+  const val STDERR_START = "@@IDEATE_STDERR@@"
+  /**
+   * What IntelliJ's launcher prints when an IDE with the same settings folder is already open: it
+   * hands `run` to that IDE, which isn't a backend, and exits.
+   */
+  private const val SETTINGS_IN_USE = "requires Remote Development backend"
+
+  /**
+   * [logs]: the end of `stdout.log`, [STDERR_START], the end of `stderr.log`. Only lines after the
+   * last [LAUNCH_START] count; if the start line is beyond the end that was read, every line is
+   * from this launch. Null while the launch command still runs and printed nothing that shows an
+   * end.
+   */
+  fun launchFailure(logs: String): LaunchFailure? {
+    fun sinceLaunch(text: String) =
+      text.lines().let { lines -> lines.drop(lines.lastIndexOf(LAUNCH_START) + 1) }
+    val stdout = sinceLaunch(logs.substringBefore(STDERR_START))
+    val stderr = sinceLaunch(logs.substringAfter(STDERR_START, ""))
+    val exitCode =
+      stdout.lastOrNull { it.startsWith(LAUNCH_EXIT) }?.substringAfter(' ')?.trim()?.toIntOrNull()
+    val settingsInUse = (stdout + stderr).any { SETTINGS_IN_USE in it }
+    if (exitCode == null && !settingsInUse) return null
+    val output =
+      (stdout + stderr)
+        .filter { it.isNotBlank() && !it.startsWith(LAUNCH_EXIT) }
+        .takeLast(5)
+        .joinToString("\n")
+    return LaunchFailure(exitCode, settingsInUse, output)
+  }
+
   private fun JsonObject.string(key: String) = (this[key] as? JsonPrimitive)?.contentOrNull
 
   private fun JsonObject.boolean(key: String) =

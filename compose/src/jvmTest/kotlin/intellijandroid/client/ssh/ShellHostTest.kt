@@ -47,7 +47,13 @@ class ShellHostTest {
         #!/bin/sh
         case "${'$'}1" in
           status) echo "starting…"; echo "STATUS:"; printf '{"appPid": 42, "unattendedMode": true, "backendUnresponsive": false, "idePath": "%s", "joinLink": "tcp://127.0.0.1:5990#jt=x", "projects": []}\n' "${'$'}(cd "${'$'}(dirname "${'$'}0")/.." && pwd -P)" ;;
-          run) echo "run ${'$'}2" > "${'$'}HOME/launched" ;;
+          run)
+            case "${'$'}2" in
+              */in-use) echo "The command 'remoteDevHost' requires Remote Development backend"; exit 1 ;;
+              */crash) echo "Starting…"; echo "Unrecognized VM option" >&2; exit 1 ;;
+              */slow) sleep 3 ;;
+              *) echo "run ${'$'}2" > "${'$'}HOME/launched" ;;
+            esac ;;
         esac
         """
           .trimIndent(),
@@ -114,6 +120,57 @@ class ShellHostTest {
     repeat(50) { if (!launched.isFile) Thread.sleep(100) }
     assertEquals("run /work/smoke\n", launched.readText())
     assertTrue(File(HostData.logsDir(host.remoteDevDir(), "IU", "/work/smoke")).isDirectory)
+  }
+
+  @Test
+  fun aLaunchThatEndsEarlyIsReported() {
+    val ide = installIde()
+    val link =
+      File(host.remoteDevDir()).resolve("userProvidedDist/_intellij").apply { parentFile.mkdirs() }
+    Files.createSymbolicLink(link.toPath(), ide.toPath())
+
+    fun failureOf(project: String): LaunchFailure? {
+      val logs = host.launch(ide.path, project)
+      repeat(50) {
+        host.launchFailure(logs)?.let {
+          return it
+        } ?: Thread.sleep(100)
+      }
+      return null
+    }
+    // The desktop IDE is open with the same settings: it takes `run`, and the launcher exits 1
+    // (IntelliJ 2026.3 on macOS, 2026-11-18).
+    val inUse = failureOf("/work/in-use")
+    assertEquals(true, inUse?.settingsInUse)
+    assertEquals(1, inUse?.exitCode)
+    val crash = failureOf("/work/crash")
+    assertEquals(LaunchFailure(1, false, "Starting…\nUnrecognized VM option"), crash)
+    // Launching again appends to the same logs: only the newest launch counts.
+    assertEquals(crash, failureOf("/work/crash"))
+
+    // Still running: no failure, and launch returned without waiting for the backend.
+    val started = System.nanoTime()
+    val slow = host.launch(ide.path, "/work/slow")
+    assertTrue(System.nanoTime() - started < 2_000_000_000L, "launch waited for the backend")
+    Thread.sleep(300)
+    assertEquals(null, host.launchFailure(slow))
+  }
+
+  @Test
+  fun launchFailureReadsOnlyTheNewestLaunch() {
+    val start = HostData.LAUNCH_START
+    val exit = HostData.LAUNCH_EXIT
+    val split = HostData.STDERR_START
+    // An earlier launch's end before the newest start line: still starting.
+    assertEquals(
+      null,
+      HostData.launchFailure("$start\nold\n$exit 1\n$start\nbanner\n$split\n$start\n"),
+    )
+    // The start line was beyond the read end of a long log: every line is this launch's.
+    assertEquals(
+      LaunchFailure(143, false, "line 199"),
+      HostData.launchFailure("line 199\n$exit 143\n$split\n"),
+    )
   }
 
   @Test

@@ -59,13 +59,14 @@ class WorkerHost(
     return HostData.workerReply(result.stdout).data.singleOrNull()?.let(HostData::status)
   }
 
-  override fun launch(idePath: String, projectPath: String) {
+  override fun launch(idePath: String, projectPath: String): String {
     val productCode =
       installedIdes().firstOrNull { it.idePath == idePath }?.productCode
         ?: throw RemoteHostException("No IDE installed at $idePath")
     val logs =
       call("get-logs-dir", "product-code" to productCode, "project-path" to projectPath, raw = true)
         .single
+    ShellHost.checked(run(shell.markLaunch(logs)), "Mark the launch in $logs")
     call(
       "host-launch",
       "ide-path" to idePath,
@@ -73,7 +74,11 @@ class WorkerHost(
       "stdout-file" to "$logs/stdout.log",
       "stderr-file" to "$logs/stderr.log",
     )
+    return logs
   }
+
+  /** The worker writes no exit line, so only the log's words show an end here. */
+  override fun launchFailure(logsDir: String) = shell.launchFailure(logsDir)
 
   override fun listFolders(path: String) = shell.listFolders(path)
 

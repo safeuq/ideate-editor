@@ -8,11 +8,13 @@ import intellijandroid.client.ssh.HostKeyCheck
 import intellijandroid.client.ssh.IdeateKey
 import intellijandroid.client.ssh.InstalledIde
 import intellijandroid.client.ssh.KnownHosts
+import intellijandroid.client.ssh.LaunchFailure
 import intellijandroid.client.ssh.LoginMethod
 import intellijandroid.client.ssh.OpenSshFiles
 import intellijandroid.client.ssh.RecentProject
 import intellijandroid.client.ssh.RemoteFolder
 import intellijandroid.client.ssh.RemoteHost
+import intellijandroid.client.ssh.RemoteHostException
 import intellijandroid.client.ssh.SecretNames
 import intellijandroid.client.ssh.SecretStore
 import intellijandroid.client.ssh.SshHostEntry
@@ -568,6 +570,12 @@ class SshController(
   private fun openProject(entry: SshHostEntry, idePath: String, projectPath: String) {
     val run = ++openRun
     val name = projectPath.trimEnd('/').substringAfterLast('/')
+    val ideName =
+      state.hosts
+        .firstOrNull { it.entry.id == entry.id }
+        ?.ides
+        ?.firstOrNull { it.idePath == idePath }
+        ?.name ?: "The IDE"
     state =
       state.copy(
         progress = SshProgress("Connecting to the IDE Backend", "$name on ${entry.name}"),
@@ -585,7 +593,7 @@ class SshController(
         val wasRunning = status?.isReady == true
         if (status?.isReady != true) {
           progress("Starting the remote IDE Backend")
-          remote.launch(idePath, projectPath)
+          val logs = remote.launch(idePath, projectPath)
           progress("Waiting for the IDE Backend to start")
           val deadline = System.currentTimeMillis() + START_TIMEOUT_MILLIS
           while (status?.isReady != true) {
@@ -595,6 +603,10 @@ class SshController(
             }
             Thread.sleep(1_000)
             status = remote.status(idePath, projectPath)
+            if (status?.isReady != true)
+              remote.launchFailure(logs)?.let { failure ->
+                throw RemoteHostException(launchFailureMessage(failure, ideName))
+              }
           }
         }
         val link =
@@ -628,6 +640,19 @@ class SshController(
       }
     }
   }
+
+  /**
+   * The launch ended without a backend. An IDE already open with the same settings takes `run` and
+   * answers `status` itself, without a link, so without this check the wait runs to its timeout.
+   */
+  private fun launchFailureMessage(failure: LaunchFailure, ideName: String) =
+    if (failure.settingsInUse)
+      "$ideName is already open there with the same settings, so it can't start a backend. " +
+        "Quit it, then open the project again."
+    else
+      "The IDE Backend stopped before it was ready" +
+        (failure.exitCode?.let { " (exit code $it)" } ?: "") +
+        (failure.output.takeIf { it.isNotEmpty() }?.let { ":\n$it" } ?: ".")
 
   private companion object {
     const val QUESTION_TIMEOUT_SECONDS = 120L

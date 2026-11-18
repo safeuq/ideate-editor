@@ -68,21 +68,43 @@ class ShellHost(
     return HostData.status(json)
   }
 
-  override fun launch(idePath: String, projectPath: String) {
+  override fun launch(idePath: String, projectPath: String): String {
     val productCode =
       installedIdes().firstOrNull { it.idePath == idePath }?.productCode
         ?: throw RemoteHostException("No IDE installed at $idePath")
     val logs = HostData.logsDir(remoteDevDir(), productCode, projectPath)
-    // Gateway's shell form; nohup and all three streams redirected, so the SSH channel can close.
+    // Gateway's shell form, with nohup and all three streams redirected so the SSH channel can
+    // close. The inner sh waits for the launcher, which runs as long as the backend does, then
+    // writes its exit code for launchFailure.
+    val runAndRecord =
+      "${shellQuote("$idePath/bin/remote-dev-server.sh")} run \"\$0\"; " +
+        "echo \"${HostData.LAUNCH_EXIT} \$?\""
     checked(
       run(
-        "mkdir -p ${shellQuote(logs)} && nohup ${shellQuote("$idePath/bin/remote-dev-server.sh")} " +
-          "run ${shellQuote(projectPath)} >> ${shellQuote("$logs/stdout.log")} " +
-          "2>> ${shellQuote("$logs/stderr.log")} < /dev/null &",
+        // Braces: a trailing & would put the whole && list in the background, and that subshell
+        // keeps the channel's output open until the backend exits.
+        "${markLaunch(logs)} && { nohup sh -c ${shellQuote(runAndRecord)} ${shellQuote(projectPath)} " +
+          ">> ${shellQuote("$logs/stdout.log")} 2>> ${shellQuote("$logs/stderr.log")} < /dev/null & }",
       ),
       "remote-dev-server.sh run",
     )
+    return logs
   }
+
+  /** The shell commands that create [logs] and write [HostData.LAUNCH_START] to both logs. */
+  internal fun markLaunch(logs: String) =
+    "mkdir -p ${shellQuote(logs)} && " +
+      "echo ${HostData.LAUNCH_START} >> ${shellQuote("$logs/stdout.log")} && " +
+      "echo ${HostData.LAUNCH_START} >> ${shellQuote("$logs/stderr.log")}"
+
+  override fun launchFailure(logsDir: String): LaunchFailure? =
+    HostData.launchFailure(
+      run(
+          "tail -n 200 ${shellQuote("$logsDir/stdout.log")} 2>/dev/null; " +
+            "echo ${HostData.STDERR_START}; tail -n 200 ${shellQuote("$logsDir/stderr.log")} 2>/dev/null",
+        )
+        .stdout,
+    )
 
   override fun listFolders(path: String): List<RemoteFolder> =
     Termux.parseFolders(checked(runScript(Termux.LIST_FOLDERS, path), "List $path").stdout).map {

@@ -45,9 +45,16 @@ interface RemoteHost {
 
   /**
    * The worker's `host-launch`: starts a backend for [projectPath], detached; poll [status] for its
-   * link.
+   * link and [launchFailure] for an early end. Returns the launch's log folder, e.g.
+   * `/Users/dev/Library/Caches/JetBrains/RemoteDev-IU/_Users_dev_xtool/log`.
    */
-  fun launch(idePath: String, projectPath: String)
+  fun launch(idePath: String, projectPath: String): String
+
+  /**
+   * How the backend that [launch] started ended, read from its log folder [logsDir]; null while it
+   * may still be starting.
+   */
+  fun launchFailure(logsDir: String): LaunchFailure?
 
   /** Sub-folders of [path] for the folder browser, like `Termux.listFolders`. */
   fun listFolders(path: String): List<RemoteFolder>
@@ -149,4 +156,20 @@ data class RemoteFolder(
   val isProject: Boolean,
   val hasFolders: Boolean,
   val hasHiddenFolders: Boolean,
+)
+
+/** A backend launch that ended before the backend gave a join link. */
+data class LaunchFailure(
+  /**
+   * The launch command's exit code. Null when only the log's words show the end: the worker's
+   * launch writes no exit line.
+   */
+  val exitCode: Int?,
+  /**
+   * The same IDE is already open on the host with the same settings folder, and it took the `run`
+   * command: `The command 'remoteDevHost' requires Remote Development backend`.
+   */
+  val settingsInUse: Boolean,
+  /** The launch's last output lines, stdout then stderr. */
+  val output: String,
 )

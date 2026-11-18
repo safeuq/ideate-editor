@@ -103,11 +103,12 @@ with `javax.xml` (desktop Java and Android both have it).
 
 ## Steps
 
-- [ ] **0. Check shared settings.** A backend started this way uses the desktop IDE's own settings folder
-  (`IntelliJIdea2026.3`). Test on this Mac, with IntelliJ open and closed: `remote-dev-server.sh run <project>` with
-  default paths, then `status` and `stop`. Write down whether it starts, refuses, or hands the project to the open
-  IDE, and what `status` prints in each case. The result decides whether step 4 needs its own message (as Termux's
-  `EXIT_SETTINGS_IN_USE` has).
+- [x] **0. Check shared settings.** A backend started this way uses the desktop IDE's own settings folder
+  (`IntelliJIdea2026.3`). With IntelliJ open, the launcher hands `run` and `status` to the open IDE: `run` prints
+  `The command 'remoteDevHost' requires Remote Development backend` and exits 1, and `status` never has a link.
+  Found over SSH to this Mac (2026-11-18); the SSH page now says so within about 2 s
+  ([`ssh-connections.md`](ssh-connections.md), "A launch that ends early"). Still to check: IntelliJ closed (start,
+  `status`, `stop`), and whether a backend with its own settings folder runs beside the open IDE.
 - [ ] **1. Finding IDEs.** `ShellHost`: a `MAC_APPS` script run before `INSTALLED_IDES` when `os()` is macOS; each
   path goes through the same `Contents` check. Test: `ShellHostTest` with a made-up home holding a channel file, an
   `~/Applications` app, a Toolbox 1.x app and an app without `remote-dev-server.sh`.
