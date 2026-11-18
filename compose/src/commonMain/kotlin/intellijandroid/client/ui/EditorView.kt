@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
@@ -51,7 +52,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -76,6 +83,8 @@ import intellijandroid.client.session.Highlight
 import intellijandroid.client.session.IndentGuide
 import intellijandroid.client.session.Lookup
 import intellijandroid.client.session.LookupKey
+import intellijandroid.client.session.TextEffect
+import intellijandroid.client.session.UsagesPopup
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import kotlin.math.ceil
@@ -141,6 +150,16 @@ class EditorActions(
   val copied: (String) -> Unit = {},
   /** Ask the backend for the editor's context menu (the caret is already at the click). */
   val openMenu: () -> Unit = {},
+  /** Run a backend action at the caret by id, as its shortcut does, e.g. `GotoDeclaration`. */
+  val runAction: (String) -> Unit = {},
+  /** The range a ⌘-click (Ctrl-click) at this offset would go to, for the underline; null for none. */
+  val linkAt: (Int, (IntRange?) -> Unit) -> Unit = { _, found -> found(null) },
+  /** Keys for the usages popup while it is open. */
+  val usagesKey: (LookupKey) -> Unit = {},
+  /** A click on a usages popup row, by usage index. */
+  val chooseUsage: (Int) -> Unit = {},
+  /** A click outside the usages popup. */
+  val closeUsages: () -> Unit = {},
 )
 
 @Composable
@@ -150,6 +169,7 @@ fun EditorView(
   actions: EditorActions,
   modifier: Modifier = Modifier,
   lookup: Lookup? = null,
+  usages: UsagesPopup? = null,
   scroll: SidewaysScroll = remember { SidewaysScroll() },
   /**
    * The backend's context menu (`EditorPopupMenu`), read while the menu shows; null entries show
@@ -213,13 +233,27 @@ fun EditorView(
         )
       }
     }
+  // The symbol under the pointer while ⌘ (Ctrl) is held, drawn as IntelliJ's CTRL_CLICKABLE.
+  var link by remember(file.path, file.text) { mutableStateOf<IntRange?>(null) }
+  val linkStyle =
+    remember(scheme) {
+      scheme.style(listOf(listOf("CTRL_CLICKABLE"))).let {
+        if (it.effect != null) it
+        else it.copy(effect = TextEffect.LINE_UNDERSCORE, effectColor = it.foreground ?: scheme.foreground)
+      }
+    }
+  val shownHighlights =
+    remember(file.highlights, link, linkStyle) {
+      link?.let { file.highlights + Highlight(-1, it.first, it.last + 1, Int.MAX_VALUE, linkStyle) }
+        ?: file.highlights
+    }
   // Keyed on the lists, not the file: a caret move must not rebuild them (every line would redraw).
   // A line keeps its previous list when its highlights didn't change, so only lines whose
   // highlighting changed recompose and measure their text again.
   val previousBuckets = remember(lines) { HashMap<Int, List<Highlight>>() }
   val highlightsByLine =
-    remember(file.highlights, lines) {
-      bucketByLine(file.highlights, lines)
+    remember(shownHighlights, lines) {
+      bucketByLine(shownHighlights, lines)
         .mapValues { (line, highlights) ->
           previousBuckets[line]?.takeIf { it == highlights } ?: highlights
         }
@@ -484,6 +518,15 @@ fun EditorView(
     val shift = event.isShiftPressed
     val meta = event.isMetaPressed
     val line = lines.lineOf(caret)
+    if (usages != null) {
+      when (key) {
+        Key.DirectionUp -> actions.usagesKey(LookupKey.UP)
+        Key.DirectionDown -> actions.usagesKey(LookupKey.DOWN)
+        Key.Enter -> actions.usagesKey(LookupKey.ACCEPT)
+        Key.Escape -> actions.usagesKey(LookupKey.CANCEL)
+        else -> null
+      }?.let { return true }
+    }
     if (lookup != null) {
       when (key) {
         Key.DirectionUp -> {
@@ -507,6 +550,10 @@ fun EditorView(
     }
     if ((meta || event.isCtrlPressed) && key == Key.C) {
       copy()
+      return true
+    }
+    navigationAction(event)?.let { actionId ->
+      actions.runAction(actionId)
       return true
     }
     if (file.editable && event.isCtrlPressed && key == Key.Spacebar) {
@@ -728,7 +775,36 @@ fun EditorView(
           .onFocusChanged { focused = it.hasFocus }
           .then(LocalEditorTextInput.current(keyboardTarget))
           .focusable()
-          .onPreviewKeyEvent { event -> event.type == KeyEventType.KeyDown && onKey(event) }
+          .onPreviewKeyEvent { event ->
+            // Letting go of ⌘ (Ctrl) drops the underline, as in IntelliJ.
+            if (event.type == KeyEventType.KeyUp && !(if (IS_MAC) event.isMetaPressed else event.isCtrlPressed)) {
+              link = null
+            }
+            event.type == KeyEventType.KeyDown && onKey(event)
+          }
+          .pointerHoverIcon(if (link != null) PointerIcon.Hand else PointerIcon.Default)
+          .pointerInput(file.path, metrics) {
+            // ⌘ (Ctrl) held over a symbol: ask the backend for its range and underline it. Starts on
+            // the next pointer move after the key goes down.
+            awaitPointerEventScope {
+              var asked = -1
+              while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.first()
+                val modifiers = event.keyboardModifiers
+                val held = if (IS_MAC) modifiers.isMetaPressed else modifiers.isCtrlPressed
+                if (!held || change.type != PointerType.Mouse || event.type == PointerEventType.Exit) {
+                  asked = -1
+                  link = null
+                  continue
+                }
+                val offset = offsetAt(change.position)
+                if (offset == asked || link?.contains(offset) == true) continue
+                asked = offset
+                actions.linkAt(offset) { range -> if (asked == offset) link = range }
+              }
+            }
+          }
           .pointerInput(file.path, metrics) {
             // On tap, not on press: a swipe that starts on the editor (phone portrait) must not
             // focus it and open the keyboard. A tap that only stops a fling doesn't move the caret.
@@ -750,6 +826,16 @@ fun EditorView(
             awaitEachGesture {
               val down = awaitFirstDown()
               if (down.type != PointerType.Mouse) return@awaitEachGesture
+              // ⌘-click (Ctrl-click off the Mac): IntelliJ's Declaration or Usages at the click.
+              // Consumed here so the tap handler doesn't move the caret back after the jump.
+              val modifiers = currentEvent.keyboardModifiers
+              if (if (IS_MAC) modifiers.isMetaPressed else modifiers.isCtrlPressed) {
+                down.consume()
+                focusRequester.requestFocus()
+                moveTo(offsetAt(down.position), extend = false)
+                actions.runAction("GotoDeclaration")
+                return@awaitEachGesture
+              }
               dragAnchor = offsetAt(down.position)
               drag(down.id) { change ->
                 change.consume()
@@ -900,6 +986,21 @@ fun EditorView(
           LookupPopup(current, actions.chooseLookupItem)
         }
       }
+    // The usages popup opens under the caret line, at the caret, like IntelliJ's.
+    usages?.let { current ->
+      val caretItem =
+        listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == caretLine } ?: return@let
+      val x =
+        (metrics.gutterWidth + (caret - lines.starts[caretLine]) * metrics.charWidth - scroll.x)
+          .roundToInt()
+          .coerceAtLeast(0)
+      Popup(
+        offset = IntOffset(x, caretItem.offset + caretItem.size),
+        onDismissRequest = actions.closeUsages,
+      ) {
+        UsagesPopupView(current, actions.chooseUsage)
+      }
+    }
   }
 }
 
@@ -1105,4 +1206,32 @@ private fun bucketByLine(highlights: List<Highlight>, lines: Lines): Map<Int, Li
     } += highlight
   }
   return result
+}
+
+/**
+ * IntelliJ's navigation shortcuts, macOS keymap on a Mac and the default keymap elsewhere: ⌘B /
+ * Ctrl+B Declaration or Usages, ⌥⌘B / Ctrl+Alt+B Implementation(s), ⌘[ and ⌘] / Ctrl+Alt+← and →
+ * Back and Forward. Null for any other key.
+ */
+internal fun navigationAction(event: KeyEvent): String? {
+  val key = event.key
+  val alt = event.isAltPressed
+  return if (IS_MAC) {
+    if (!event.isMetaPressed || event.isCtrlPressed || event.isShiftPressed) return null
+    when {
+      key == Key.B -> if (alt) "GotoImplementation" else "GotoDeclaration"
+      alt -> null
+      key == Key.LeftBracket -> "Back"
+      key == Key.RightBracket -> "Forward"
+      else -> null
+    }
+  } else {
+    if (!event.isCtrlPressed || event.isMetaPressed || event.isShiftPressed) return null
+    when {
+      key == Key.B -> if (alt) "GotoImplementation" else "GotoDeclaration"
+      alt && key == Key.DirectionLeft -> "Back"
+      alt && key == Key.DirectionRight -> "Forward"
+      else -> null
+    }
+  }
 }

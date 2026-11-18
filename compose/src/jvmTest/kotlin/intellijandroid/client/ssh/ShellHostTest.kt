@@ -131,8 +131,9 @@ class ShellHostTest {
 
     fun failureOf(project: String): LaunchFailure? {
       val logs = host.launch(ide.path, project)
-      repeat(50) {
-        host.launchFailure(logs)?.let {
+      // Until the exit line is in: the in-use message comes a moment before it.
+      repeat(100) {
+        host.launchFailure(logs)?.takeIf { it.exitCode != null }?.let {
           return it
         } ?: Thread.sleep(100)
       }

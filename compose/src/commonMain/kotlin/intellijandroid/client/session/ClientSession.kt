@@ -77,7 +77,18 @@ import com.jetbrains.rd.ide.model.TextControlId
 import com.jetbrains.rd.ide.model.VisibleRange
 import com.jetbrains.rd.ide.model.asyncActionsModel
 import com.jetbrains.rd.ide.model.clipboardModel
+import com.jetbrains.rd.ide.model.BrowseMode
+import com.jetbrains.rd.ide.model.HyperlinkHighlightingArgs
+import com.jetbrains.rd.ide.model.HyperlinkHighlightingResult
 import com.jetbrains.rd.ide.model.codeStructureTreeModel
+import com.jetbrains.rd.ide.model.findUsagesHost
+import com.jetbrains.rd.ide.model.RdShowUsagesSession
+import com.jetbrains.rd.ide.model.RdMergeableUsage
+import com.jetbrains.rd.ide.model.RdUsageBase
+import com.jetbrains.rd.ide.model.RdUsageNavigationData
+import com.jetbrains.rd.util.reactive.AddRemove
+import com.jetbrains.rd.util.reactive.hasTrueValue
+import com.jetbrains.rd.ide.model.hyperlinkHighlightingModel
 import com.jetbrains.rd.ide.model.documentsOperationModel
 import com.jetbrains.rd.ide.model.fileEditorsModel
 import com.jetbrains.rd.ide.model.fleetRpcModel
@@ -352,6 +363,37 @@ class ClientSession(
   fun redo() = onRd {
     completion?.cancel()
     selectedEditSession()?.undo(isUndo = false)
+  }
+
+  /**
+   * A shortcut in the editor, e.g. ⌘B: runs [actionId] on the backend at the selected editor's
+   * caret. Where it navigates arrives as a caret move (same file) or as a backend editor selection
+   * ([followBackendSelection]).
+   */
+  fun runEditorAction(actionId: String) = onRd {
+    completion?.cancel()
+    val session = selectedEditSession() ?: return@onRd log("No editor; $actionId not run")
+    log("$actionId at offset ${session.caret}")
+    actionMenus?.runAction(actionId, KEYBOARD_PLACE, session.actionTimestamps())
+  }
+
+  /**
+   * The symbol at [offset] that a ⌘-click (Ctrl-click) would go to, for the underline while the
+   * pointer is over it, as JetBrains Client's `FrontendCtrlClickHost` asks; [found] gets null for
+   * none or while the backend is indexing.
+   */
+  fun linkAt(offset: Int, found: (IntRange?) -> Unit) = onRd {
+    val session = selectedEditSession() ?: return@onRd found(null)
+    val model = solution?.hyperlinkHighlightingModel ?: return@onRd found(null)
+    model.getElementRange
+      .start(lifetime, HyperlinkHighlightingArgs(session.editorId, offset, BrowseMode.Declaration))
+      .result
+      .advise(lifetime) { result ->
+        val range = (runCatching { result.unwrap() }.getOrNull() as? HyperlinkHighlightingResult)
+          ?.textRange
+          ?.takeIf { it.endOffset > it.startOffset }
+        found(range?.let { it.startOffset until it.endOffset })
+      }
   }
 
   /** Ctrl+Space: basic completion at the caret of the selected file. */
@@ -686,7 +728,16 @@ class ClientSession(
         compositeLifetime,
         compositeId,
         deferred ->
+        // The backend asks to show a file it opened for navigation (Go to Declaration into
+        // another file): `selectAsCurrent` true. Files IDEate opens itself come with false.
+        if (deferred.openRequest.selectAsCurrent)
+          followBackendSelection(EditorIdentity.textEditorId(compositeId))
         deferred.model.advise(compositeLifetime) { composite ->
+          // The same for a file that is already open.
+          composite.openWithFocus.advise(compositeLifetime) { request ->
+            if (request.selectAsCurrent)
+              followBackendSelection(EditorIdentity.textEditorId(compositeId))
+          }
           // A file the backend opened itself (e.g. from the Packages pane): ask the VFS for its
           // path.
           (composite.fileId as? RdFileIdNew)?.let { fileId ->
@@ -717,10 +768,14 @@ class ClientSession(
             )
         }
       }
+      newSolution.fileEditorsModel.selectionChanged.advise(solutionLifetime) { event ->
+        if (event.origin == OriginKind.Backend) followBackendSelection(event.newEditorId)
+      }
       createProjectView(solutionLifetime, newSolution)
       projectViews.bind(solutionLifetime, newSolution.projectViewModel)
       toolWindows.bind(solutionLifetime, newSolution)
       bindStructure(solutionLifetime, newSolution)
+      bindUsages(solutionLifetime, newSolution)
       newSolution.isLoaded.advise(solutionLifetime) { loaded ->
         if (!loaded) return@advise
         reopenEditors()
@@ -743,6 +798,106 @@ class ClientSession(
    * the editor it sees as selected, sends it whole, and sends it again after every change to the
    * file.
    */
+  /** The Show Usages session the popup shows, by its key in `FindUsagesModel.sessions`. */
+  private var usagesSession: Pair<Int, RdShowUsagesSession>? = null
+
+  /**
+   * IntelliJ's Show Usages (docs/feature-parity-plan.md, section 2): ⌘B on a declaration makes the
+   * backend add an `RdShowUsagesSession` and stream its usages into it. As JetBrains Client does,
+   * nothing shows when the backend handled it itself, a single usage is gone to at once, and the
+   * popup lists the rest; closing it removes the session.
+   */
+  private fun bindUsages(solutionLifetime: Lifetime, solution: Solution) {
+    solution.findUsagesHost.sessions.view(solutionLifetime) { sessionLifetime, id, session ->
+      if (session !is RdShowUsagesSession) return@view
+      val path = mutableState.value.selectedEditor ?: return@view
+      val title = plainText(session.title)
+      val rows = mutableListOf<UsageRow>()
+      var complete = false
+      fun refresh() {
+        if (session.handledOnBackend.hasTrueValue) return
+        if (complete && rows.size == 1 && session.navigateToSingleUsageImmediately) {
+          goToUsage(id, session, rows.single().index)
+          return
+        }
+        // Wait for a second row or the end, so a single usage doesn't flash a popup first.
+        if (!complete && rows.size < 2) return
+        usagesSession = id to session
+        mutableState.update {
+          it.copy(
+            usages =
+              UsagesPopup(
+                path,
+                title,
+                session.scopeName.orEmpty(),
+                rows.toList(),
+                complete,
+                it.usages?.selected ?: 0,
+              )
+          )
+        }
+      }
+      log("Usages of $title in ${session.scopeName}")
+      session.usages.items.adviseAddRemove(sessionLifetime) { kind, _, batch ->
+        if (kind == AddRemove.Add) {
+          rows += batch.map(::usageRow)
+          refresh()
+        }
+      }
+      session.isSearchComplete.advise(sessionLifetime) {
+        complete = it
+        if (it) log("${rows.size} usages of $title")
+        refresh()
+      }
+      sessionLifetime.onTermination {
+        if (usagesSession?.first == id) {
+          usagesSession = null
+          mutableState.update { it.copy(usages = null) }
+        }
+      }
+    }
+  }
+
+  /** Up, Down, Enter and Escape while the usages popup is open. */
+  fun usagesKey(key: LookupKey) = onRd {
+    val popup = mutableState.value.usages ?: return@onRd
+    when (key) {
+      LookupKey.UP,
+      LookupKey.DOWN -> {
+        if (popup.rows.isEmpty()) return@onRd
+        val step = if (key == LookupKey.UP) -1 else 1
+        val selected = (popup.selected + step).mod(popup.rows.size)
+        mutableState.update { it.copy(usages = it.usages?.copy(selected = selected)) }
+      }
+      LookupKey.ACCEPT -> popup.rows.getOrNull(popup.selected)?.let { chooseUsageRow(it.index) }
+      LookupKey.CANCEL -> closeUsages()
+    }
+  }
+
+  /** A click on a usage row: go there, as the backend's navigation does. */
+  fun chooseUsage(index: Int) = onRd { chooseUsageRow(index) }
+
+  fun closeUsages() = onRd {
+    val (id, _) = usagesSession ?: return@onRd
+    solution?.findUsagesHost?.sessions?.remove(id)
+  }
+
+  private fun chooseUsageRow(index: Int) {
+    val (id, session) = usagesSession ?: return
+    goToUsage(id, session, index)
+  }
+
+  private fun goToUsage(id: Int, session: RdShowUsagesSession, index: Int) {
+    log("Going to usage $index")
+    mutableState.update { it.copy(usages = null) }
+    // The session is removed once the backend answers: removing it first could drop the call.
+    session.usages.navigateTo.start(lifetime, RdUsageNavigationData(index, true)).result.advise(
+      lifetime
+    ) {
+      solution?.findUsagesHost?.sessions?.remove(id)
+    }
+  }
+
   private fun bindStructure(solutionLifetime: Lifetime, solution: Solution) {
     val model = solution.codeStructureTreeModel
     model.treeNodes.advise(solutionLifetime) { list ->
@@ -941,6 +1096,28 @@ class ClientSession(
       ?.set(id == compositeId)
     saveEditors()
   }
+
+  /**
+   * The backend asked to show an editor (Go to Declaration into another file: an `openRequest` or
+   * `openWithFocus` with `selectAsCurrent`, or a backend `selectionChanged`): show that tab and
+   * tell the backend it is the selected, visible one, as [showEditor] does. A file the backend just
+   * opened may not have its tab or path yet; [pendingBackendSelection] keeps it until
+   * [nameDocument] names it.
+   */
+  private fun followBackendSelection(editorId: RdFileEditorId?) {
+    val compositeId = editorId?.compositeId ?: return
+    val path = compositeIds.entries.firstOrNull { it.value == compositeId }?.key
+    if (path == null || mutableState.value.editors.none { it.path == path }) {
+      pendingBackendSelection = editorId
+      return
+    }
+    pendingBackendSelection = null
+    log("Backend showed $path")
+    showEditor(path)
+  }
+
+  /** A backend selection whose file has no tab or path yet. */
+  private var pendingBackendSelection: RdFileEditorId? = null
 
   private fun createEditSession(
     controlLifetime: Lifetime,
@@ -1155,6 +1332,8 @@ class ClientSession(
         else (state.editors + file).sortedBy { tabIndex(it.path) }
       state.copy(editors = editors, selectedEditor = state.selectedEditor ?: file.path)
     }
+    // A backend selection that came before this file's tab.
+    pendingBackendSelection?.let(::followBackendSelection)
   }
 
   /** Where [path]'s tab goes; a file opened some other way goes last. */
@@ -1175,6 +1354,7 @@ class ClientSession(
         selectedEditor = if (state.selectedEditor == unnamed) path else state.selectedEditor,
       )
     }
+    pendingBackendSelection?.let(::followBackendSelection)
   }
 
   private fun pathOf(documentId: RdDocumentId): String {
@@ -1218,6 +1398,9 @@ class ClientSession(
     /** The user's IntelliJ uses Islands Dark (its theme and its editor scheme). */
     const val EDITOR_SCHEME = "Islands Dark"
     const val PROJECT_PANE = "ProjectPane"
+
+    /** `ActionPlaces.KEYBOARD_SHORTCUT`: where an action run by its shortcut comes from. */
+    const val KEYBOARD_PLACE = "keyboard shortcut"
 
     /** About two frames at 60 Hz. */
     const val MARKUP_DELAY_MS = 32L
@@ -1354,3 +1537,31 @@ private object ProtocolMarshallers : MarshallersProvider {
  */
 internal fun tabToSelectAfterClose(paths: List<String>, closedIndex: Int): String? =
   paths.getOrNull(closedIndex - 1) ?: paths.getOrNull(closedIndex + 1)
+
+/**
+ * A usage as a popup row: its line trimmed, the usage's place in it. [RdMergeableUsage] carries the
+ * line and column (0-based); a plain [RdUsageBase] doesn't, and its row then has no match.
+ */
+internal fun usageRow(usage: RdUsageBase): UsageRow {
+  val fileName =
+    usage.groups.lastOrNull { it.groupingRuleId.endsWith(".FileGroupingRule") }?.text.orEmpty()
+  val text = usage.text.trim()
+  val position = (usage as? RdMergeableUsage)?.position
+    ?: return UsageRow(usage.index, fileName, 0, text, 0, 0)
+  val column = position.column - (usage.text.length - usage.text.trimStart().length)
+  val end = column + usage.endOffset - usage.startOffset
+  return if (column >= 0 && end <= text.length) {
+    UsageRow(usage.index, fileName, position.line + 1, text, column, end)
+  } else {
+    UsageRow(usage.index, fileName, position.line + 1, text, 0, 0)
+  }
+}
+
+/** The backend's HTML title ("<b>Method</b>&nbsp;<b>twice(int)</b>…") as plain text. */
+internal fun plainText(html: String): String =
+  html
+    .replace(Regex("<[^>]*>"), "")
+    .replace("&nbsp;", " ")
+    .replace("&lt;", "<")
+    .replace("&gt;", ">")
+    .replace("&amp;", "&")

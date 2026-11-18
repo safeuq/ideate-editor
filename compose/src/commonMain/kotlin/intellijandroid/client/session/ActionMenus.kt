@@ -111,13 +111,47 @@ internal class ActionMenus(
     return true
   }
 
+  /**
+   * Runs [actionId] in [place] and the context [timestamps] without a menu, as a shortcut does: the
+   * backend's `update` gives the presentation for that context, and the action runs only when it is
+   * enabled there (e.g. `GotoDeclaration` with the caret on a reference). [disabled] is called
+   * otherwise.
+   */
+  fun runAction(
+    actionId: String,
+    place: String,
+    timestamps: ActionTimestampSetModel,
+    disabled: () -> Unit = {},
+  ) {
+    val request =
+      AsyncActionUpdateRequest(actionId, timestamps, place, PopupKindModel(false, false), null)
+    model.update.start(lifetime, request).result.advise(lifetime) { result ->
+      val presentation =
+        runCatching { result.unwrap() }
+          .onFailure { failure -> log("$actionId not updated: ${failure.message}") }
+          .getOrNull() ?: return@advise
+      if (presentation.isEnabled) send(actionId, presentation, place, timestamps)
+      else {
+        log("$actionId is disabled here")
+        disabled()
+      }
+    }
+  }
+
   private fun run(actionId: String, presentation: PresentationModel, menu: Menu) = onRd {
+    send(actionId, presentation, menu.place, menu.timestamps)
+  }
+
+  private fun send(
+    actionId: String,
+    presentation: PresentationModel,
+    place: String,
+    timestamps: ActionTimestampSetModel,
+  ) {
     // The backend runs only an action whose presentation, as sent back, is enabled: the one the
-    // menu showed.
+    // menu showed, or the one `update` returned.
     val requestId =
-      sendRequest(
-        RdCallActionRequest(menu.timestamps, actionId, menu.place, presentation, null, false, null),
-      )
+      sendRequest(RdCallActionRequest(timestamps, actionId, place, presentation, null, false, null))
     running[requestId] = actionId
     log("Running $actionId")
   }
@@ -211,10 +245,10 @@ internal class ActionMenus(
     /** Groups whose items open what IDEate doesn't show yet. */
     val UNSHOWN_GROUPS =
       setOf(
-        // The editor's menu: Go To and Diagrams open popups, Analyze fills tool windows, Run and
-        // Debug run the program with its output in a backend tool window, and Folding changes
-        // folds IDEate doesn't draw yet.
-        "EditorPopupMenu.GoTo",
+        // The editor's menu: Diagrams open popups, Analyze fills tool windows, Run and Debug run
+        // the program with its output in a backend tool window, and Folding changes folds IDEate
+        // doesn't draw yet. Go To's navigation runs (ClientSession follows the backend's editor
+        // selection); its items that open a chooser popup are in UNSHOWN_ACTIONS.
         "UML.EditorGroup",
         "AnalyzeMenu",
         "RunContextPopupGroup",
@@ -242,6 +276,14 @@ internal class ActionMenus(
         "CompareFileWithEditor",
         "CompareClipboardWithSelection",
         "ShowIntentionActions",
+        // Go To items that open a chooser popup (Related Symbol, Test), a data or DDL editor, the
+        // Database tool window or the grid's Row dialog (LangActions.xml, DatabaseTools, grid).
+        "GotoRelated",
+        "GotoTest",
+        "Jdbc.OpenEditor.Data",
+        "Jdbc.OpenEditor.DDL",
+        "GotoRow",
+        "sql.SelectInDatabaseView",
       )
 
     // PresentationModel.flags (ActionsKt in intellij.rd.platform.jar).

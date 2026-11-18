@@ -645,6 +645,11 @@ private fun EditorIsland(
             session::pasteSimple,
             session::copied,
             session::editorMenu,
+            session::runEditorAction,
+            session::linkAt,
+            session::usagesKey,
+            session::chooseUsage,
+            session::closeUsages,
           )
         }
       EditorView(
@@ -653,6 +658,7 @@ private fun EditorIsland(
         actions,
         Modifier.fillMaxSize(),
         state.lookup?.takeIf { it.path == selected.path },
+        state.usages?.takeIf { it.path == selected.path },
         editorScroll,
         backendMenu = { state.contextMenu?.entries },
       )

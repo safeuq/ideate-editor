@@ -159,8 +159,8 @@ Steps 1 to 4 are built.
   `EditSession.actionTimestamps()`); the caret is moved to the click first for the context menu.
 - Files the backend opens on its own are already picked up from `backendDeferredComposites` and named through
   the VFS.
-- No modifier-hover, no handling of a backend-made selection change, no usages popup. `Find Usages` and
-  `Go To` are greyed out in the editor menu.
+- (Before 2026-11-18.) No modifier-hover, no handling of a backend-made selection change, no usages popup.
+  `Find Usages` and `Go To` were greyed out in the editor menu. See "Built" below.
 
 ### Design
 
@@ -201,6 +201,53 @@ Steps 1 to 4 are built.
 - **[Open]** How a library class opens: as a normal composite with decompiled text (expected), or something
   IDEate has no model for. Step 1.
 - **[Open]** `RdShowUsagesSession`'s item list: the fields were read, the flow of `RdUsage` rows was not.
+  Settled below.
+
+### Built (2026-11-18)
+
+Steps 2 to 5, checked on the Mac backend (263.7307.200) from the desktop client. Step 1 (recording JetBrains
+Client) was skipped: the backend's answers settled the open items.
+
+- **Running an action like its shortcut** (`ActionMenus.runAction`): first `AsyncActionsModel.update`
+  with `AsyncActionUpdateRequest`, place `"keyboard shortcut"` (`ActionPlaces.KEYBOARD_SHORTCUT`); only if
+  the answer's `PresentationModel` has the enabled flag (`0x1`), `RdCallActionRequest`. A disabled action
+  is logged ("Back is disabled here") and not sent: `Back` with no history, `Forward` at the newest place.
+- **Ids.** `GotoDeclaration` is IntelliJ's "Go to Declaration or Usages" (declaration-only is
+  `GotoDeclarationOnly`). ⌘B / Ctrl+B and ⌘-click / Ctrl-click send it; ⌥⌘B / Ctrl+Alt+B `GotoImplementation`;
+  ⌘[ ⌘] / Ctrl+Alt+← → `Back` / `Forward`.
+- **Following the backend into another file.** Not `selectionChanged`: the backend never fired it with
+  `OriginKind.Backend` here. It adds a `DeferredCompositeModel` to `fileEditorsModel.backendDeferredComposites`
+  whose `openRequest` is `OpenWithFocusRequest(selectAsCurrent = true, openMode = DEFAULT)` (files IDEate
+  opens itself come back with `selectAsCurrent = false`); for a file that is already open it sets the
+  composite's `openWithFocus`. IDEate shows that tab, waiting for the document's name and text when they
+  are not in yet. Same file: the caret move arrives as an ordinary backend patch.
+- **Hover underline.** `solution.hyperlinkHighlightingModel.getElementRange(HyperlinkHighlightingArgs(editorId,
+  offset, BrowseMode.Declaration))` answers `HyperlinkHighlightingResult(textRange = RdTextRange(408, 416),
+  docInfo)`; IDEate draws the range with the scheme's `CTRL_CLICKABLE` (falls back to an underline in the
+  text colour) and a hand cursor. It starts on the first pointer move with ⌘ (Ctrl) down, not on the key
+  press itself, and drops on key release, pointer exit or an edit. Mouse only; a touch has no modifier.
+- **Usages popup.** On a declaration the backend adds an `RdShowUsagesSession` to `solution.findUsagesHost
+  .sessions` (title HTML `<b>Method</b>&nbsp;<b>twice(int)</b>&nbsp;<font …>of demo.Caller</font>`, scope
+  "Project and Libraries", `maxUsages = 100`, `navigateToSingleUsageImmediately = true`) and streams rows into
+  `usages.items` in batches, then sets `isSearchComplete = true`. Rows were `RdMergeableUsage`: the line text
+  (`'    return twice(new Other().next());'`), document offsets 63–68, `position` with 0-based line and
+  column, and grouping texts (the `FileGroupingRule` group is the file name). JetBrains Client
+  (`FrontendUsageManagerHost`) waits 200 ms and shows nothing when `handledOnBackend` is true. IDEate:
+  - a single usage with `navigateToSingleUsageImmediately`: goes there at once (no popup);
+  - otherwise the popup once two rows are in or the search is complete: title, count, a row per usage
+    (line number, the line with the usage bold, file name), the scope; ↑ ↓ Enter Esc, click;
+    "No usages found in …" for none;
+  - going: `usages.navigateTo(RdUsageNavigationData(index, requestFocus = true))`, then the client removes the
+    session from `sessions` (as JetBrains Client does when its popup closes); Esc or a click outside only
+    removes it.
+- **Hidden in the editor menu's Go To**: Related Symbol (`GotoRelated`) and Test (`GotoTest`) open chooser
+  popups; `Jdbc.OpenEditor.Data`, `Jdbc.OpenEditor.DDL`, `GotoRow` and `sql.SelectInDatabaseView` open data
+  editors, a grid dialog or the Database tool window.
+- **Library classes.** ⌘B on `String.length` made the backend open JetBrains' decompiler licence dialog
+  (a Lux dialog). IDEate drew it 555 × 158 with its buttons cut off. The licence was not accepted, so what
+  a decompiled class looks like is still open, and so is the dialog's height.
+- Not yet: ⇧⌘-click (type declaration), ⌥⌘-click (implementation), Show Usages' "more usages" and scope
+  change, a file icon per row.
 
 ---
 

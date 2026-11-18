@@ -61,6 +61,33 @@ data class ProjectTree(
   }
 }
 
+/**
+ * The Show Usages popup for the editor of [path]: [title] is the target ("Method twice(int) of
+ * demo.Caller"), [scope] the search scope ("Project and Libraries"); rows come in while the backend
+ * searches, until [complete].
+ */
+data class UsagesPopup(
+  val path: String,
+  val title: String,
+  val scope: String,
+  val rows: List<UsageRow>,
+  val complete: Boolean,
+  val selected: Int = 0,
+)
+
+/**
+ * One usage: [text] is its line, trimmed; [matchStart] until [matchEnd] the usage in it; [line] is
+ * 1-based, 0 when the backend didn't send it.
+ */
+data class UsageRow(
+  val index: Int,
+  val fileName: String,
+  val line: Int,
+  val text: String,
+  val matchStart: Int,
+  val matchEnd: Int,
+)
+
 /** A highlighted range. [style] is already resolved against the current scheme. */
 data class Highlight(
   val id: Long,
@@ -154,6 +181,8 @@ data class SessionState(
   val scheme: EditorScheme? = null,
   /** The completion popup, if one is open. */
   val lookup: Lookup? = null,
+  /** IntelliJ's Show Usages popup, if one is open (⌘B or ⌘-click on a declaration). */
+  val usages: UsagesPopup? = null,
   /** The Structure tool window's tree, for the file the backend sees as selected. */
   val structure: StructureTree = StructureTree(),
   /** The open context menu built by the backend (ActionMenus). */
