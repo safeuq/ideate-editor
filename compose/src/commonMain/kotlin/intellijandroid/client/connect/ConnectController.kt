@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -13,12 +14,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import intellijandroid.client.connection.ClientCertificate
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.session.ClientSession
 import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.LocalBackHandler
+import intellijandroid.client.ui.LocalTitleBarArea
 import intellijandroid.client.ui.TitleBarSpacer
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
@@ -708,45 +711,55 @@ class ConnectController(
 }
 
 /**
- * The whole app: the connect screen until a session exists, then the IDE screen. Fonts and icons
- * come from the platform; [modifier] goes inside the window background (Android: the system bar
- * insets).
+ * The connections window: the connect screen under the window's title bar strip. It stays as it is
+ * while a session is open; the session shows in its own window ([EditorApp]). Fonts and icons come
+ * from the platform; [modifier] goes inside the window background (Android: the system bar insets).
  */
 @Composable
-fun IdeateApp(controller: ConnectController, fonts: ClientFonts, modifier: Modifier = Modifier) {
-  val current = controller.session
-  // [modifier] keeps the content clear of the system bars and a camera cutout (Android); the
-  // backgrounds fill behind them: the connect screen's here, the IDE screen paints its own (with
-  // the
-  // project tint) and takes [modifier] inside it.
-  val background = if (current == null) Gateway.background else IslandsDark.windowBackground
-  Box(Modifier.fillMaxSize().background(background)) {
-    if (current == null) {
-      LaunchedEffect(Unit) { controller.refresh() }
-      Column(modifier) {
-        // Where the app draws the window's title bar (ui/TitleBar.kt), an empty strip that drags
-        // the window, above the connect screen.
-        Box(Modifier.fillMaxWidth().background(Gateway.background)) { TitleBarSpacer() }
-        ConnectScreen(controller.screenState(), controller.actions, fonts)
+fun ConnectApp(controller: ConnectController, fonts: ClientFonts, modifier: Modifier = Modifier) {
+  Box(Modifier.fillMaxSize().background(Gateway.background)) {
+    LaunchedEffect(Unit) { controller.refresh() }
+    Column(modifier) {
+      // Where the app draws the window's title bar (ui/TitleBar.kt): an empty strip that drags
+      // the window, with IntelliJ's welcome screen separator under it.
+      if (LocalTitleBarArea.current != null) {
+        TitleBarSpacer()
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Gateway.divider))
       }
-    } else {
-      val state by current.state.collectAsState()
-      // Back from the IDE screen: to the connect screen, not out of the app (the backend keeps
-      // running; another project or connection can be opened from there).
-      LocalBackHandler.current(true) { controller.leave() }
-      LaunchedEffect(state.connectionLost) { state.connectionLost?.let(controller::connectionLost) }
-      LaunchedEffect(state.projectName, controller.isAccepted) {
-        state.projectName?.let(controller::projectNamed)
-      }
-      ClientScreen(state, current, insets = modifier)
-      controller.reconnecting?.let { attemptNumber ->
-        StartProgress(
-          "No connection to IDE Backend",
-          "Trying to reconnect… (attempt $attemptNumber)",
-          fonts,
-          onCancel = controller::leave,
-        )
-      }
+      ConnectScreen(controller.screenState(), controller.actions, fonts)
+    }
+  }
+}
+
+/**
+ * The editor window for [session]: the IDE screen, which paints its own background (with the
+ * project tint) and takes [modifier] inside it. Back leaves the session; the platform then closes
+ * this window, and the connections window is there again.
+ */
+@Composable
+fun EditorApp(
+  controller: ConnectController,
+  session: ClientSession,
+  fonts: ClientFonts,
+  modifier: Modifier = Modifier,
+) {
+  Box(Modifier.fillMaxSize().background(IslandsDark.windowBackground)) {
+    val state by session.state.collectAsState()
+    // The backend keeps running; another project or connection can be opened from the
+    // connections window.
+    LocalBackHandler.current(true) { controller.leave() }
+    LaunchedEffect(state.connectionLost) { state.connectionLost?.let(controller::connectionLost) }
+    LaunchedEffect(state.projectName, controller.isAccepted) {
+      state.projectName?.let(controller::projectNamed)
+    }
+    ClientScreen(state, session, insets = modifier)
+    controller.reconnecting?.let { attemptNumber ->
+      StartProgress(
+        "No connection to IDE Backend",
+        "Trying to reconnect… (attempt $attemptNumber)",
+        fonts,
+        onCancel = controller::leave,
+      )
     }
   }
 }

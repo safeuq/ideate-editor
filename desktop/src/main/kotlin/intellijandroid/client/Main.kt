@@ -1,5 +1,6 @@
 package intellijandroid.client
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toComposeImageBitmap
@@ -8,12 +9,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import intellijandroid.client.connect.ConnectApp
 import intellijandroid.client.connect.ConnectController
 import intellijandroid.client.connect.ConnectScreen
 import intellijandroid.client.connect.ConnectionHistory
-import intellijandroid.client.connect.IdeateApp
+import intellijandroid.client.connect.EditorApp
 import intellijandroid.client.connect.SshSetup
 import intellijandroid.client.connect.StoredText
 import intellijandroid.client.desktop.ComponentGallery
@@ -31,6 +34,7 @@ import intellijandroid.client.ui.component.LocalResizePointers
 import intellijandroid.client.ui.component.ResizePointers
 import intellijandroid.client.ui.lux.PngDecoder
 import intellijandroid.client.ui.lux.pngDecoder
+import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import java.io.File
@@ -109,7 +113,8 @@ fun main(arguments: Array<String>) {
   arguments.firstOrNull()?.let { link -> controller.connectLink(link, arguments.getOrNull(1)) }
 
   System.getenv("CLIENT_SNAPSHOT")?.let { target ->
-    // Without IdeateApp's effects: the snapshot composes afresh every few seconds and must not
+    // Without ConnectApp's and EditorApp's effects: the snapshot composes afresh every few seconds
+    // and must not
     // refresh or reconnect.
     Snapshots.start(File(target), clientLib, fonts) {
       val session = controller.session
@@ -118,36 +123,63 @@ fun main(arguments: Array<String>) {
     }
   }
   application {
-    val windowState = rememberWindowState(width = 1200.dp, height = 800.dp)
-    Window(
-      onCloseRequest = {
-        controller.close()
-        exitApplication()
-      },
-      title = "IDEate",
-      state = windowState,
-    ) {
-      val density = LocalDensity.current
-      val icons = remember(density) { DesktopResources.JarIcons(clientLib, density) }
-      // On macOS the main toolbar takes the title bar's place, as in IntelliJ.
-      val titleBar =
-        rememberMacTitleBar(window, windowState.placement == WindowPlacement.Fullscreen)
-      CompositionLocalProvider(
-        LocalClientFonts provides fonts,
-        LocalIcons provides icons,
-        LocalTitleBarArea provides titleBar,
-        // IntelliJ's Splitter cursors.
-        LocalResizePointers provides
-          ResizePointers(
-            sideBySide =
-              PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.W_RESIZE_CURSOR)),
-            stacked =
-              PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.N_RESIZE_CURSOR)),
-          ),
+    // Two windows, one at a time, as IntelliJ's welcome frame and project frame: the connections
+    // window (FlatWelcomeFrame's default 800 × 650), and the editor window while a session is
+    // open. Closing the editor window leaves the session; closing the connections window quits.
+    val session = controller.session
+    if (session == null) {
+      IdeateWindow(
+        rememberWindowState(width = 800.dp, height = 650.dp),
+        clientLib,
+        fonts,
+        onClose = {
+          controller.close()
+          exitApplication()
+        },
       ) {
-        IdeateApp(controller, fonts)
+        ConnectApp(controller, fonts)
+      }
+    } else {
+      IdeateWindow(
+        rememberWindowState(width = 1200.dp, height = 800.dp),
+        clientLib,
+        fonts,
+        onClose = controller::leave,
+      ) {
+        EditorApp(controller, session, fonts)
       }
     }
+  }
+}
+
+@Composable
+private fun IdeateWindow(
+  windowState: WindowState,
+  clientLib: File,
+  fonts: ClientFonts,
+  onClose: () -> Unit,
+  content: @Composable () -> Unit,
+) {
+  Window(onCloseRequest = onClose, title = "IDEate", state = windowState) {
+    val density = LocalDensity.current
+    val icons = remember(density) { DesktopResources.JarIcons(clientLib, density) }
+    // On macOS the app draws in the title bar's place, as in IntelliJ: the main toolbar in the
+    // editor window, an empty strip in the connections window.
+    val titleBar = rememberMacTitleBar(window, windowState.placement == WindowPlacement.Fullscreen)
+    CompositionLocalProvider(
+      LocalClientFonts provides fonts,
+      LocalIcons provides icons,
+      LocalTitleBarArea provides titleBar,
+      // IntelliJ's Splitter cursors.
+      LocalResizePointers provides
+        ResizePointers(
+          sideBySide =
+            PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.W_RESIZE_CURSOR)),
+          stacked =
+            PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.N_RESIZE_CURSOR)),
+        ),
+      content = content,
+    )
   }
 }
 

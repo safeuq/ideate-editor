@@ -4,37 +4,27 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.core.content.edit
+import intellijandroid.client.connect.ConnectApp
 import intellijandroid.client.connect.ConnectController
 import intellijandroid.client.connect.ConnectionHistory
-import intellijandroid.client.connect.IdeateApp
 import intellijandroid.client.connect.SshSetup
 import intellijandroid.client.connect.StoredText
 import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ssh.RemoteHosts
-import intellijandroid.client.ui.LocalBackHandler
-import intellijandroid.client.ui.LocalEditorTextInput
-import intellijandroid.client.ui.LocalIcons
-import intellijandroid.client.ui.LocalTitleBarArea
-import intellijandroid.client.ui.component.LocalResizePointers
-import intellijandroid.client.ui.component.ResizePointers
 import intellijandroid.client.ui.lux.PngDecoder
 import intellijandroid.client.ui.lux.pngDecoder
-import intellijandroid.client.ui.theme.LocalClientFonts
 
 /**
- * The connect screen (link prompt, backends on this phone, history; docs/connections.md), then the
- * IDE screen; both shared with the desktop ([IdeateApp]). For scripted runs: `adb shell am start -n
+ * The connections window: the connect screen (link prompt, backends on this phone, history;
+ * docs/connections.md), shared with the desktop ([ConnectApp]). A session opens in
+ * [EditorActivity]. For scripted runs: `adb shell am start -n
  * intellijandroid.client.android/.MainActivity --es joinLink '<link>' [--es openFile '<path>']`
  * connects at once.
  */
@@ -44,14 +34,7 @@ class MainActivity : ComponentActivity() {
     registerForActivityResult(ActivityResultContracts.RequestPermission()) { controller.refresh() }
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    // The app's own backgrounds run behind the status and navigation bars on every Android version
-    // (Android 15+ does that anyway), with light bar icons over the dark UI and no grey contrast
-    // overlay under 3-button navigation; the content keeps clear of the bars (appInsets). Also lays
-    // out into a camera cutout on the short edges, so a phone held sideways has no black strip.
-    enableEdgeToEdge(
-      statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-      navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-    )
+    edgeToEdge()
     super.onCreate(savedInstanceState)
     window.isNavigationBarContrastEnforced = false
     // Lux dialogs' images (ui/lux/LuxImages.kt).
@@ -86,39 +69,38 @@ class MainActivity : ComponentActivity() {
       controller.connectLink(extra, intent.getStringExtra("openFile"))
     }
 
+    IdeateProcess.controller = controller
+    IdeateProcess.fonts = fonts
+    IdeateProcess.icons = icons
+
     setContent {
-      CompositionLocalProvider(
-        LocalClientFonts provides fonts,
-        LocalIcons provides icons,
-        LocalEditorTextInput provides ::editorTextInput,
-        LocalBackHandler provides { enabled, onBack -> BackHandler(enabled, onBack) },
-        LocalTitleBarArea provides rememberCaptionBar(),
-        // A mouse over a split's border (component/SplitPane.kt).
-        LocalResizePointers provides
-          ResizePointers(
-            sideBySide = PointerIcon(android.view.PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW),
-            stacked = PointerIcon(android.view.PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW),
-          ),
-      ) {
-        IdeateApp(controller, fonts, Modifier.windowInsetsPadding(appInsets()))
+      // A session shows in the editor window (EditorActivity); this one stays the connections
+      // window.
+      val connected = controller.session != null
+      LaunchedEffect(connected) { if (connected) EditorActivity.start(this@MainActivity) }
+      IdeateWindow(fonts, icons) {
+        ConnectApp(controller, fonts, Modifier.windowInsetsPadding(appInsets()))
       }
     }
     transparentCaptionBar()
   }
 
-  // With the screen off the activity stops; a dropped connection is retried once it starts again.
+  // With the screen off the activities stop; a dropped connection is retried once one starts
+  // again.
   override fun onStart() {
     super.onStart()
-    controller.inForeground = true
+    IdeateProcess.started(1)
   }
 
   override fun onStop() {
-    controller.inForeground = false
+    IdeateProcess.started(-1)
     super.onStop()
   }
 
+  // Closing the connections window ends the session, as quitting the desktop app does.
   override fun onDestroy() {
     controller.close()
+    if (IdeateProcess.controller === controller) IdeateProcess.controller = null
     super.onDestroy()
   }
 

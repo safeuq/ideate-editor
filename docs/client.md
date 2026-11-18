@@ -7,7 +7,7 @@ A native client for IntelliJ's split mode (remote development), written with Com
 | `compose/src/commonMain/kotlin/…/connection/` | join link, client certificate (BouncyCastle), TLS 1.3, DEFLATE frames, handshake, the rd wire | JVM and Android |
 | `compose/src/commonMain/kotlin/…/session/` | rd protocol and the models the editor needs; exposes a `StateFlow<SessionState>` | JVM and Android, with the rd jars |
 | `compose/src/commonMain/kotlin/…/ui/` | Project tree, editor, window layout; common Compose APIs only. Fonts, icons and the editor's text input come in through `LocalClientFonts`, `LocalIcons`, `LocalEditorTextInput` | JVM and Android |
-| `compose/src/commonMain/kotlin/…/connect/` | the connect screen (Gateway's welcome window), its logic (`ConnectController`), history, the port scan, the folder chooser, and `IdeateApp` (connect screen, then the IDE screen). Termux and where history is stored come in through the `Termux` and `StoredText` interfaces | JVM and Android |
+| `compose/src/commonMain/kotlin/…/connect/` | the connect screen (Gateway's welcome window), its logic (`ConnectController`), history, the port scan, the folder chooser, and the two windows' content: `ConnectApp` (connections window) and `EditorApp` (editor window). Termux and where history is stored come in through the `Termux` and `StoredText` interfaces | JVM and Android |
 | `desktop/` | the JVM launcher: `Main.kt` (no Termux; history in `~/.ideate/`) and `desktop/`: fonts and icons read from the JetBrains Client install, off-screen snapshots | desktop only |
 | `android/` | the Android app: activity, `AndroidTermux` (RUN_COMMAND), history in shared preferences, fonts and icons from assets, soft keyboard | Android only |
 

@@ -687,7 +687,7 @@ both bars were black; Android 15+ forces drawing behind them, so they showed the
 | Part | Before (API 34 emulator) | Now |
 |---|---|---|
 | Status and navigation bars | black `#000000` | transparent on every version (`enableEdgeToEdge` with `SystemBarStyle.dark(TRANSPARENT)`), light icons; no grey contrast overlay under 3-button navigation (`isNavigationBarContrastEnforced = false`) |
-| Behind them, connect screen | `#26282C` on Android 15+ (the IDE window's colour) | the connect screen's own `#191A1C` (`IdeateApp` paints `Gateway.background` before the insets padding) |
+| Behind them, connect screen | `#26282C` on Android 15+ (the IDE window's colour) | the connect screen's own `#191A1C` (`ConnectApp` paints `Gateway.background` before the insets padding) |
 | Behind them, IDE screen | `#26282C` | `#26282C`: the bottom tool window bar runs into the navigation bar |
 | Camera cutout, phone sideways | black strip | the background fills it (`enableEdgeToEdge` lays out into short-edge cutouts); content keeps clear (`safeDrawing`) |
 | Before the first frame | `Theme.Material`'s black | `Theme.Ideate`: window background and launch splash `#191A1C`, the connect screen's colour |
@@ -697,7 +697,38 @@ Measured on the API 34 emulator (1080 × 2220): status bar rows 0–65 and navig
 emulator has none).
 
 The project tint behind the status bar (ideate-editor, same day, after the layout rewrite): `ClientScreen` takes
-the insets (`insets = Modifier.windowInsetsPadding(appInsets())` through `IdeateApp`) and applies them inside its
+the insets (`insets = Modifier.windowInsetsPadding(appInsets())` through `EditorApp`) and applies them inside its
 background, so the window colour and `drawProjectGradient` start at the screen's top. The gradient's 300 dp fade
 then runs from behind the status bar, as on macOS it runs from behind the merged title bar. The connect screen
 keeps the insets on its own column; the reconnect popup centres on the whole screen.
+
+## 19. Two windows: connections and editor (2026-11-18)
+
+IntelliJ has a welcome frame and a project frame; Gateway has its own window and JetBrains Client's. IDEate had one
+window that showed the connect screen and then the IDE screen.
+
+| | Connections window | Editor window |
+|---|---|---|
+| Content | `ConnectApp` (connect/ConnectController.kt) | `EditorApp` |
+| Desktop size | 800 × 650 dp, `FlatWelcomeFrame`'s default (`MAX_DEFAULT_WIDTH` 800, `DEFAULT_HEIGHT` 650) | 1200 × 800 dp, as before |
+| Title bar | an empty strip, then a 1 dp line in `WelcomeScreen.separatorColor` (`Gateway.divider`) | the main toolbar |
+| Closing it | quits (desktop); ends the session and the app's task (Android) | leaves the session; the backend keeps running |
+
+- **Desktop** (`Main.kt`): one window at a time. The connections window shows while there is no session, the editor
+  window while there is one. One controller holds one session, so the connections window has nothing to do
+  meanwhile.
+- **Android** (`MainActivity`, `EditorActivity`): `MainActivity` starts `EditorActivity` when a session opens, and
+  `EditorActivity` finishes when it ends.
+  - On a phone both are in one task: the editor covers the connect screen, and Back leaves the session.
+  - Under desktop windowing (`isInMultiWindowMode`) the editor starts with `FLAG_ACTIVITY_NEW_TASK |
+    FLAG_ACTIVITY_MULTIPLE_TASK`, so it is a second window. Both stay open; closing the editor's window leaves the
+    session (`onDestroy` while finishing).
+  - The controller, fonts and icons are shared through `IdeateProcess`. A dropped connection is retried while
+    either activity is started.
+- **Checked:**
+  - Desktop: connections window 800 × 650 with the divider; a join link opens only the 1200 × 800 editor window;
+    its close button brings the connections window back.
+  - Phone emulator (Android 14): editor on top in the same task; Back returns; a History tap opens it again.
+  - Tablet emulator (Android 16, desktop windowing): two tasks, two windows; the editor's X leaves the session.
+- **Not checked:** split-screen (also `isInMultiWindowMode`, so the editor also starts as its own task there), and
+  the system recreating `EditorActivity` after the process ended (it goes back to `MainActivity`).
