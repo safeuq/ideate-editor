@@ -38,9 +38,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.key.Key
@@ -78,7 +76,6 @@ import intellijandroid.client.session.Highlight
 import intellijandroid.client.session.IndentGuide
 import intellijandroid.client.session.Lookup
 import intellijandroid.client.session.LookupKey
-import intellijandroid.client.session.TextEffect
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import kotlin.math.ceil
@@ -1048,63 +1045,15 @@ private fun DrawScope.drawEffect(
   val from = maxOf(highlight.start - lineStart, 0)
   val to = minOf(highlight.end - lineStart, lineLength)
   if (to <= from) return
-  val left = x(from)
-  val right = x(to)
-  val baseline = metrics.baseline
-  when (effect) {
-    // IntelliJ's EffectPainter2D: a 2 px period zig-zag 3 to 6 px below the baseline.
-    TextEffect.WAVE_UNDERSCORE -> {
-      val top = baseline + 3.dp.toPx()
-      val bottom = baseline + 5.dp.toPx()
-      val step = 1.dp.toPx()
-      val path =
-        Path().apply {
-          moveTo(left, bottom)
-          var position = left
-          var up = true
-          while (position < right) {
-            position += step
-            lineTo(position.coerceAtMost(right), if (up) top else bottom)
-            up = !up
-          }
-        }
-      drawPath(path, color, style = Stroke(width = 0.7.dp.toPx()))
-    }
-    TextEffect.LINE_UNDERSCORE,
-    TextEffect.BOLD_LINE_UNDERSCORE -> {
-      val y = baseline + 1.5.dp.toPx()
-      drawLine(
-        color,
-        Offset(left, y),
-        Offset(right, y),
-        strokeWidth = (if (effect == TextEffect.BOLD_LINE_UNDERSCORE) 2 else 1).dp.toPx(),
-      )
-    }
-    TextEffect.STRIKEOUT -> {
-      val y = baseline - 3.5.dp.toPx()
-      drawLine(color, Offset(left, y), Offset(right, y), strokeWidth = 1.dp.toPx())
-    }
-    TextEffect.BOXED ->
-      drawRect(
-        color,
-        Offset(left, metrics.caretTop),
-        Size(right - left, metrics.caretHeight),
-        style = Stroke(1.dp.toPx()),
-      )
-    TextEffect.BOLD_DOTTED_LINE -> {
-      val y = baseline + 1.5.dp.toPx()
-      var position = left
-      while (position < right) {
-        drawLine(
-          color,
-          Offset(position, y),
-          Offset(minOf(position + 2.dp.toPx(), right), y),
-          strokeWidth = 2.dp.toPx(),
-        )
-        position += 4.dp.toPx()
-      }
-    }
-  }
+  drawTextEffect(
+    effect,
+    color,
+    x(from),
+    x(to),
+    metrics.baseline,
+    metrics.lineHeight,
+    IslandsDark.EDITOR_FONT_SIZE,
+  )
 }
 
 /**

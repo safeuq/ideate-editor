@@ -732,3 +732,39 @@ window that showed the connect screen and then the IDE screen.
   - Tablet emulator (Android 16, desktop windowing): two tasks, two windows; the editor's X leaves the session.
 - **Not checked:** split-screen (also `isInMultiWindowMode`, so the editor also starts as its own task there), and
   the system recreating `EditorActivity` after the process ended (it goes back to `MainActivity`).
+
+## 20. Text effects in the editor (2026-11-18)
+
+Underlines, waves, strikeouts and boxes are ported from IntelliJ's painter, not approximated: `ui/EditorEffects.kt`
+follows `EffectPainter2D` (IC `platform/platform-api/src/com/intellij/ui/paint`) as `EditorPainter.paintTextEffect`
+calls it, with the default registry values `ide.text.effect.new`, `ide.text.effect.new.metrics` and
+`ide.text.effect.new.scale`, all `true`.
+
+- **Inputs.** The baseline `y`, the room under it (`EditorView.getDescent()`, 5 px for JetBrains Mono 12 at line
+  spacing 1.2), the font's line metrics and the screen scale. JetBrains Mono's tables: `underlinePosition` -155,
+  `underlineThickness` 50, `yStrikeoutPosition` 320, `yStrikeoutSize` 50 of 1000 units per em.
+- **Thickness.** `factor × max(font's underline thickness, fontSize / 13)`, moved onto a whole device pixel
+  (`PaintUtil.alignToInt`): down, except the wave on a HiDPI screen, which goes up. Factors: line 1, bold line 2,
+  dotted 2, wave 3.
+- **Offset under the baseline.** The font's underline offset (1.86 at size 12), on a device pixel the same way, and
+  never so low that the effect leaves the line.
+
+| Effect | JetBrains Mono 12, 2x screen | 1x screen | Before (IDEate) |
+|---|---|---|---|
+| `LINE_UNDERSCORE` | 0.5 thick, 1.5 under the baseline | 1 thick at 1 | 1 thick, centred 1.5 under |
+| `BOLD_LINE_UNDERSCORE` | 1.5 thick at 1.5 | 2 thick at 1 | 2 thick, centred 1.5 under |
+| `BOLD_DOTTED_LINE` | round dots 1.5 wide, every 3, at 1.5 | square dots 2 wide, every 4, at 1 | dashes 2 long, every 4 |
+| `WAVE_UNDERSCORE` | zig-zag from 2 to 4 under the baseline, a step every 2, stroke 0.7 | from 1 to 3, a step every 2 | from 3 to 5, a step every 1 |
+| `STRIKEOUT` | 0.5 thick, 3.5 above the baseline | 1 thick, 3 above | 1 thick, 3.5 above |
+| `BOXED` | 1-unit frame around the whole line height (`drawSimpleBorder`) | the same | frame around the caret's height |
+
+- The wave and the dots start at multiples of their period from the editor's left, so two ranges next to each
+  other join up (IntelliJ tiles one cached image the same way).
+- A wave taller than 4 units (large fonts) is drawn with curves, as in IntelliJ; at the editor's sizes it is the
+  zig-zag.
+- The protocol sends only these six (`IdeaEffectType`); IntelliJ's `ROUNDED_BOX`, `SEARCH_MATCH`,
+  `SLIGHTLY_WIDER_BOX` and `FADED` never arrive.
+- **Checked:** unit tests for the geometry at 1x and 2x (`EditorEffectsTest`); on the desktop (2x) the error,
+  warning and typo waves against IntelliJ's Color Scheme preview. Not seen on screen: strikeout, dotted line and
+  box (the test file showed none).
+- **Not done:** IntelliJ joins a box that spans several lines into one outline; IDEate frames each line's part.
