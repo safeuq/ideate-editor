@@ -53,8 +53,16 @@ across a rotation.
 - **Tool window bars**: the places' buttons in groups, a 1 dp line between groups, ⋯ (windows without a button) at
   the end of the left top group. Empty groups and their lines are left out. Every bar scrolls when its buttons don't
   fit. Icons are IntelliJ's `expui/toolwindows/<name>.svg` at the same size as the main toolbar's, as in IntelliJ:
-  16 in compact mode (buttons 32 in a 40-thick bar), 20 in normal (buttons 40, bar 48). Only Project and Structure
-  open; the rest say they aren't supported.
+  16 in compact mode (buttons 32 in a 40-thick bar), 20 in normal (buttons 40, bar 48). Every window
+  opens. Only Project and Structure have content; the rest show their header and "Tool window not implemented"
+  (2026-11-18, before that a tap only showed "… isn't supported in this client yet").
+  - Hover and press fill the same rounded shape as the selected highlight, as IntelliJ's
+    `SquareStripeButtonLook` does: hover `#FFFFFF17`, pressed `#FFFFFF29` (the selected colour). Before, Compose's
+    default press mark covered the whole square button.
+  - A button's icon can come wrapped: with a badge (`BadgeIconModel`), an overlay (`IconWithOverlayModel`), an
+    indicator, a tint, an offset, a crop or a rotation. IDEate shows the icon inside and leaves the extra out;
+    before, such a button was blank (seen with the xtool project on the phone backend; which wrapper it was
+    isn't confirmed, the phone's log wasn't read).
 - **Header line:** when a tool window covers the editor (phone held upright), a 1 dp line in
   `ToolWindow.Header.borderColor` (`#26282C`) runs under its header.
 - **Tapping an open window's button closes it**, as on IntelliJ's stripes.

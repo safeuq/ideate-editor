@@ -4,6 +4,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -82,12 +85,10 @@ enum class Place(val side: Side, val split: Boolean) {
 
 /**
  * A tool window button: one of the backend's tool windows ([BackendToolWindow]) or Project, which
- * JetBrains Client registers itself. Only Project and Structure work; the others say "not supported
- * yet" when tapped. Two are the same window when their [id]s are.
+ * JetBrains Client registers itself. Every one opens; only Project and Structure have content so
+ * far, the others show "Tool window not implemented". Two are the same window when their [id]s are.
  */
 class ToolWindow(val id: String, val title: String, val icon: String?, val place: Place) {
-  val supported
-    get() = id == PROJECT.id || id == STRUCTURE.id
 
   override fun equals(other: Any?) = other is ToolWindow && other.id == id
 
@@ -412,16 +413,25 @@ private fun StripeButton(
   val top = IslandsDark.stripeHighlightTop
   val start = IslandsDark.stripeHighlightStart
   val end = IslandsDark.stripeHighlightEnd
+  // IntelliJ's SquareStripeButtonLook: the hover and pressed fills take the selected highlight's
+  // place and shape (ActionButton.hoverBackground / pressedBackground), not the whole button.
+  val interaction = remember { MutableInteractionSource() }
+  val hovered by interaction.collectIsHoveredAsState()
+  val pressed by interaction.collectIsPressedAsState()
   Box(
     (if (vertical) Modifier.size(across, along) else Modifier.size(along, across))
-      .clickable(onClick = onClick)
+      .clickable(interaction, indication = null, onClick = onClick)
       .padding(
         if (vertical && mirrored) PaddingValues(start = end, top = top, end = start, bottom = top)
         else if (vertical) PaddingValues(start = start, top = top, end = end, bottom = top)
         else PaddingValues(start = top, top = end, end = top, bottom = start),
       )
       .background(
-        if (selected) IslandsDark.stripeHighlight else Color.Transparent,
+        when {
+          selected || pressed -> IslandsDark.stripeHighlight
+          hovered -> IslandsDark.toolbarHover
+          else -> Color.Transparent
+        },
         RoundedCornerShape(IslandsDark.stripeHighlightRadius),
       ),
     contentAlignment = Alignment.Center,

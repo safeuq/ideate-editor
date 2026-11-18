@@ -161,7 +161,6 @@ fun ClientScreen(
     LocalBackHandler.current(editorCovered) { backToEditor() }
 
     fun barClick(window: ToolWindow) {
-      if (!window.supported) return unsupported(window.title)
       if (layout != ScreenLayout.PORTRAIT) return windows.toggle(window, layout)
       val target = window.place.side.page()
       when {
@@ -471,7 +470,14 @@ private fun ToolWindowContent(
       )
     window == ToolWindow.STRUCTURE ->
       StructureView(state, session, onNavigated, Modifier.fillMaxSize(), scroll)
-    else -> Unit
+    // A tool window IDEate doesn't draw yet: it opens with its header, as any other.
+    else ->
+      Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        BasicText(
+          "Tool window not implemented",
+          style = LocalClientFonts.current.label().copy(color = IslandsDark.textSecondary),
+        )
+      }
   }
 
 /**

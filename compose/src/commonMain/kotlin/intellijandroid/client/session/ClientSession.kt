@@ -21,10 +21,14 @@ import com.jetbrains.rd.framework.Protocol
 import com.jetbrains.rd.framework.RdId
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.ide.model.ActionTimestampSetModel
+import com.jetbrains.rd.ide.model.BadgeIconModel
 import com.jetbrains.rd.ide.model.BasicIdeRootMarshallersProvider
 import com.jetbrains.rd.ide.model.ClipboardContent
 import com.jetbrains.rd.ide.model.ClipboardModel
+import com.jetbrains.rd.ide.model.ColorizedIconModel
 import com.jetbrains.rd.ide.model.CompositionIconModel
+import com.jetbrains.rd.ide.model.CropIconModel
+import com.jetbrains.rd.ide.model.CustomImageIconModel
 import com.jetbrains.rd.ide.model.DeferredIconModel
 import com.jetbrains.rd.ide.model.EmptyIconModel
 import com.jetbrains.rd.ide.model.FailedRequestComposite
@@ -32,9 +36,12 @@ import com.jetbrains.rd.ide.model.FileEditorManagerEventModel
 import com.jetbrains.rd.ide.model.GutterMarkHighlighterModel
 import com.jetbrains.rd.ide.model.HighlighterElement
 import com.jetbrains.rd.ide.model.IconModel
+import com.jetbrains.rd.ide.model.IconWithOverlayModel
 import com.jetbrains.rd.ide.model.ImageIconModel
+import com.jetbrains.rd.ide.model.IndicatorIconModel
 import com.jetbrains.rd.ide.model.MarkupDocumentExtension
 import com.jetbrains.rd.ide.model.MarkupTextControlExtension
+import com.jetbrains.rd.ide.model.OffsetIconModel
 import com.jetbrains.rd.ide.model.OriginKind
 import com.jetbrains.rd.ide.model.ProjectTimestampModel
 import com.jetbrains.rd.ide.model.ProjectViewTimestampModel
@@ -59,6 +66,7 @@ import com.jetbrains.rd.ide.model.RdRetryTimestamp
 import com.jetbrains.rd.ide.model.RdSuccessResponse
 import com.jetbrains.rd.ide.model.RequestCompositeQuery
 import com.jetbrains.rd.ide.model.RequestResponseModel
+import com.jetbrains.rd.ide.model.RotatedIconModel
 import com.jetbrains.rd.ide.model.RowIconModel
 import com.jetbrains.rd.ide.model.Solution
 import com.jetbrains.rd.ide.model.SuccessfulRequestComposite
@@ -1269,6 +1277,16 @@ class ClientSession(
         is DeferredIconModel -> icon.baseIcon?.let(::iconPaths).orEmpty()
         // A blank slot, e.g. the visibility place in a Structure row's icon.
         is EmptyIconModel -> emptyList()
+        // An icon with something on or around it (a badge dot, an overlay, a tint, an offset):
+        // the icon itself, without the extra. E.g. a tool window button with a badge.
+        is BadgeIconModel -> iconPaths(icon.icon)
+        is IconWithOverlayModel -> iconPaths(icon.mainIcon)
+        is IndicatorIconModel -> icon.base?.let(::iconPaths).orEmpty()
+        is ColorizedIconModel -> iconPaths(icon.base)
+        is OffsetIconModel -> iconPaths(icon.icon)
+        is CropIconModel -> iconPaths(icon.base)
+        is RotatedIconModel -> iconPaths(icon.staticNode)
+        is CustomImageIconModel -> iconPaths(icon.model)
         else -> {
           if (unhandledIconTypes.add(icon::class.simpleName.orEmpty()))
             println("Icon type not handled yet: $icon")
