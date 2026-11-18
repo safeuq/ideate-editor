@@ -30,5 +30,6 @@ docs/           all documentation (below)
 | [`ui-components.md`](docs/ui-components.md) | plan: one shared component per IntelliJ widget, laid out like Jewel, styled from Islands Dark theme keys |
 | [`ssh-connections.md`](docs/ssh-connections.md) | plan for the SSH page (Gateway's SSH connections): how Gateway finds IDEs and recent projects on a host, opens a project, and forwards the port |
 | [`local-backends.md`](docs/local-backends.md) | plan for the desktop's This computer page: find installed IDEs (Toolbox, Applications folders), list projects from IDE and backend history, start, stop and reconnect without pasting a link |
+| [`feature-parity-plan.md`](docs/feature-parity-plan.md) | plan for undo/redo, Cmd+Click (go to declaration or usages), Search Everywhere, Find in Files and Find in the editor: how IntelliJ and JetBrains Client do each, the design and the open questions |
 
 Every finding goes into the matching doc in the same commit as the work; a new doc gets a row above.
