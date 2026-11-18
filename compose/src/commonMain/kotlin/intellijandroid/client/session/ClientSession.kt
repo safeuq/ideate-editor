@@ -19,7 +19,9 @@ import com.jetbrains.rd.framework.Identities
 import com.jetbrains.rd.framework.MarshallersProvider
 import com.jetbrains.rd.framework.Protocol
 import com.jetbrains.rd.framework.RdId
+import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.Serializers
+import com.jetbrains.rd.framework.UnsafeBuffer
 import com.jetbrains.rd.ide.model.ActionTimestampSetModel
 import com.jetbrains.rd.ide.model.BadgeIconModel
 import com.jetbrains.rd.ide.model.BasicIdeRootMarshallersProvider
@@ -92,6 +94,7 @@ import intellijandroid.client.connection.SplitWire
 import intellijandroid.client.ui.IconJar
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.Base64
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -639,7 +642,6 @@ class ClientSession(
         ::log,
       )
     fleet = rpc
-    fleetModelListener?.invoke(protocol.fleetRpcModel, lifetime, rdScheduler)
 
     vfs = protocol.vfsModel
     bindClipboard(protocol.clipboardModel)
@@ -669,6 +671,13 @@ class ClientSession(
             log = ::log,
           )
         solutionLifetime.onTermination { completion = null }
+        fleetModelListener?.invoke(
+          protocol.fleetRpcModel,
+          solutionLifetime,
+          rdScheduler,
+          kernelProjectId,
+          dataContextBlob(protocol, newSolution.projectId),
+        )
       }
       newSolution.editorTabsModel
       // The backend lists each open file's editor here; the client marks the one it shows as
@@ -1305,11 +1314,31 @@ class ClientSession(
  * resource lists).
  */
 /**
- * Debug hook: called with the Fleet RPC model once a session's protocol is up, so the desktop can
- * run JetBrains' own RPC client and Rhizome database over it next to [FleetRpc]
- * (docs/feature-parity-plan.md, section 5, the spike).
+ * Debug hook: called with the Fleet RPC model once a project is open, so the desktop can run
+ * JetBrains' own RPC client and Rhizome database over it next to [FleetRpc]
+ * (docs/feature-parity-plan.md, section 5, the spike). Also gets the project's kernel id, e.g.
+ * `m3nniruk9k7j4qsibjui`, and [dataContextBlob].
  */
-var fleetModelListener: ((FleetRpcModel, Lifetime, IScheduler) -> Unit)? = null
+var fleetModelListener:
+  ((FleetRpcModel, Lifetime, IScheduler, kernelProjectId: String, dataContext: String) -> Unit)? =
+  null
+
+/**
+ * A data context naming only the project, as a Fleet RPC `DataContextId` carries it: JetBrains
+ * Client's `FrontendDataContextRpcSerializer` writes an [ActionTimestampSetModel] with rd's
+ * marshaller and sends the bytes as base64, e.g. `AQAAAA…`.
+ */
+private fun dataContextBlob(protocol: IProtocol, projectId: RdProjectId): String {
+  val buffer = UnsafeBuffer(ByteArray(64))
+  // A context without the connection's intern table: through it the project id would go out as
+  // a number only this connection knows (`02000000`), not as text.
+  ActionTimestampSetModel.write(
+    SerializationCtx(protocol.serializers, protocol.identity),
+    buffer,
+    ActionTimestampSetModel(listOf(ProjectTimestampModel(projectId))),
+  )
+  return Base64.getEncoder().encodeToString(buffer.getArray().copyOf(buffer.position))
+}
 
 private object ProtocolMarshallers : MarshallersProvider {
   override fun getMarshaller(id: RdId): IMarshaller<*>? =

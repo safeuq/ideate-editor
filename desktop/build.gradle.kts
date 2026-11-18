@@ -45,6 +45,7 @@ dependencies {
   // sets coroutines-core: 1.11, which JetBrains' Fleet jars are built against (1.9 lacks
   // SendChannel.close's default-argument bridge they call).
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0")
+  implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
   // Pixel tests of the Lux painter need Skia, which only this module has.
   testImplementation(kotlin("test"))
 }

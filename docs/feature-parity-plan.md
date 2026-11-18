@@ -489,7 +489,7 @@ withKernel(middleware) {                                   // withTransactor { w
    | 1. JetBrains' `rpcClient` over `FleetRpcModel`, next to IDEate's own `FleetRpc` | works. Each client has its own origin id and takes only envelopes addressed to it. Route `fleet`, instance id = the API's name (`fleet.kernel.rebase.RemoteKernel`). `subscribeWithChunkedSnapshot(null)` answered with a vector clock and the snapshot |
    | 2. Local database following the backend's | works, set up as IntelliJ's `startClientKernel`: `withTransactor(FollowerTransactorMiddleware(DefaultInstructionSet.encoder()), defaultPart = FrontendPart)`, `withRete`, `withRebaseLoop(…, DefaultInstructionSet, …)`. 30 entities after the snapshot (bookkeeping types only on a fresh backend) |
    | 3a. Create a `SeSessionEntity` | works locally, no rejection from the backend. IDEate declares the type itself (`SearchSessionEntity`): a type is known by its name, and the module is always `<unknown>`; a reference travels as `{"uid": "…"}` |
-   | 3b. `SeRemoteApi.getItems` with that session | not done: needs the call with an outgoing stream argument, and the client's vector clock in the call's meta so the backend waits for the session (`ClientCausalityRequestInterceptor`) |
+   | 3b. `SeRemoteApi.getItems` with that session | works: the Files tab for `Main` returned one item, `Main.java` in `src/demo` (`presentableText`, `containerText`, `locationText` "smoke", `iconId`, matched ranges), then `SeTransferEnd`. Details below |
 
    What it took:
    - Fleet's logging finds its factory through Java's service loader and fails without one:
@@ -500,6 +500,24 @@ withKernel(middleware) {                                   // withTransactor { w
      `fleet.util.core`, `.serialization`, `.logging.api`, `.codepoints`, `fleet.multiplatform.shims`,
      `fleet.reporting.api`, `.shared`, `fleet.bifurcan`, `fleet.fastutil`, `fleet.openmap`, `fleet.radixTrie`,
      `intellij.libraries.kotlinx.collections.immutable`.
+   - The call (3b), as JSON through JetBrains' RPC client, with no IntelliJ platform jars:
+     - `SearchApi` and its descriptor are written by hand (JetBrains' RPC compiler plugin generates them for
+       IntelliJ). Every argument and the item stream are `JsonElement`; `requestedCountChannel` is a
+       `ReceiveChannel<Int>` that IDEate sends 50 on.
+     - Arguments: `projectId` `{"id": "<kernel project id>"}`; `session`
+       `{"type": "com.intellij.platform.searchEverywhere.SeSessionImpl", "ref": {"uid": "lu5lflrsb7pt7o8n5kgf"}}`;
+       `providerIds` `[{"value": "FileSearchEverywhereContributor"}]`; `params`
+       `{"inputQuery": "Main", "filter": {"type": "com.intellij.platform.searchEverywhere.SeFilterState.Empty"}}`.
+     - The database position: JetBrains Client's `ClientCausalityRequestInterceptor` (decompiled,
+       `intellij.platform.kernel.base.frontend.split.jar`) puts `db().clientClock.compressed()` in the call's meta
+       under `CompressedVectorClock`. IDEate's copy leaves it off `RemoteKernel`'s own calls: on `transact` the
+       backend waited for the very changes the call carried ("Timed out waiting for clock … sentTxs=1").
+     - `dataContextId` is required: with `null` the backend logs "Cannot create providers on the backend: no
+       serialized data context" and answers nothing. It is `{"serializedValue": "<base64>"}`, the bytes of an
+       rd `ActionTimestampSetModel`, as JetBrains Client's `FrontendDataContextRpcSerializer` writes it. The spike
+       sends only `ProjectTimestampModel(projectId)`. It must be written with a serialization context without
+       the connection's intern table, or the project id goes out as a number (`02000000`) and the backend fails
+       with "Expected 4 bytes in buffer, only 0 available".
    - `ChangeDocument` (IntelliJ's `CommonInstructionSet` adds it to `DefaultInstructionSet`) is left out: it is in
      IntelliJ's platform jars. Not needed so far; a backend transaction using it would stop the rebase loop.
 2. Popup with the Files tab end to end, including opening the result.
@@ -509,13 +527,14 @@ withKernel(middleware) {                                   // withTransactor { w
 
 ### Unknown
 
-- **[Open]** Whether JetBrains' Fleet jars run outside IntelliJ: they are built against JetBrains' coroutines
+- **[Answered 2026-11-18, desktop]** Whether JetBrains' Fleet jars run outside IntelliJ: they are built against JetBrains' coroutines
   fork and may reach for platform classes (logging, tracing). Step 1.
-- **[Open]** Whether two RPC clients (IDEate's hand-written `FleetRpc` and JetBrains') can share one
+- **[Answered 2026-11-18: they can]** Whether two RPC clients (IDEate's hand-written `FleetRpc` and JetBrains') can share one
   `FleetRpcModel`, or completion and Structure must move onto JetBrains' client first. Step 1.
 - **[Open]** Android: the jars' size and whether they run on ART.
-- **[Open]** `dataContextId`: JetBrains Client registers its data context and sends an id. Whether `null` or
-  the editor's context from rd is enough for `getAvailableProviderIds`. Step 1.
+- **[Answered 2026-11-18]** `dataContextId`: `null` gets no results; a data context naming only the project is
+  enough for the Files tab (spike part 3b). The editor's context (`EditSession.actionTimestamps()`) is the next
+  thing to send, for tabs that look at the current file.
 - **[Open]** If the spike fails: the fallback is the backend's own Search Everywhere popup over Lux, which
   would look like IntelliJ but not feel native (no soft-keyboard hints, scaled on a phone).
 
