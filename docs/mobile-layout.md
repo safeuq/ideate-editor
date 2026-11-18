@@ -61,8 +61,12 @@ across a rotation.
     default press mark covered the whole square button.
   - A button's icon can come wrapped: with a badge (`BadgeIconModel`), an overlay (`IconWithOverlayModel`), an
     indicator, a tint, an offset, a crop or a rotation. IDEate shows the icon inside and leaves the extra out;
-    before, such a button was blank (seen with the xtool project on the phone backend; which wrapper it was
-    isn't confirmed, the phone's log wasn't read).
+    before, such an icon was blank.
+  - The backend can also set a window's icon to null after naming it. With xtool on the phone backend
+    (2026-11-18 15:19 IST) Structure, Problems View, Bookmarks, Database Changes and Pull Requests each got
+    `ImageIconModel(path = "expui/toolwindows/structure.svg", …)` and 0.2 s later `null`; their bar buttons
+    were blank. IDEate keeps the last icon named (`BackendToolWindows`). Why the backend clears them, and only
+    there (the Mac backend with the smoke project doesn't), isn't known.
 - **Header line:** when a tool window covers the editor (phone held upright), a 1 dp line in
   `ToolWindow.Header.borderColor` (`#26282C`) runs under its header.
 - **Tapping an open window's button closes it**, as on IntelliJ's stripes.
