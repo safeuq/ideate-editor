@@ -23,6 +23,7 @@ import intellijandroid.client.desktop.ComponentGallery
 import intellijandroid.client.desktop.DesktopOpenSshFiles
 import intellijandroid.client.desktop.DesktopResources
 import intellijandroid.client.desktop.FileSecretStore
+import intellijandroid.client.desktop.KernelSpike
 import intellijandroid.client.desktop.Snapshots
 import intellijandroid.client.desktop.rememberMacTitleBar
 import intellijandroid.client.session.OpenEditors
@@ -78,7 +79,12 @@ fun main(arguments: Array<String>) {
     exitProcess(0)
   }
 
+  // Spike: JetBrains' Rhizome database client next to IDEate's (desktop/KernelSpike.kt).
+  if (System.getenv("CLIENT_KERNEL_SPIKE") != null)
+    intellijandroid.client.session.fleetModelListener = KernelSpike::start
+
   val dataFolder = File(System.getProperty("user.home"), ".ideate")
+
   if (dataFolder.mkdirs()) {
     // The history holds client private keys. Windows has no POSIX permissions; the user's home
     // folder protects it there.

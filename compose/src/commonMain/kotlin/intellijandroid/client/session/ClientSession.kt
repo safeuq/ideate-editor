@@ -33,6 +33,7 @@ import com.jetbrains.rd.ide.model.DeferredIconModel
 import com.jetbrains.rd.ide.model.EmptyIconModel
 import com.jetbrains.rd.ide.model.FailedRequestComposite
 import com.jetbrains.rd.ide.model.FileEditorManagerEventModel
+import com.jetbrains.rd.ide.model.FleetRpcModel
 import com.jetbrains.rd.ide.model.GutterMarkHighlighterModel
 import com.jetbrains.rd.ide.model.HighlighterElement
 import com.jetbrains.rd.ide.model.IconModel
@@ -638,6 +639,7 @@ class ClientSession(
         ::log,
       )
     fleet = rpc
+    fleetModelListener?.invoke(protocol.fleetRpcModel, lifetime, rdScheduler)
 
     vfs = protocol.vfsModel
     bindClipboard(protocol.clipboardModel)
@@ -1302,6 +1304,13 @@ class ClientSession(
  * The client's marshallers: the IDE root models, then the split-mode models (both resolve ids from
  * resource lists).
  */
+/**
+ * Debug hook: called with the Fleet RPC model once a session's protocol is up, so the desktop can
+ * run JetBrains' own RPC client and Rhizome database over it next to [FleetRpc]
+ * (docs/feature-parity-plan.md, section 5, the spike).
+ */
+var fleetModelListener: ((FleetRpcModel, Lifetime, IScheduler) -> Unit)? = null
+
 private object ProtocolMarshallers : MarshallersProvider {
   override fun getMarshaller(id: RdId): IMarshaller<*>? =
     BasicIdeRootMarshallersProvider.getMarshaller(id)

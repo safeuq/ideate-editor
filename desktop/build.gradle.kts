@@ -15,10 +15,36 @@ dependencies {
   // JetBrains Runtime's API (com.jetbrains.JBR): the macOS title bar (MacTitleBar.kt). The same jar
   // IntelliJ ships; it calls into the runtime and reports "not supported" on other Java runtimes.
   implementation(files("$jetbrainsClientLib/intellij.libraries.jbr.jar"))
+  // JetBrains' Fleet RPC client and Rhizome database, from the same install (the kernel spike,
+  // docs/feature-parity-plan.md section 5).
+  implementation(
+    files(
+      listOf(
+          "fleet.rpc.jar",
+          "fleet.rhizomedb.jar",
+          "fleet.rhizomedb.transactor.jar",
+          "fleet.rhizomedb.transactor.rebase.jar",
+          "fleet.util.core.jar",
+          "fleet.util.serialization.jar",
+          "fleet.util.logging.api.jar",
+          "fleet.util.codepoints.jar",
+          "fleet.multiplatform.shims.jar",
+          "fleet.reporting.api.jar",
+          "fleet.reporting.shared.jar",
+          "fleet.bifurcan.jar",
+          "fleet.fastutil.jar",
+          "fleet.openmap.jar",
+          "fleet.radixTrie.jar",
+          "intellij.libraries.kotlinx.collections.immutable.jar",
+        )
+        .map { "$jetbrainsClientLib/$it" },
+    ),
+  )
   implementation(compose.desktop.currentOs)
-  // Dispatchers.Main on the desktop (ConnectController); Compose Desktop doesn't bring it. Same
-  // version as coroutines-core.
-  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
+  // Dispatchers.Main on the desktop (ConnectController); Compose Desktop doesn't bring it. It also
+  // sets coroutines-core: 1.11, which JetBrains' Fleet jars are built against (1.9 lacks
+  // SendChannel.close's default-argument bridge they call).
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0")
   // Pixel tests of the Lux painter need Skia, which only this module has.
   testImplementation(kotlin("test"))
 }

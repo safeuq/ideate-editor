@@ -480,6 +480,28 @@ withKernel(middleware) {                                   // withTransactor { w
    3. Create a `SeSessionEntity`, call `getItems` for the Files tab. Done when `Main` returns `Main.java` on
       the Mac backend.
    Then the same on Android (the jars need the ART patching the rd jars get).
+
+   **Spike results, 2026-11-18, desktop against the Mac backend** (`desktop/…/KernelSpike.kt`, run with
+   `CLIENT_KERNEL_SPIKE=1`; `ClientSession.fleetModelListener` hands it the rd `FleetRpcModel`):
+
+   | Part | Result |
+   |---|---|
+   | 1. JetBrains' `rpcClient` over `FleetRpcModel`, next to IDEate's own `FleetRpc` | works. Each client has its own origin id and takes only envelopes addressed to it. Route `fleet`, instance id = the API's name (`fleet.kernel.rebase.RemoteKernel`). `subscribeWithChunkedSnapshot(null)` answered with a vector clock and the snapshot |
+   | 2. Local database following the backend's | works, set up as IntelliJ's `startClientKernel`: `withTransactor(FollowerTransactorMiddleware(DefaultInstructionSet.encoder()), defaultPart = FrontendPart)`, `withRete`, `withRebaseLoop(…, DefaultInstructionSet, …)`. 30 entities after the snapshot (bookkeeping types only on a fresh backend) |
+   | 3a. Create a `SeSessionEntity` | works locally, no rejection from the backend. IDEate declares the type itself (`SearchSessionEntity`): a type is known by its name, and the module is always `<unknown>`; a reference travels as `{"uid": "…"}` |
+   | 3b. `SeRemoteApi.getItems` with that session | not done: needs the call with an outgoing stream argument, and the client's vector clock in the call's meta so the backend waits for the session (`ClientCausalityRequestInterceptor`) |
+
+   What it took:
+   - Fleet's logging finds its factory through Java's service loader and fails without one:
+     `FleetLoggerFactory`, registered in `META-INF/services/fleet.util.logging.KLoggerFactory`.
+   - kotlinx-coroutines 1.11 (the jars call `SendChannel.close`'s default-argument bridge, missing in 1.9). The
+     desktop moved to 1.11.0 through `kotlinx-coroutines-swing`. None of the jars use JetBrains' coroutines fork.
+   - The jars, from JetBrains Client's `lib`: `fleet.rpc`, `fleet.rhizomedb`, `.transactor`, `.transactor.rebase`,
+     `fleet.util.core`, `.serialization`, `.logging.api`, `.codepoints`, `fleet.multiplatform.shims`,
+     `fleet.reporting.api`, `.shared`, `fleet.bifurcan`, `fleet.fastutil`, `fleet.openmap`, `fleet.radixTrie`,
+     `intellij.libraries.kotlinx.collections.immutable`.
+   - `ChangeDocument` (IntelliJ's `CommonInstructionSet` adds it to `DefaultInstructionSet`) is left out: it is in
+     IntelliJ's platform jars. Not needed so far; a backend transaction using it would stop the rebase loop.
 2. Popup with the Files tab end to end, including opening the result.
 3. Classes, Symbols, All (merging, groups, "more").
 4. Actions (running one is `itemSelected`; results that open dialogs come over Lux).
