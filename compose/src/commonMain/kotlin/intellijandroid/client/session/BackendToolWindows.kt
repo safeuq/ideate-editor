@@ -67,7 +67,8 @@ internal class BackendToolWindows(
       toolWindow.title.icon.advise(windowLifetime) { icon ->
         // The backend can take the icon away again: on the phone backend (xtool) Structure,
         // Problems View, Bookmarks, Database Changes and Pull Requests got their icon, e.g.
-        // `expui/toolwindows/structure.svg`, and 0.2 s later null. The button keeps the last one.
+        // `expui/toolwindows/structure.svg`, and 0.2 s later null. The button keeps the last one,
+        // as JetBrains Client does (docs/mobile-layout.md has the backend's reason).
         icon?.let(this@BackendToolWindows.iconPath)?.let { path ->
           update { copy(iconPath = path) }
         }
