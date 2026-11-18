@@ -85,6 +85,28 @@ starts with a spike.
 4. Toolbar ⋮ menu entries.
 5. Device test: type, paste, complete, then undo and redo each; undo across a reconnect.
 
+### Done (2026-11-18)
+
+Steps 1 to 4 are built.
+
+- **Keys:** `EditorView.onKey` uses ⌘ on a Mac and Ctrl elsewhere for Z and Shift+Z.
+- **Enabled state:** the backend tells its stack sizes only in the answer to an undo or redo
+  (`RdStackSizeItem`), so they are unknown until the first one, and a later text edit isn't counted in them.
+  `EditSession.canUndo` / `canRedo` (`undoAvailable`, `redoAvailable`):
+
+  | What is known | Undo | Redo |
+  |---|---|---|
+  | nothing yet (no undo done in this session) | enabled: the backend may hold history | greyed |
+  | sizes known, undo stack 0, nothing typed since | greyed | enabled when the redo stack isn't 0 |
+  | sizes known, text typed since | enabled | greyed: typing empties the backend's redo stack |
+
+- **Touch:** the main toolbar's ⋮ opens a menu with Undo and Redo (IntelliJ's icons and shortcut texts). Android's
+  `android.R.id.undo` / `redo` input actions call the same.
+- **Checked** on the emulator against the Mac backend: typed `hello`, Undo from the menu removed it; the menu
+  then showed Undo greyed and Redo enabled; Redo brought it back; hardware Ctrl+Z removed it again.
+- **Not checked:** Android's undo/redo input actions (Gboard shows no such button by default), and step 5's
+  paste, completion and reconnect cases.
+
 ### Unknown
 
 - **[Open]** The action's name ("Undo Typing"). The backend's answer names the command (`::Undo #Typing`), but

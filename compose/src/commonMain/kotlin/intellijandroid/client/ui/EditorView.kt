@@ -455,6 +455,10 @@ fun EditorView(
 
       override fun selectAll() = actions.moveCaret(currentFile.text.length, 0)
 
+      override fun undo() = actions.undo()
+
+      override fun redo() = actions.redo()
+
       override fun textBeforeCaret(count: Int): String {
         val caretNow = currentFile.caret
         return currentFile.text.substring(maxOf(0, caretNow - count), caretNow)
@@ -531,7 +535,8 @@ fun EditorView(
           cut()
           return true
         }
-        meta && key == Key.Z -> {
+        // IntelliJ's $Undo and $Redo: ⌘Z and ⇧⌘Z on a Mac, Ctrl+Z and Ctrl+Shift+Z elsewhere.
+        (if (IS_MAC) meta else event.isCtrlPressed) && key == Key.Z -> {
           if (shift) actions.redo() else actions.undo()
           return true
         }

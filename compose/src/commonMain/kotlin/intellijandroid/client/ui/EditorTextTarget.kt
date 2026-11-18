@@ -28,6 +28,11 @@ interface EditorTextTarget {
   /** The whole document selected, caret at its end. */
   fun selectAll()
 
+  /** The keyboard's Undo and Redo: the backend's, as ⌘Z / Ctrl+Z. */
+  fun undo() = Unit
+
+  fun redo() = Unit
+
   /** Up to [count] characters before the caret, for the keyboard's capitalisation and Backspace. */
   fun textBeforeCaret(count: Int): String
 

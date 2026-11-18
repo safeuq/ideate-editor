@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -91,6 +92,8 @@ fun MainToolbar(
   islandsStart: Dp = IslandsDark.islandGap,
   /** Phone upright, away from the editor: the button back to it, at the row's right end. */
   back: ToolbarBack? = null,
+  /** What the ⋮ button opens, e.g. Undo and Redo; without entries it says "not supported". */
+  moreActions: List<MenuEntry> = emptyList(),
 ) {
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
@@ -169,7 +172,6 @@ fun MainToolbar(
             "expui/build/build.svg" to "Build",
             "expui/run/run.svg" to "Run",
             "expui/run/debug.svg" to "Debug",
-            "expui/general/moreVertical.svg" to "More actions",
           )
           .forEach { (path, label) ->
             IconButton(
@@ -180,6 +182,21 @@ fun MainToolbar(
               iconSize = IslandsDark.toolbarIcon,
             )
           }
+        var moreShown by remember { mutableStateOf(false) }
+        Box {
+          IconButton(
+            "expui/general/moreVertical.svg",
+            "More actions",
+            onClick = {
+              if (moreActions.isEmpty()) onUnsupported("More actions") else moreShown = true
+            },
+            size = IslandsDark.toolbarButton,
+            iconSize = IslandsDark.toolbarIcon,
+            selected = moreShown,
+          )
+          if (moreShown)
+            DropDownMenu(moreActions, beside = false, onDismiss = { moreShown = false })
+        }
       }
       // A divider, then the way back to the editor; the run controls move left to make room.
       back?.let { target ->

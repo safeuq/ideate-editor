@@ -147,7 +147,10 @@ private class EditorInputConnection(view: View, private val target: () -> Editor
     return true
   }
 
-  /** The keyboard's Paste, Copy, Cut and Select all buttons (Gboard's Text Editing panel). */
+  /**
+   * The keyboard's Paste, Copy, Cut, Select all, Undo and Redo buttons (Gboard's Text Editing
+   * panel).
+   */
   override fun performContextMenuAction(id: Int): Boolean =
     when (id) {
       android.R.id.paste -> {
@@ -164,6 +167,14 @@ private class EditorInputConnection(view: View, private val target: () -> Editor
       }
       android.R.id.selectAll -> {
         target().selectAll()
+        true
+      }
+      android.R.id.undo -> {
+        target().undo()
+        true
+      }
+      android.R.id.redo -> {
+        target().redo()
         true
       }
       else -> false

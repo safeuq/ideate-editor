@@ -1119,6 +1119,8 @@ class ClientSession(
         selectionEnd = session?.selectionEnd ?: 0,
         editable = session != null,
         caretRestored = caretsRestored[pathOf(documentId)] ?: 0,
+        canUndo = session?.canUndo == true,
+        canRedo = session?.canRedo == true,
       )
     // Debug aid: CLIENT_HIGHLIGHT_DUMP=<file> writes every highlight with its keys and covered
     // text.

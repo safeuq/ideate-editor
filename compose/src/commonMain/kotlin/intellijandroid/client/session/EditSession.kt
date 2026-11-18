@@ -222,6 +222,25 @@ class EditSession(
   private var editorVersion = RdEditorVersion(-1, 0, -1)
   private var undoSizes = listOf(0, 0)
   private var redoSizes = listOf(0, 0)
+
+  /**
+   * What is known about the backend's undo stacks. The backend tells their sizes only after an undo
+   * or redo (`RdStackSizeItem`), so until the first one they are unknown, and a text edit made
+   * since the last one isn't counted in them.
+   */
+  private var undoSizesKnown = false
+  private var editedSinceUndoSizes = false
+
+  /** Undo may do something: unknown counts as yes (the backend may hold older history). */
+  val canUndo
+    get() =
+      canEdit() && undoAvailable(undoSizesKnown, editedSinceUndoSizes, undoSizes.any { it > 0 })
+
+  /** Redo is known to have something: only right after an undo, before the next edit. */
+  val canRedo
+    get() =
+      canEdit() && redoAvailable(undoSizesKnown, editedSinceUndoSizes, redoSizes.any { it > 0 })
+
   private val pending = ArrayDeque<Pending>()
   /** The action running now, for the requests it sends. */
   private var currentAction: Action? = null
@@ -822,6 +841,8 @@ class EditSession(
   }
 
   private fun submit(request: RdRequest, patch: RdPatch, before: Snapshot, edit: TextEdit?) {
+    // A text change is a new undo step on the backend, and it empties the redo stack.
+    if (edit != null) editedSinceUndoSizes = true
     val again = replayed?.removeFirstOrNull()
     if (again != null) {
       again.request = request
@@ -957,7 +978,9 @@ class EditSession(
                 caretHash(),
               )
         }
-      is RdStackSizeItem ->
+      is RdStackSizeItem -> {
+        undoSizesKnown = true
+        editedSinceUndoSizes = false
         if (item.fileId == null) {
           undoSizes = listOf(item.undoSize, undoSizes[1])
           redoSizes = listOf(item.redoSize, redoSizes[1])
@@ -965,6 +988,7 @@ class EditSession(
           undoSizes = listOf(undoSizes[0], item.undoSize)
           redoSizes = listOf(redoSizes[0], item.redoSize)
         }
+      }
       else -> Unit
     }
   }
@@ -1094,3 +1118,14 @@ class EditSession(
     )
   }
 }
+
+/**
+ * Whether Undo may do something. Examples: nothing known yet → true; sizes known and all 0 → false;
+ * sizes 0 but typed since → true.
+ */
+internal fun undoAvailable(sizesKnown: Boolean, editedSince: Boolean, anyUndo: Boolean) =
+  !sizesKnown || editedSince || anyUndo
+
+/** Whether Redo has something: the sizes are known, say so, and nothing was typed since. */
+internal fun redoAvailable(sizesKnown: Boolean, editedSince: Boolean, anyRedo: Boolean) =
+  sizesKnown && !editedSince && anyRedo

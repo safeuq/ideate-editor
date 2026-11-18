@@ -102,6 +102,10 @@ data class EditorFile(
   val editable: Boolean = false,
   /** Bumped when the caret was put back where it was last time; the view scrolls to it then. */
   val caretRestored: Int = 0,
+  /** Undo may do something (true while the backend's undo stack is unknown). */
+  val canUndo: Boolean = false,
+  /** Redo has something: right after an undo, until the next edit. */
+  val canRedo: Boolean = false,
 ) {
   val name: String
     get() = path.substringAfterLast('/')
