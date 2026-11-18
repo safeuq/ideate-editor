@@ -74,14 +74,16 @@ private fun ToolbarDropdown(
 
 /**
  * IntelliJ's main toolbar, reduced: the project widget on the left; the run widget, Build, Run,
- * Debug and More on the right. Only the project name is live; the rest reports "not supported yet"
- * through [onUnsupported].
+ * Debug and More, then Search Everywhere, on the right. Only the project name is live; the rest
+ * reports "not supported yet" through [onUnsupported].
  */
 @Composable
 fun MainToolbar(
   projectName: String?,
   onUnsupported: (String) -> Unit,
   modifier: Modifier = Modifier,
+  /** Opens Search Everywhere: the magnifier at the right end, as in IntelliJ's new UI. */
+  onSearch: (() -> Unit)? = null,
   /** The project widget's icon centre in the window, in px: where the project gradient peaks. */
   onProjectIconCenter: (Float) -> Unit = {},
   /**
@@ -181,6 +183,16 @@ fun MainToolbar(
               iconSize = IslandsDark.toolbarIcon,
             )
           }
+      }
+      onSearch?.let { search ->
+        IconButton(
+          "expui/general/search.svg",
+          "Search Everywhere",
+          onClick = search,
+          modifier = control.padding(start = 6.dp),
+          size = IslandsDark.toolbarButton,
+          iconSize = IslandsDark.toolbarIcon,
+        )
       }
       // A divider, then the way back to the editor; the run controls move left to make room.
       back?.let { target ->

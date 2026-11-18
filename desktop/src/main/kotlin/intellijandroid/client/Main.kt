@@ -78,11 +78,6 @@ fun main(arguments: Array<String>) {
     exitProcess(0)
   }
 
-  // Spike: JetBrains' Rhizome database client next to IDEate's (compose/…/kernel/KernelSpike.kt).
-  if (System.getenv("CLIENT_KERNEL_SPIKE") != null)
-    intellijandroid.client.session.fleetModelListener =
-      intellijandroid.client.kernel.KernelSpike::start
-
   val dataFolder = File(System.getProperty("user.home"), ".ideate")
 
   if (dataFolder.mkdirs()) {

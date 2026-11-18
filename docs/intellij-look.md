@@ -768,3 +768,24 @@ calls it, with the default registry values `ide.text.effect.new`, `ide.text.effe
   warning and typo waves against IntelliJ's Color Scheme preview. Not seen on screen: strikeout, dotted line and
   box (the test file showed none).
 - **Not done:** IntelliJ joins a box that spans several lines into one outline; IDEate frames each line's part.
+
+## 21. Search Everywhere popup (2026-11-19)
+
+IntelliJ's sources (`platform/searchEverywhere/frontend/src/ui`, `JBUI.CurrentTheme.BigPopup`, `Popup.Selection`)
+and ManyIslandsDark.theme.json; not measured on the real client (its popup is a window of its own that the
+automation used here cannot capture).
+
+| Part | Value | Source |
+|---|---|---|
+| Width | 700, less 8 on each side when the window is narrower | registry `search.everywhere.new.minimum.width` |
+| Place | centred; top at a quarter of the window's height less half the popup's, not above the main toolbar; fixed once shown, so it grows downward | `SeFrontendService.calcPopupPositionAndShow` |
+| Frame | `Popup.background` `#26282C`, 1 px `#33353B`, radius 8 | `PopupContainer` |
+| Header | insets 2, 4, 0, 9; tabs 24 high, 12 each side; the selected one filled `#233558` with white text, radius 4 | `SearchEverywhere.Header.insets`, `BigPopup.tabInsets`, `SearchEverywhere.Tab.*` |
+| Field | IDEate's `SearchTextField` undecorated, 12 each side | `ComplexPopup.TextField.borderInsets` |
+| Separators | 1 px `#33353B` under the tabs and under the field | `customLineBottom` |
+| Rows | 24 high (22 compact); selection band 8 in from the sides, radius 4, `#2A4371`; then 8 inside | `List.rowHeight`, `Popup.Selection.leftRightInset`, `innerInsets` |
+| Row | icon 16, gap 6, name, gap 6, folder in `#73767C`; project name and its icon at the right end | `SeTargetItemPresentationRenderer` |
+| Match | only on the selected row: the matched ranges on `#BA9752` in black | `SearchMatch.startBackground` = `search-match-bg` |
+| List | at most 600 high, and at most 60% of the window | `BigPopup.maxListHeight` |
+| Nothing found | "Nothing found." in `#73767C` | `SeEmptyResultInfo` |
+

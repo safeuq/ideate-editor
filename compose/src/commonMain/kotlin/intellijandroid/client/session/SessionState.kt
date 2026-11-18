@@ -183,6 +183,10 @@ data class SessionState(
   val lookup: Lookup? = null,
   /** IntelliJ's Show Usages popup, if one is open (⌘B or ⌘-click on a declaration). */
   val usages: UsagesPopup? = null,
+  /** The open Search Everywhere popup. */
+  val search: SearchPopup? = null,
+  /** Search Everywhere can be opened: the project has a kernel id (SearchEverywhere.kt). */
+  val searchAvailable: Boolean = false,
   /** The Structure tool window's tree, for the file the backend sees as selected. */
   val structure: StructureTree = StructureTree(),
   /** The open context menu built by the backend (ActionMenus). */

@@ -528,8 +528,8 @@ withKernel(middleware) {                                   // withTransactor { w
       the Mac backend.
    Then the same on Android (the jars need the ART patching the rd jars get).
 
-   **Spike results, 2026-11-18, desktop against the Mac backend** (`compose/…/kernel/KernelSpike.kt`, run with
-   `CLIENT_KERNEL_SPIKE=1`; `ClientSession.fleetModelListener` hands it the rd `FleetRpcModel`):
+   **Spike results, 2026-11-18, desktop against the Mac backend** (then `KernelSpike.kt` behind
+   `CLIENT_KERNEL_SPIKE=1`; since step 2 it is `compose/…/kernel/SearchKernel.kt`, always on):
 
    | Part | Result |
    |---|---|
@@ -567,8 +567,29 @@ withKernel(middleware) {                                   // withTransactor { w
        with "Expected 4 bytes in buffer, only 0 available".
    - `ChangeDocument` (IntelliJ's `CommonInstructionSet` adds it to `DefaultInstructionSet`) is left out: it is in
      IntelliJ's platform jars. Not needed so far; a backend transaction using it would stop the rebase loop.
-2. Popup with the Files tab end to end, including opening the result.
-3. Classes, Symbols, All (merging, groups, "more").
+2. Popup with the Files tab end to end, including opening the result. **Done 2026-11-19**, with Classes and Symbols
+   (they use the same row kind):
+   - `kernel/SearchKernel.kt` is the spike made permanent: it starts with every project that has a kernel id
+     (no switch any more), creates the session with the popup's first search and deletes it when the popup
+     closes, as `SeFrontendService` does. `getItems` asks for 50 items and 50 more each time those arrived
+     (`SeFrontendItemDataProvidersFacade`); `itemSelected(…, modifiers = 0, searchText, isAllTab = false)` opens
+     the item, and its answer says whether the popup closes.
+   - `session/SearchEverywhere.kt`: one search per query (the last one is cancelled), rows sorted by
+     `SeComposedWeight` (key by key in `order`, then `id`; a missing component counts as its key's default),
+     `uuidsToReplace` removes the rows an item replaces. An empty query shows nothing (IntelliJ's Files tab shows
+     recent files there).
+   - `ui/SearchEverywherePopup.kt`: see intellij-look.md section 21. Opened by the magnifier at the right end of
+     the main toolbar, double ⇧ (`ModifierKeyDoubleClickHandler`'s timing: four Shift events, each within 300 ms
+     of the one before, no other key between), and ⌘O / ⇧⌘O / ⌥⌘O (Ctrl+N, Ctrl+Shift+N, Ctrl+Alt+Shift+N) for
+     Classes, Files and Symbols. All, Actions and Text say "not supported yet".
+   - Checked on the desktop and the Pixel 3a emulator: "Main" → `Main.java` (Files), `Main` (Classes), `Main` and
+     `main(String[])` (Symbols); Enter or a tap on `.gitignore` opened it and closed the popup; Escape closes.
+   - Not confirmed: double ⇧. The automation tool's lone Shift press does not arrive as a key event, so it is
+     covered by `DoubleShiftTest` only.
+   - **Known gap**: choosing a symbol in the file already open leaves the caret where it was. The backend sends
+     nothing the client listens to: no edit patch (checked with `CLIENT_EDIT_DEBUG`), no
+     `TextControlModel.requestFocusFromBackend`, no `scrolling`. Choosing something in another file opens it.
+3. All (merging, groups, "more").
 4. Actions (running one is `itemSelected`; results that open dialogs come over Lux).
 5. Filters, then the Text tab.
 
@@ -580,7 +601,7 @@ withKernel(middleware) {                                   // withTransactor { w
   `FleetRpcModel`, or completion and Structure must move onto JetBrains' client first. Step 1.
 - **[Answered 2026-11-18]** Android: they run on ART. The same spike on the Pixel 3a emulator (API 34) against the Mac
   backend returned `Main.java` for "Main", and the editor kept working beside it. Turned on with
-  `adb shell am start -n intellijandroid.client.android/.MainActivity --ez kernelSpike true`. What it took:
+  an intent extra (`--ez kernelSpike true`; removed in step 2). What it took:
   - The Fleet jars go through `prepareProtocolJars` like the rd jars (class version lowered to 61 for D8).
     None of them needed the `sun.misc.Unsafe` shim.
   - `kotlinx-coroutines-android` 1.11.0, as on the desktop.

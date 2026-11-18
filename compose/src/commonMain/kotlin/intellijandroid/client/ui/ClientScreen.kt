@@ -43,6 +43,15 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -56,6 +65,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import intellijandroid.client.session.ClientSession
+import intellijandroid.client.session.SearchTab
 import intellijandroid.client.session.SessionState
 import intellijandroid.client.ui.component.SplitPane
 import intellijandroid.client.ui.theme.IslandsDark
@@ -115,8 +125,32 @@ fun ClientScreen(
   // before that is 150).
   var gradientCenter by remember { mutableFloatStateOf(Float.NaN) }
   val projectColor = state.projectName?.let(::projectGradientColor)
+  val doubleShift = remember { DoubleShift() }
   BoxWithConstraints(
     Modifier.fillMaxSize()
+      .onPreviewKeyEvent { event ->
+        val search = session.searchEverywhere ?: return@onPreviewKeyEvent false
+        if (state.search != null) return@onPreviewKeyEvent false
+        val shift = event.key == Key.ShiftLeft || event.key == Key.ShiftRight
+        val down = event.type == KeyEventType.KeyDown
+        if (doubleShift.onKey(shift, down, System.currentTimeMillis())) {
+          search.open(SearchTab.FILES)
+          return@onPreviewKeyEvent true
+        }
+        // IntelliJ's Go to Class / File / Symbol: ⌘O, ⇧⌘O, ⌥⌘O (Ctrl+N, Ctrl+Shift+N,
+        // Ctrl+Alt+Shift+N elsewhere).
+        val command = if (IS_MAC) event.isMetaPressed else event.isCtrlPressed
+        val key = if (IS_MAC) Key.O else Key.N
+        if (!down || !command || event.key != key) return@onPreviewKeyEvent false
+        search.open(
+          when {
+            event.isAltPressed -> SearchTab.SYMBOLS
+            event.isShiftPressed -> SearchTab.FILES
+            else -> SearchTab.CLASSES
+          },
+        )
+        true
+      }
       .background(IslandsDark.windowBackground)
       .drawBehind {
         if (projectColor != null) {
@@ -259,6 +293,10 @@ fun ClientScreen(
       MainToolbar(
         state.projectName,
         unsupported,
+        onSearch =
+          if (state.searchAvailable) {
+            { session.searchEverywhere?.open(SearchTab.FILES) }
+          } else null,
         onProjectIconCenter = { gradientCenter = it },
         islandsStart =
           if (layout == ScreenLayout.PORTRAIT) IslandsDark.islandGap
@@ -409,6 +447,18 @@ fun ClientScreen(
     }
     // Over everything: the backend's BeControl popups (New ▸ File's name).
     intellijandroid.client.ui.popup.BackendPopups(state.backendPopups, session)
+    val search = session.searchEverywhere
+    if (state.search != null && search != null) {
+      SearchEverywherePopup(
+        state.search,
+        search,
+        // Under the main toolbar, which the popup must not cover on a phone.
+        top = IslandsDark.toolbarHeight + IslandsDark.islandGap,
+        maxHeight = maxHeight * 0.6f,
+        onChosen = ::onNavigated,
+        onUnsupported = unsupported,
+      )
+    }
   }
 }
 

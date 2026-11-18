@@ -25,6 +25,7 @@ import com.jetbrains.rd.framework.UnsafeBuffer
 import com.jetbrains.rd.ide.model.ActionTimestampSetModel
 import com.jetbrains.rd.ide.model.BadgeIconModel
 import com.jetbrains.rd.ide.model.BasicIdeRootMarshallersProvider
+import com.jetbrains.rd.ide.model.BrowseMode
 import com.jetbrains.rd.ide.model.ClipboardContent
 import com.jetbrains.rd.ide.model.ClipboardModel
 import com.jetbrains.rd.ide.model.ColorizedIconModel
@@ -35,9 +36,10 @@ import com.jetbrains.rd.ide.model.DeferredIconModel
 import com.jetbrains.rd.ide.model.EmptyIconModel
 import com.jetbrains.rd.ide.model.FailedRequestComposite
 import com.jetbrains.rd.ide.model.FileEditorManagerEventModel
-import com.jetbrains.rd.ide.model.FleetRpcModel
 import com.jetbrains.rd.ide.model.GutterMarkHighlighterModel
 import com.jetbrains.rd.ide.model.HighlighterElement
+import com.jetbrains.rd.ide.model.HyperlinkHighlightingArgs
+import com.jetbrains.rd.ide.model.HyperlinkHighlightingResult
 import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.IconWithOverlayModel
 import com.jetbrains.rd.ide.model.ImageIconModel
@@ -57,6 +59,7 @@ import com.jetbrains.rd.ide.model.RdFileEditorId
 import com.jetbrains.rd.ide.model.RdFileIdNew
 import com.jetbrains.rd.ide.model.RdMarkupKey
 import com.jetbrains.rd.ide.model.RdMarkupModel
+import com.jetbrains.rd.ide.model.RdMergeableUsage
 import com.jetbrains.rd.ide.model.RdOpenSolution
 import com.jetbrains.rd.ide.model.RdPatch
 import com.jetbrains.rd.ide.model.RdProjectId
@@ -66,7 +69,10 @@ import com.jetbrains.rd.ide.model.RdRequests
 import com.jetbrains.rd.ide.model.RdResetDocumentChange
 import com.jetbrains.rd.ide.model.RdRetryResponse
 import com.jetbrains.rd.ide.model.RdRetryTimestamp
+import com.jetbrains.rd.ide.model.RdShowUsagesSession
 import com.jetbrains.rd.ide.model.RdSuccessResponse
+import com.jetbrains.rd.ide.model.RdUsageBase
+import com.jetbrains.rd.ide.model.RdUsageNavigationData
 import com.jetbrains.rd.ide.model.RequestCompositeQuery
 import com.jetbrains.rd.ide.model.RequestResponseModel
 import com.jetbrains.rd.ide.model.RotatedIconModel
@@ -77,31 +83,25 @@ import com.jetbrains.rd.ide.model.TextControlId
 import com.jetbrains.rd.ide.model.VisibleRange
 import com.jetbrains.rd.ide.model.asyncActionsModel
 import com.jetbrains.rd.ide.model.clipboardModel
-import com.jetbrains.rd.ide.model.BrowseMode
-import com.jetbrains.rd.ide.model.HyperlinkHighlightingArgs
-import com.jetbrains.rd.ide.model.HyperlinkHighlightingResult
 import com.jetbrains.rd.ide.model.codeStructureTreeModel
-import com.jetbrains.rd.ide.model.findUsagesHost
-import com.jetbrains.rd.ide.model.RdShowUsagesSession
-import com.jetbrains.rd.ide.model.RdMergeableUsage
-import com.jetbrains.rd.ide.model.RdUsageBase
-import com.jetbrains.rd.ide.model.RdUsageNavigationData
-import com.jetbrains.rd.util.reactive.AddRemove
-import com.jetbrains.rd.util.reactive.hasTrueValue
-import com.jetbrains.rd.ide.model.hyperlinkHighlightingModel
 import com.jetbrains.rd.ide.model.documentsOperationModel
 import com.jetbrains.rd.ide.model.fileEditorsModel
+import com.jetbrains.rd.ide.model.findUsagesHost
 import com.jetbrains.rd.ide.model.fleetRpcModel
+import com.jetbrains.rd.ide.model.hyperlinkHighlightingModel
 import com.jetbrains.rd.ide.model.requestResponseModel
 import com.jetbrains.rd.ide.model.solutionModel
 import com.jetbrains.rd.util.lifetime.Lifetime
 import com.jetbrains.rd.util.lifetime.LifetimeDefinition
+import com.jetbrains.rd.util.reactive.AddRemove
 import com.jetbrains.rd.util.reactive.IScheduler
+import com.jetbrains.rd.util.reactive.hasTrueValue
 import com.jetbrains.rd.util.threading.SingleThreadScheduler
 import intellijandroid.client.connection.ClientCertificate
 import intellijandroid.client.connection.Connection
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.connection.SplitWire
+import intellijandroid.client.kernel.SearchKernel
 import intellijandroid.client.ui.IconJar
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -191,6 +191,12 @@ class ClientSession(
   private var retryTimestamp = RdRetryTimestamp(0, 0)
   private var fleet: FleetRpc? = null
   private var completion: Completion? = null
+
+  /** Search Everywhere, once a project with a kernel id is open. */
+  @Volatile
+  var searchEverywhere: SearchEverywhere? = null
+    private set
+
   private var requestResponse: RequestResponseModel? = null
   private var actionMenus: ActionMenus? = null
   private var luxDialogs: LuxDialogs? = null
@@ -389,9 +395,10 @@ class ClientSession(
       .start(lifetime, HyperlinkHighlightingArgs(session.editorId, offset, BrowseMode.Declaration))
       .result
       .advise(lifetime) { result ->
-        val range = (runCatching { result.unwrap() }.getOrNull() as? HyperlinkHighlightingResult)
-          ?.textRange
-          ?.takeIf { it.endOffset > it.startOffset }
+        val range =
+          (runCatching { result.unwrap() }.getOrNull() as? HyperlinkHighlightingResult)
+            ?.textRange
+            ?.takeIf { it.endOffset > it.startOffset }
         found(range?.let { it.startOffset until it.endOffset })
       }
   }
@@ -713,13 +720,25 @@ class ClientSession(
             log = ::log,
           )
         solutionLifetime.onTermination { completion = null }
-        fleetModelListener?.invoke(
-          protocol.fleetRpcModel,
-          solutionLifetime,
-          rdScheduler,
-          kernelProjectId,
-          dataContextBlob(protocol, newSolution.projectId),
-        )
+        // Search Everywhere: JetBrains' Fleet RPC client and Rhizome database next to FleetRpc.
+        val kernel =
+          SearchKernel.start(
+            protocol.fleetRpcModel,
+            solutionLifetime,
+            rdScheduler,
+            kernelProjectId,
+            dataContextBlob(protocol, newSolution.projectId),
+            ::log,
+          )
+        searchEverywhere =
+          SearchEverywhere(kernel) { change ->
+            mutableState.update { it.copy(search = change(it.search)) }
+          }
+        mutableState.update { it.copy(searchAvailable = true) }
+        solutionLifetime.onTermination {
+          searchEverywhere = null
+          mutableState.update { it.copy(search = null, searchAvailable = false) }
+        }
       }
       newSolution.editorTabsModel
       // The backend lists each open file's editor here; the client marks the one it shows as
@@ -833,7 +852,7 @@ class ClientSession(
                 rows.toList(),
                 complete,
                 it.usages?.selected ?: 0,
-              )
+              ),
           )
         }
       }
@@ -892,7 +911,7 @@ class ClientSession(
     mutableState.update { it.copy(usages = null) }
     // The session is removed once the backend answers: removing it first could drop the call.
     session.usages.navigateTo.start(lifetime, RdUsageNavigationData(index, true)).result.advise(
-      lifetime
+      lifetime,
     ) {
       solution?.findUsagesHost?.sessions?.remove(id)
     }
@@ -1497,16 +1516,6 @@ class ClientSession(
  * resource lists).
  */
 /**
- * Debug hook: called with the Fleet RPC model once a project is open, so the desktop can run
- * JetBrains' own RPC client and Rhizome database over it next to [FleetRpc]
- * (docs/feature-parity-plan.md, section 5, the spike). Also gets the project's kernel id, e.g.
- * `m3nniruk9k7j4qsibjui`, and [dataContextBlob].
- */
-var fleetModelListener:
-  ((FleetRpcModel, Lifetime, IScheduler, kernelProjectId: String, dataContext: String) -> Unit)? =
-  null
-
-/**
  * A data context naming only the project, as a Fleet RPC `DataContextId` carries it: JetBrains
  * Client's `FrontendDataContextRpcSerializer` writes an [ActionTimestampSetModel] with rd's
  * marshaller and sends the bytes as base64, e.g. `AQAAAA…`.
@@ -1546,8 +1555,8 @@ internal fun usageRow(usage: RdUsageBase): UsageRow {
   val fileName =
     usage.groups.lastOrNull { it.groupingRuleId.endsWith(".FileGroupingRule") }?.text.orEmpty()
   val text = usage.text.trim()
-  val position = (usage as? RdMergeableUsage)?.position
-    ?: return UsageRow(usage.index, fileName, 0, text, 0, 0)
+  val position =
+    (usage as? RdMergeableUsage)?.position ?: return UsageRow(usage.index, fileName, 0, text, 0, 0)
   val column = position.column - (usage.text.length - usage.text.trimStart().length)
   val end = column + usage.endOffset - usage.startOffset
   return if (column >= 0 && end <= text.length) {

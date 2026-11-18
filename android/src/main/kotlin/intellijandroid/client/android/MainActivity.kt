@@ -37,11 +37,6 @@ class MainActivity : ComponentActivity() {
     edgeToEdge()
     super.onCreate(savedInstanceState)
     window.isNavigationBarContrastEnforced = false
-    // Spike: JetBrains' Rhizome database client next to IDEate's (compose/…/kernel/KernelSpike.kt).
-    // `adb shell am start -n intellijandroid.client.android/.MainActivity --ez kernelSpike true`
-    if (intent.getBooleanExtra("kernelSpike", false))
-      intellijandroid.client.session.fleetModelListener =
-        intellijandroid.client.kernel.KernelSpike::start
     // Lux dialogs' images (ui/lux/LuxImages.kt).
     pngDecoder = PngDecoder { bytes ->
       BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
