@@ -235,9 +235,14 @@ fun ClientScreen(
         .filter { layout != ScreenLayout.PORTRAIT || it.place.side.page() == page }
         .toSet()
 
-    // The backend builds the Structure tree only while the tool window shows.
+    // The backend builds the Structure tree only while the tool window shows. It hears of a hide
+    // 30 s late: on a phone held upright a swipe to the editor and back would otherwise make the
+    // phone's backend build the whole tree again.
     val structureShown = ToolWindow.STRUCTURE in shown
-    LaunchedEffect(structureShown) { session.setStructureVisible(structureShown) }
+    LaunchedEffect(structureShown) {
+      if (!structureShown) delay(STRUCTURE_HIDE_DELAY_MS)
+      session.setStructureVisible(structureShown)
+    }
 
     // Opening a file from a tool window shows the editor on a phone held upright.
     fun onNavigated() {
@@ -264,7 +269,10 @@ fun ClientScreen(
             )
           },
       ) {
-        ToolWindowContent(window, state, session, scrollOf(window), onNavigated = ::onNavigated)
+        val scroll = scrollOf(window)
+        Box(Modifier.fillMaxSize().onGloballyPositioned { scroll.bounds = it.boundsInRoot() }) {
+          ToolWindowContent(window, state, session, scroll, onNavigated = ::onNavigated)
+        }
       }
     }
 
@@ -324,8 +332,12 @@ fun ClientScreen(
       )
       when (layout) {
         ScreenLayout.PORTRAIT -> {
-          fun scrolls(side: Side, dragX: Float) =
-            windows.openOn(side).any { scrollOf(it).canScroll(dragX) }
+          // Only the window the drag started on: Project over Structure each scroll on their own.
+          fun scrolls(side: Side, dragX: Float, down: Offset) =
+            windows.openOn(side).any {
+              val scroll = scrollOf(it)
+              scroll.bounds.contains(down) && scroll.canScroll(dragX)
+            }
           SwipePager(
             page = page,
             onPage = { target ->
@@ -337,14 +349,14 @@ fun ClientScreen(
             canShow = { side -> windows.canShow(side) },
             canScroll = { onPage, dragX, down ->
               when (onPage) {
-                Page.LEFT -> scrolls(Side.LEFT, dragX)
+                Page.LEFT -> scrolls(Side.LEFT, dragX, down)
                 Page.MIDDLE ->
                   when {
-                    bottomShown -> scrolls(Side.BOTTOM, dragX)
+                    bottomShown -> scrolls(Side.BOTTOM, dragX, down)
                     tabRow.contains(down) -> tabRow.canScroll(dragX)
                     else -> editorScroll.canScroll(dragX)
                   }
-                Page.RIGHT -> scrolls(Side.RIGHT, dragX)
+                Page.RIGHT -> scrolls(Side.RIGHT, dragX, down)
               }
             },
             left = { Area(Side.LEFT, stacked = true, Modifier.fillMaxSize()) },
@@ -946,3 +958,5 @@ private fun TabCloseButton(fileName: String, onClose: () -> Unit) {
     Image(icon, contentDescription = "Close $fileName", modifier = Modifier.size(16.dp))
   }
 }
+
+private const val STRUCTURE_HIDE_DELAY_MS = 30_000L

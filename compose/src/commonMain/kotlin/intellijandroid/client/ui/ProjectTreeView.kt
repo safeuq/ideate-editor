@@ -194,6 +194,7 @@ fun ProjectTreeView(
           },
           onDoubleClick = { if (node.hasChildren) onToggle(node) else onOpen(node) },
           onChevron = { onToggle(node) },
+          scrolling = { listState.isScrollInProgress || scroll.scrollable.isScrollInProgress },
           scroll = scroll,
           onRight = { right -> rowRights[node.id] = right },
         )
@@ -225,6 +226,8 @@ private fun TreeRow(
   onPress: () -> Unit,
   onDoubleClick: () -> Unit,
   onChevron: () -> Unit,
+  /** Whether the tree is moving: a press then only stops it. */
+  scrolling: () -> Boolean,
   scroll: SidewaysScroll,
   /** The row's content width in px, from its left edge to the text end plus the side inset. */
   onRight: (Float) -> Unit,
@@ -254,7 +257,13 @@ private fun TreeRow(
       .then(node.background?.let { Modifier.background(Color(it)) } ?: Modifier)
       .hoverable(interaction)
       .pointerInput(node.id) {
-        detectTapGestures(onPress = { onPress() }, onDoubleTap = { onDoubleClick() })
+        // On release, not on touch-down: a scroll that starts on a row takes the press over
+        // (tryAwaitRelease is false) and selects nothing. In Structure a selection also moves the
+        // editor. A press that only stops a fling doesn't select either.
+        detectTapGestures(
+          onPress = { if (!scrolling() && tryAwaitRelease()) onPress() },
+          onDoubleTap = { onDoubleClick() },
+        )
       },
   ) {
     // Selection and hover: a rounded rectangle inset 9 from the left (the root chevron's inset,
@@ -297,7 +306,7 @@ private fun TreeRow(
               Modifier.offset(x = chevronX).size(16.dp).align(Alignment.CenterStart).pointerInput(
                 node.id,
               ) {
-                detectTapGestures(onPress = { onChevron() })
+                detectTapGestures(onPress = { if (!scrolling() && tryAwaitRelease()) onChevron() })
               },
           )
         }

@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
 
 /**
  * A panel's sideways scroll position in px: the editor's text area (IntelliJ keeps the gutter in
@@ -16,6 +17,12 @@ import androidx.compose.runtime.setValue
 class SidewaysScroll {
   var x by mutableFloatStateOf(0f)
     internal set
+
+  /**
+   * Where the panel is, in root coordinates, so the pager asks only the panel under the finger: on
+   * a split page (Project over Structure) a long name in one used to keep the swipe from the other.
+   */
+  internal var bounds = Rect.Zero
 
   /** How far the content reaches past the panel's right edge; 0 when it fits. */
   internal var max by mutableFloatStateOf(0f)

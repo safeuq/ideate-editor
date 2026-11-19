@@ -841,17 +841,16 @@ class ClientSession(
   /** Whether the Structure tool window is showing; the backend builds the tree only while it is. */
   private var structureVisible = false
 
+  /** When Structure last became visible (System.nanoTime), until its tree arrives. */
+  private var structureShownAt: Long? = null
+
   fun setStructureVisible(visible: Boolean) = onRd {
+    if (visible && !structureVisible) structureShownAt = System.nanoTime()
     structureVisible = visible
     val current = solution ?: return@onRd
     current.codeStructureTreeModel.toolWindowVisible.set(visible)
   }
 
-  /**
-   * The Structure tool window's model (docs/structure-protocol.md): the backend builds the tree for
-   * the editor it sees as selected, sends it whole, and sends it again after every change to the
-   * file.
-   */
   /** The Show Usages session the popup shows, by its key in `FindUsagesModel.sessions`. */
   private var usagesSession: Pair<Int, RdShowUsagesSession>? = null
 
@@ -952,6 +951,11 @@ class ClientSession(
     }
   }
 
+  /**
+   * The Structure tool window's model (docs/structure-protocol.md): the backend builds the tree for
+   * the editor it sees as selected, sends it whole, and sends it again after every change to the
+   * file.
+   */
   private fun bindStructure(solutionLifetime: Lifetime, solution: Solution) {
     val model = solution.codeStructureTreeModel
     model.treeNodes.advise(solutionLifetime) { list ->
@@ -968,6 +972,13 @@ class ClientSession(
             )
           }
       val path = list.documentTimestamp?.documentId?.takeIf { nodes.isNotEmpty() }?.let(::pathOf)
+      structureShownAt
+        ?.takeIf { nodes.isNotEmpty() }
+        ?.let { shownAt ->
+          val waited = (System.nanoTime() - shownAt) / 1_000_000
+          log("Structure tree: ${nodes.size} nodes for $path, $waited ms after showing")
+          structureShownAt = null
+        }
       mutableState.update { it.copy(structure = StructureTree(path, nodes)) }
     }
     model.toolWindowVisible.set(structureVisible)
