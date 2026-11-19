@@ -69,3 +69,25 @@ The join link is the one the backend prints, with `0.0.0.0` replaced by its addr
 `./gradlew :compose:jvmTest` checks the frame encoding against the bytes in the protocol doc, and the version hashes against numbers recorded from the real client.
 
 Code is formatted with Spotless: ktfmt in Google style (2-space indent, 100 columns) for `src/**/*.kt` and the Gradle scripts, trailing whitespace for `*.md`. `./gradlew spotlessApply` formats, `./gradlew spotlessCheck` fails on unformatted code. Plugin versions are in `gradle/libs.versions.toml`.
+
+## Driving the desktop UI in tests (2026-11-20)
+
+`desktop/src/test/.../DesktopDriverTest.kt` runs the real IDE screen (`ClientScreen` on a live `ClientSession`)
+inside the test JVM with Compose's UI test layer (`compose.uiTest`, `runDesktopComposeUiTest`). It finds nodes
+by text or content description, clicks them through Compose's own input, and renders PNGs. It uses no window
+and no macOS accessibility, so nothing depends on focus or pixel positions.
+
+```
+DRIVER_LINK='tcp://127.0.0.1:5991#jt=…' DRIVER_OUT=/tmp/driver \
+  ./gradlew :desktop:test --tests '*DesktopDriverTest*' --rerun-tasks
+```
+
+Without `DRIVER_LINK` the test is skipped. Against the Mac test backend on a small Gradle project it connected,
+clicked the bar's "Gradle" button, then the toolbar's "Expand All", and wrote `1-connected.png`,
+`2-gradle.png`, `3-expanded.png` and `semantics.txt` (every node: text, content description, actions) in
+about 14 s. Steps name nodes as the user sees them: stripe buttons by their tool window title, toolbar buttons
+by their action's text ("Sync All Gradle Projects"), tree rows by their text.
+
+An icon without a content description can't be found this way; give it one (it also helps screen readers).
+Compose Desktop also exposes the same semantics to macOS accessibility (the AX tree), which works for a real
+window, but the in-process test is more reliable.

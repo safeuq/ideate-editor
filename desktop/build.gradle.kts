@@ -24,9 +24,16 @@ dependencies {
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0")
   // Pixel tests of the Lux painter need Skia, which only this module has.
   testImplementation(kotlin("test"))
+  // DesktopDriverTest: Compose's in-process UI test layer drives the real screens.
+  @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+  testImplementation(compose.uiTest)
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+  useJUnitPlatform()
+  // Fonts and icons, as the app reads them (DesktopDriverTest).
+  systemProperty("jetbrains.client.lib", jetbrainsClientLib)
+}
 
 java {
   sourceCompatibility = JavaVersion.VERSION_21
