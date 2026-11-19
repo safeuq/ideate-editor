@@ -107,3 +107,28 @@ these actions), and Structure's sorters, filters and Logical/Physical tabs. For 
 Checked on the Mac backend, 16:22–16:24 IST: Select Opened File opened `src ▸ demo` and selected `Main`.
 Expand Selected on `smoke` opened `.idea ▸ codeStyles`, `src ▸ demo`, and so on. Both Collapse All buttons,
 Expand All and Hide work.
+
+## 7. "Projects and Files": the welcome project's pane (2026-11-19)
+
+A backend started without a project opens IntelliJ's welcome project, `~/IdeaProjects/IdeaHome`, when a client
+joins. JetBrains Client then shows "Projects and Files" in the Project window: Open, New ▾, Clone Repository, a
+project search field and the recent projects.
+
+What the backend sends (probe on the Mac backend, port 5994, 17:55–17:59 IST):
+
+| Pane id | Name | Class | Weight |
+|---|---|---|---|
+| `NonModalWelcomeScreenProjectPane` | Projects and Files | `RdProjectViewBePane` | −10 |
+| `ProjectPane` | Project | `RdProjectViewAsyncPane` | 0 |
+| `PackagesPane` | Packages | `RdProjectViewBePane` | 1 |
+| `Scope` | Scopes | `RdProjectViewBePane` | 4 |
+
+- `currentPane` starts null. IDEate sets it to `ProjectPane` itself (`createProjectView`), so it never shows
+  this pane by default. JetBrains Client shows it.
+- The pane's `control` is a `BeneluxView`: a BeControl that only names an `LxPanel` the backend paints. It is
+  the same kind of Lux panel IDEate already paints inside popups (`BackendPopups`, New ▸ File's "already
+  exists" hint). So the buttons and the project list are drawn by the backend, not described as controls.
+- Choosing the pane in IDEate today shows an empty panel, because `ProjectViewPanes` looks only for a
+  `BeTreeGrid`.
+
+Not looked at yet: where the editor area's New Markdown File, Open File and Open Terminal buttons come from.
