@@ -251,6 +251,38 @@ fun ClientScreen(
       windows.closeSide(Side.BOTTOM)
     }
 
+    // Structure's folded rows, here for its header's Expand All and Collapse All.
+    var structureCollapsed by remember { mutableStateOf(emptySet<String>()) }
+
+    // The header buttons IntelliJ shows; the backend sends none for these two windows
+    // (BeIdeaToolWindow.headerToolbar is empty), JetBrains Client draws them itself.
+    fun headerActions(window: ToolWindow): List<HeaderAction> =
+      when {
+        window == ToolWindow.PROJECT &&
+          state.projectViews.current.let { it == null || it.paneId == PROJECT_PANE } ->
+          listOf(
+            HeaderAction("expui/general/locate.svg", "Select Opened File") {
+              session.selectOpenedFile()
+            },
+            HeaderAction("expui/general/expandAll.svg", "Expand Selected") {
+              session.expandSelected()
+            },
+            HeaderAction("expui/general/collapseAll.svg", "Collapse All") {
+              session.collapseProjectTree()
+            },
+          )
+        window == ToolWindow.STRUCTURE ->
+          listOf(
+            HeaderAction("expui/general/expandAll.svg", "Expand All") {
+              structureCollapsed = emptySet()
+            },
+            HeaderAction("expui/general/collapseAll.svg", "Collapse All") {
+              structureCollapsed = allStructureParents(state.structure)
+            },
+          )
+        else -> emptyList()
+      }
+
     @Composable
     fun Window(window: ToolWindow, modifier: Modifier) {
       // Project's header picks the view: Project, Packages, Project Files, ….
@@ -268,10 +300,22 @@ fun ClientScreen(
               onClick = { session.chooseProjectView(option) },
             )
           },
+        actions = headerActions(window),
+        // The window is on screen, so its stripe button's tap hides it (and on a phone held
+        // upright, the last one of a side page goes back to the editor).
+        onHide = { barClick(window) },
       ) {
         val scroll = scrollOf(window)
         Box(Modifier.fillMaxSize().onGloballyPositioned { scroll.bounds = it.boundsInRoot() }) {
-          ToolWindowContent(window, state, session, scroll, onNavigated = ::onNavigated)
+          ToolWindowContent(
+            window,
+            state,
+            session,
+            scroll,
+            onNavigated = ::onNavigated,
+            structureCollapsed = structureCollapsed,
+            onStructureCollapsedChange = { structureCollapsed = it },
+          )
         }
       }
     }
@@ -515,6 +559,8 @@ private fun ToolWindowContent(
   session: ClientSession,
   scroll: SidewaysScroll,
   onNavigated: () -> Unit,
+  structureCollapsed: Set<String>,
+  onStructureCollapsedChange: (Set<String>) -> Unit,
 ) =
   when {
     // Packages, Scopes: rows the backend draws (a BeTreeGrid); it opens what is double-tapped.
@@ -553,7 +599,15 @@ private fun ToolWindowContent(
         fileStatusColor = { status -> state.scheme?.color("FILESTATUS_$status")?.let(::Color) },
       )
     window == ToolWindow.STRUCTURE ->
-      StructureView(state, session, onNavigated, Modifier.fillMaxSize(), scroll)
+      StructureView(
+        state,
+        session,
+        onNavigated,
+        Modifier.fillMaxSize(),
+        scroll,
+        structureCollapsed,
+        onStructureCollapsedChange,
+      )
     // A tool window IDEate doesn't draw yet: it opens with its header, as any other.
     else ->
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

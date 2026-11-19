@@ -23,9 +23,9 @@ import intellijandroid.client.ui.theme.label
 /**
  * The Structure tool window: the backend's tree for the selected file, drawn with the Project
  * tree's rows. Everything starts expanded, as in IntelliJ. A tap selects and moves the caret to the
- * element (IntelliJ's "Navigate with Single Click" is on by default); a double tap also calls
- * [onNavigated], which on a phone held upright slides back to the editor. Left out: caret
- * following, sorting and filters.
+ * element (IntelliJ's "Navigate with Single Click" is on by default); a double tap, on any row
+ * including a class, also calls [onNavigated], which on a phone held upright slides back to the
+ * editor. Left out: caret following, sorting and filters.
  */
 @Composable
 fun StructureView(
@@ -34,10 +34,14 @@ fun StructureView(
   onNavigated: () -> Unit,
   modifier: Modifier,
   scroll: SidewaysScroll = remember { SidewaysScroll() },
+  /**
+   * Collapsed rows by name path (node ids change on every rebuild); kept by the caller for the
+   * header's Expand All and Collapse All.
+   */
+  collapsed: Set<String> = emptySet(),
+  onCollapsedChange: (Set<String>) -> Unit = {},
 ) {
   val structure = state.structure
-  // Node ids change on every rebuild, so remember collapsed nodes by name path instead.
-  var collapsed by remember { mutableStateOf(emptySet<String>()) }
   var selected by remember { mutableStateOf<String?>(null) }
   if (structure.nodes.isEmpty() || structure.path != state.selectedEditor) {
     val fonts = LocalClientFonts.current
@@ -61,7 +65,7 @@ fun StructureView(
     tree = tree,
     onToggle = { node ->
       keys[node.id]?.let { key ->
-        collapsed = if (key in collapsed) collapsed - key else collapsed + key
+        onCollapsedChange(if (key in collapsed) collapsed - key else collapsed + key)
       }
     },
     onSelect = ::navigate,
@@ -74,7 +78,22 @@ fun StructureView(
     // ProjectTreeView selects the row first, which moves the caret to the element.
     onMenu = { session.structureMenu() },
     menuEntries = { state.contextMenu?.entries },
+    opensParents = true,
   )
+}
+
+/**
+ * Collapse All: every row with children except the root, so the file's top level stays in view, as
+ * IntelliJ's Structure does.
+ */
+fun allStructureParents(structure: StructureTree): Set<String> {
+  if (structure.nodes.isEmpty()) return emptySet()
+  val keys = nameKeys(structure)
+  return structure.nodes
+    .drop(1)
+    .filter { it.children.isNotEmpty() }
+    .mapNotNull { keys[it.id] }
+    .toSet()
 }
 
 /**

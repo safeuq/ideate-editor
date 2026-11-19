@@ -212,6 +212,15 @@ portrait (`adb shell wm density 240`) with Project and Structure side by side un
 `Main.java › Main › main(String[]): void`, a tap on `main` moved the caret to line 4, and typing `int count` added
 `count: int`. Not yet on the user's phone.
 
+## Touch in the trees (2026-11-19)
+
+- **Rows select when the finger lifts.** They used to select on touch-down, so every scroll that started on a row selected it; in Structure that also moved the caret.
+  - Now a row selects only when the finger lifts and the list didn't scroll.
+  - A tap that just stops a fling selects nothing.
+  - The chevron works the same way (`TreeRow` in `ProjectTreeView.kt`).
+- **A sideways swipe asks only the window under the finger.** On a split side page (Project above Structure), the page used to stay put if *either* window could still scroll sideways. Now only the window under the finger counts (`SidewaysScroll.bounds`, `scrolls` in `ClientScreen.kt`).
+- **A double tap on a Structure row goes to it**, even on a row with children such as a class. Before, it folded the row, as a Project folder does. On a phone held upright it then slides back to the editor (`opensParents` in `ProjectTreeView.kt`).
+
 ## Testing notes
 
 - The emulator rotates only when the app allows it. `adb shell wm user-rotation lock 0` holds portrait;

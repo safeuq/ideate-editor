@@ -84,3 +84,26 @@ openInRightSplit = false))`. The backend opens the editor itself (`GuestFileEdit
 remote editor for file=ArrayList.class … selectAsCurrent=true"), and IDEate follows it as in section 4.
 Files on disk (no `!/` in the path) still open through `findFile` and `requestComposite`. Checked on the Mac
 backend: `ArrayList.class` opened from External Libraries ▸ < 21 > ▸ java.base.
+
+## 6. Header buttons (2026-11-19)
+
+The backend sends no header buttons for Project or Structure. A probe of `BeIdeaToolWindow` on the Mac backend
+saw Structure's `headerToolbar = []` and `headerToolbarWest = []`, and Project's were never set. JetBrains
+Client draws these buttons itself, so IDEate does too (`headerActions` in `ClientScreen.kt`,
+`HeaderAction`/`ToolWindowPanel` in `ToolWindows.kt`):
+
+| Window | Button | Icon | What IDEate does |
+|---|---|---|---|
+| Project (Project view only) | Select Opened File | `expui/general/locate.svg` | `RdProjectViewAsyncPane.expandByPath(<selected editor's path>)`. The answer is the file's row id. IDEate opens the rows above it and selects it. JetBrains Client does the same for a file it has no `RdFileId` for (`ThinClientProjectViewPaneBinding.select`, else `expandById`). |
+| Project | Expand Selected | `expui/general/expandAll.svg` | `expand` for the selected row and every folder under it. A row that arrives under one of them opens too. The backend can answer `expand` before it sends the rows (seen for `.idea` ▸ `codeStyles`), so the answer can't be used as the signal. |
+| Project | Collapse All | `expui/general/collapseAll.svg` | Closes every row in IDEate. The backend keeps what it loaded. |
+| Structure | Expand All / Collapse All | same icons | Done in IDEate only. Collapse All leaves the root open, so the file's top level stays in view. |
+| both | Hide | `expui/general/hide.svg` | The same as tapping the window's stripe button while it shows. On a phone held upright, closing the last window on a side page goes back to the editor. |
+
+Not drawn yet: Project's ⋮ Options menu (flatten packages, show members, and so on; the backend sends none of
+these actions), and Structure's sorters, filters and Logical/Physical tabs. For those, see
+[structure-protocol.md](structure-protocol.md), "Logical and Physical".
+
+Checked on the Mac backend, 16:22–16:24 IST: Select Opened File opened `src ▸ demo` and selected `Main`.
+Expand Selected on `smoke` opened `.idea ▸ codeStyles`, `src ▸ demo`, and so on. Both Collapse All buttons,
+Expand All and Hide work.

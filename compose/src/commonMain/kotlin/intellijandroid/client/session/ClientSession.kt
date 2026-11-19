@@ -155,6 +155,12 @@ class ClientSession(
   private val documentTexts = mutableMapOf<RdDocumentId, String>()
   private val documentHighlights = mutableMapOf<RdDocumentId, MutableMap<String, RawHighlight>>()
   private val loadedChildren = mutableSetOf<Int>()
+
+  /**
+   * Rows under Expand Selected: a row arriving under one opens too. Cleared when the user opens or
+   * closes a row, so later rows (a new file) don't open by themselves.
+   */
+  private val expandingAll = mutableSetOf<Int>()
   private val unhandledChangeKinds = mutableSetOf<String>()
   /** Documents whose markup changed since the last publish; see [publishMarkupLater]. */
   private val markupChanged = mutableSetOf<RdDocumentId>()
@@ -228,6 +234,7 @@ class ClientSession(
 
   /** Expands or collapses a tree node; the first expansion asks the backend for the children. */
   fun toggle(nodeId: Int) = onRd {
+    expandingAll.clear()
     val tree = mutableState.value.tree
     if (nodeId in tree.expanded) {
       mutableState.update { it.copy(tree = it.tree.copy(expanded = it.tree.expanded - nodeId)) }
@@ -239,6 +246,50 @@ class ClientSession(
   fun select(nodeId: Int) = onRd {
     mutableState.update { it.copy(tree = it.tree.copy(selected = nodeId)) }
     pane?.selection?.set(nodeId)
+  }
+
+  /**
+   * The Project header's Select Opened File: the backend expands its tree down to the selected
+   * editor's file and answers that row's id (`expandByPath` with the plain path, as JetBrains
+   * Client's `ThinClientProjectViewPaneBinding.select` does for a file it has no id for). The rows
+   * on the way arrive before the answer; IDEate opens them and selects the file's row.
+   */
+  fun selectOpenedFile() = onRd {
+    val path = mutableState.value.selectedEditor ?: return@onRd
+    val current = pane ?: return@onRd
+    current.expandByPath.start(lifetime, path).result.advise(lifetime) { answer ->
+      val id =
+        runCatching { answer.unwrap() }.getOrNull()
+          ?: return@advise log("The Project tree has no row for $path")
+      val nodes = mutableState.value.tree.nodes
+      val parents = generateSequence(nodes[id]?.parentId) { nodes[it]?.parentId }.toList()
+      loadedChildren += parents
+      mutableState.update {
+        it.copy(tree = it.tree.copy(expanded = it.tree.expanded + parents, selected = id))
+      }
+      current.selection.set(id)
+    }
+  }
+
+  /**
+   * The Project header's Expand Selected: the selected row and every folder under it. Rows not
+   * loaded yet open as they arrive (see [expandingAll]); the backend may answer an `expand` before
+   * it sends the rows, so the answer can't be the cue.
+   */
+  fun expandSelected() = onRd { mutableState.value.tree.selected?.let(::expandAll) }
+
+  private fun expandAll(nodeId: Int) {
+    expandingAll += nodeId
+    expand(nodeId)
+    mutableState.value.tree.nodes.values
+      .filter { it.parentId == nodeId && it.hasChildren }
+      .forEach { child -> expandAll(child.id) }
+  }
+
+  /** The Project header's Collapse All: every row closes; the backend keeps what it loaded. */
+  fun collapseProjectTree() = onRd {
+    expandingAll.clear()
+    mutableState.update { it.copy(tree = it.tree.copy(expanded = emptySet())) }
   }
 
   /** Shows another pane in the Project tool window, e.g. Packages or the Project Files scope. */
@@ -1001,6 +1052,7 @@ class ClientSession(
             tree = it.tree.copy(nodes = it.tree.nodes + (id to node)),
           )
         }
+        if (node.parentId in expandingAll && node.hasChildren) expandAll(id)
         // IntelliJ opens with the project root expanded.
         if (
           node.parentId == null &&

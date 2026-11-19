@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -43,6 +44,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import intellijandroid.client.session.BackendToolWindow
+import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.component.Menu
 import intellijandroid.client.ui.component.Menus
 import intellijandroid.client.ui.theme.IslandsDark
@@ -458,6 +460,10 @@ fun ToolWindowPanel(
   modifier: Modifier = Modifier,
   title: String = window.title,
   views: List<MenuEntry>? = null,
+  /** The header's buttons, left to right, before Hide. */
+  actions: List<HeaderAction> = emptyList(),
+  /** Hide (IntelliJ's "—" at the header's end); null: no Hide button. */
+  onHide: (() -> Unit)? = null,
   content: @Composable () -> Unit,
 ) {
   val fonts = LocalClientFonts.current
@@ -495,11 +501,24 @@ fun ToolWindowPanel(
         if (viewsShown && views != null)
           DropDownMenu(views, beside = false, onDismiss = { viewsShown = false })
       }
+      Spacer(Modifier.weight(1f))
+      val buttons =
+        actions + listOfNotNull(onHide?.let { HeaderAction("expui/general/hide.svg", "Hide", it) })
+      buttons.forEach { action ->
+        IconButton(action.iconPath, action.name, action.onClick, Modifier.padding(end = 2.dp))
+      }
+      Spacer(Modifier.width(6.dp))
     }
     if (underline) Box(Modifier.fillMaxWidth().height(1.dp).background(Bars.headerBorder))
     Box(Modifier.fillMaxWidth().weight(1f)) { content() }
   }
 }
+
+/**
+ * A tool window header button: an icon from the icons jar and its name (IntelliJ's tooltip), e.g.
+ * `expui/general/locate.svg`, "Select Opened File".
+ */
+class HeaderAction(val iconPath: String, val name: String, val onClick: () -> Unit)
 
 /**
  * Colors and fixed sizes of the bars; the sizes that follow the UI density are in [IslandsDark].

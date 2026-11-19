@@ -105,8 +105,15 @@ fun ProjectTreeView(
   menuEntries: () -> List<MenuEntry>? = { null },
   /** The name colour for a [TreeNode.fileStatus], or null for the default text colour. */
   fileStatusColor: (String) -> Color? = { null },
+  /**
+   * Double click and Enter open a row that has children too, instead of folding it: Structure's
+   * rows go to their element, as IntelliJ's do.
+   */
+  opensParents: Boolean = false,
 ) {
   val rows = remember(tree) { tree.visibleRows() }
+  fun openOrToggle(node: TreeNode) =
+    if (node.hasChildren && !opensParents) onToggle(node) else onOpen(node)
   // Each laid-out row's right edge (text end plus the side inset), for the sideways scroll range.
   // ponytail: only rows that have been on screen count, like a lazy list; a wider row further
   // down widens the range when it scrolls into view.
@@ -141,7 +148,7 @@ fun ProjectTreeView(
           if (node.id in tree.expanded) onToggle(node)
           else node.parentId?.let { parent -> tree.nodes[parent]?.let(onSelect) }
         }
-      Key.Enter -> current?.let { node -> if (node.hasChildren) onToggle(node) else onOpen(node) }
+      Key.Enter -> current?.let(::openOrToggle)
       else -> return false
     }
     return true
@@ -192,7 +199,7 @@ fun ProjectTreeView(
             focusRequester.requestFocus()
             onSelect(node)
           },
-          onDoubleClick = { if (node.hasChildren) onToggle(node) else onOpen(node) },
+          onDoubleClick = { openOrToggle(node) },
           onChevron = { onToggle(node) },
           scrolling = { listState.isScrollInProgress || scroll.scrollable.isScrollInProgress },
           scroll = scroll,
