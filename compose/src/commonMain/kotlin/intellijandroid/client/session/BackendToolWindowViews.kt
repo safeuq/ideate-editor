@@ -25,7 +25,7 @@ import com.jetbrains.rd.util.lifetime.SequentialLifetimes
 import intellijandroid.client.ui.MenuEntry
 
 /**
- * What a backend tool window shows (docs/tool-windows.md, section 6): its action toolbar, e.g.
+ * What a backend tool window shows (docs/tool-windows.md, section 8): its action toolbar, e.g.
  * Gradle's Reload All Gradle Projects, Execute Gradle Task, Expand All, …, and its tree. [label]:
  * the text of a tab that has only a label, e.g. "Initializing Gradle projects data…".
  */
