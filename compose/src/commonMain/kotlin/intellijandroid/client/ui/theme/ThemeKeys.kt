@@ -46,6 +46,13 @@ object ThemeKeys {
       // The hint under a field with a problem, e.g. New ▸ File's "already exists" (ManyIslandsDark:
       // feedback-error-bg = red-40, feedback-error-border = red-60, warnings yellow-40 /
       // yellow-60).
+      // The welcome project's Open / New / Clone Repository buttons (darcula.theme.json, which
+      // Islands Dark inherits: #FFFFFF12, hover #FFFFFF0D, pressed #FFFFFF1A).
+      "DisclosureButton.defaultBackground" to Color(0x12FFFFFF),
+      "DisclosureButton.hoverOverlay" to Color(0x0DFFFFFF),
+      "DisclosureButton.pressedOverlay" to Color(0x1AFFFFFF),
+      // ManyIslandsDark: Borders.color = dialog-border = layer-0-border = gray-30.
+      "Borders.color" to Color(0xFF26282C),
       "ValidationTooltip.errorBackground" to Color(0xFF56272B),
       "ValidationTooltip.errorBackgroundColor" to Color(0xFF56272B),
       "ValidationTooltip.errorBorderColor" to Color(0xFF80383E),

@@ -23,11 +23,14 @@ import com.jetbrains.ide.model.uiautomation.ValidationStates
 import com.jetbrains.ide.model.uiautomation.uIAutomationInteractionModel
 import com.jetbrains.rd.framework.IProtocol
 import com.jetbrains.rd.ide.model.BeAbstractPopup
+import com.jetbrains.rd.ide.model.BeListPopupLine
 import com.jetbrains.rd.ide.model.DefaultPopupContent
 import com.jetbrains.rd.ide.model.FontStyle
 import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.LxPanel
 import com.jetbrains.rd.ide.model.LxPoint
+import com.jetbrains.rd.ide.model.StepPopupContent
+import com.jetbrains.rd.ide.model.WizardPopupContent
 import com.jetbrains.rd.ide.model.luxModel
 import com.jetbrains.rd.util.lifetime.Lifetime
 import intellijandroid.client.ui.lux.resolveLuxColor
@@ -51,7 +54,14 @@ class PopupLabel(text: String) : PopupItem {
  * [Class (class.svg), Interface, Enum, Record, Annotation, Exception])`. [selected] follows each
  * row's `isSelected`, which the backend moves on Up and Down.
  */
-class PopupList(val rows: List<PopupRow>) : PopupItem {
+class PopupList(
+  val rows: List<PopupRow>,
+  /**
+   * A list popup (`WizardPopupContent`, e.g. the welcome screen's New ▾): a tap chooses the row, as
+   * a click does in IntelliJ's `ListPopupImpl`, instead of only selecting it.
+   */
+  internal val wizard: WizardPopupContent? = null,
+) : PopupItem {
   var selected by mutableStateOf(-1)
 }
 
@@ -105,6 +115,14 @@ internal class BackendPopups(
 
   fun bind() {
     protocol.uIAutomationInteractionModel.activePopups.view(lifetime) { popupLifetime, id, model ->
+      (model.content as? WizardPopupContent)?.let { wizard ->
+        model.loaded.advise(popupLifetime) {
+          showList(popupLifetime, id, model, wizard, wizard.step)
+        }
+        model.result.advise(popupLifetime) { result -> if (result == DialogResult.CLOSE) close(id) }
+        popupLifetime.onTermination { close(id) }
+        return@view
+      }
       val content = (model.content as? DefaultPopupContent)?.content
       if (content == null) {
         log("Backend popup $id: ${model.content::class.simpleName} not shown")
@@ -226,6 +244,41 @@ internal class BackendPopups(
     }
   }
 
+  /**
+   * A list popup's [step] (its rows), as JetBrains Client's `WizardPopupProvider` shows it with a
+   * `DefaultLineStep`. A row with a submenu ([BeListPopupLine.hasSubstep]) replaces the rows with
+   * its `nextStep` once the backend sends it.
+   */
+  private fun showList(
+    popupLifetime: Lifetime,
+    id: Int,
+    model: BeAbstractPopup,
+    wizard: WizardPopupContent,
+    step: StepPopupContent,
+  ) {
+    val lines = step.items.toList().filterIsInstance<BeListPopupLine>()
+    val list =
+      PopupList(
+        lines.map { line ->
+          val row = BeRow.of(line, iconPath)
+          PopupRow(row.icon, row.text, line)
+        },
+        wizard,
+      )
+    val popup =
+      BackendPopup(
+        id,
+        step.title.ifBlank { model.title?.text?.value.orEmpty() },
+        listOf(list),
+        model.settings.cancelOnClickOutside,
+        model,
+        emptyMap(),
+      )
+    shown[id] = popup
+    log("Backend list popup '${popup.title}': ${list.rows.joinToString { it.text }}")
+    publish(shown.values.toList())
+  }
+
   private fun close(id: Int) {
     if (shown.remove(id) != null) publish(shown.values.toList())
   }
@@ -240,8 +293,36 @@ internal class BackendPopups(
 
   /** A tap on [row]: it becomes the list's selected row, as a click selects it in IntelliJ. */
   fun select(list: PopupList, row: PopupRow) {
+    list.wizard?.let { wizard ->
+      return choose(list, wizard, row)
+    }
     list.rows.forEach { each -> if (each !== row) each.line.isSelected.set(false) }
     row.line.isSelected.set(true)
+  }
+
+  /** A list popup's row chosen, as `DefaultLineStep.onChosen` does. */
+  private fun choose(list: PopupList, wizard: WizardPopupContent, row: PopupRow) {
+    val line = row.line as? BeListPopupLine ?: return
+    val popup = shown.values.firstOrNull { list in it.items } ?: return
+    wizard.selectedValueChanged.fire(list.rows.indexOf(row))
+    if (!line.hasSubstep) {
+      log("Backend list popup ${popup.id}: chose '${row.text}'")
+      line.signal.fire(Unit)
+      // The popup closes on a final choice; an action list runs the action once it has closed
+      // (IntelliJ's doFinalStep), which the backend hears as the result.
+      popup.model.result.set(DialogResult.OK)
+      return
+    }
+    list.rows.forEach { each ->
+      (each.line as? BeListPopupLine)?.let {
+        it.isExpanded.set(false)
+        it.nextStep.set(null)
+      }
+    }
+    line.isExpanded.set(true)
+    line.nextStep.advise(lifetime) { next ->
+      if (next != null) showList(lifetime, popup.id, popup.model, wizard, next)
+    }
   }
 
   /** A key the backend listens for, by AWT keystroke text (`pressed UP`): its listeners fire. */

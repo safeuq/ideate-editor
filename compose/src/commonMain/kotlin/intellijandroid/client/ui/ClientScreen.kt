@@ -82,6 +82,7 @@ import intellijandroid.client.session.SessionState
 import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.component.SearchHistory
 import intellijandroid.client.ui.component.SplitPane
+import intellijandroid.client.ui.lux.LuxPaneView
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.label
@@ -570,6 +571,9 @@ private fun ToolWindowContent(
   onStructureCollapsedChange: (Set<String>) -> Unit,
 ) =
   when {
+    // A pane the backend paints, e.g. the welcome project's "Projects and Files".
+    window == ToolWindow.PROJECT && state.projectViews.panel != null ->
+      LuxPaneView(state.projectViews.panel, session, Modifier.fillMaxSize())
     // Packages, Scopes: rows the backend draws (a BeTreeGrid); it opens what is double-tapped.
     window == ToolWindow.PROJECT &&
       state.projectViews.current.let { it != null && it.paneId != PROJECT_PANE } ->

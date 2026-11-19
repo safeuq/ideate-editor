@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,11 +43,14 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -60,6 +64,7 @@ import com.jetbrains.rd.ide.model.LxKeyEvent
 import com.jetbrains.rd.ide.model.LxKeyEventType
 import com.jetbrains.rd.ide.model.LxMouseEvent
 import com.jetbrains.rd.ide.model.LxMouseEventType
+import com.jetbrains.rd.ide.model.LxMouseWheelEvent
 import com.jetbrains.rd.ide.model.LxWindowEvent
 import com.jetbrains.rd.ide.model.LxWindowEventType
 import intellijandroid.client.session.ClientSession
@@ -176,12 +181,14 @@ private fun closeWindow(send: (LxEvent) -> Unit) {
  * [dialog]'s content: the backend's draw operations replayed onto a bitmap, and input sent back.
  */
 @Composable
-private fun LuxSurface(
+internal fun LuxSurface(
   dialog: LuxDialog,
   session: ClientSession,
   fit: Float,
   send: (LxEvent) -> Unit,
   softKeyboard: Boolean,
+  /** A pane, not a window: finger drags scroll, and it doesn't take the focus when it appears. */
+  pane: Boolean = false,
 ) {
   val images = session.luxImages ?: return
   val density = LocalDensity.current
@@ -203,7 +210,7 @@ private fun LuxSurface(
     }
     painted++
   }
-  LuxContent(dialog, bitmap, painted, fit, send, softKeyboard)
+  LuxContent(dialog, bitmap, painted, fit, send, softKeyboard, pane)
 }
 
 @Composable
@@ -214,6 +221,7 @@ private fun LuxContent(
   fit: Float,
   send: (LxEvent) -> Unit,
   softKeyboard: Boolean,
+  pane: Boolean,
 ) {
   val clipboard = LocalClipboardManager.current
   val keyboard = remember(dialog.id) { LuxKeyboard(send) { clipboard.getText()?.text } }
@@ -223,7 +231,7 @@ private fun LuxContent(
   // focus node each time, since the keyboard connects when the node gains focus.
   val wantsKeyboard = softKeyboard && dialog.acceptsText
   val focus = remember(dialog.id) { FocusRequester() }
-  Box(Modifier.luxPointer(dialog, fit, send, focus)) {
+  Box(Modifier.luxPointer(dialog, fit, send, focus, dragScrolls = pane)) {
     key(wantsKeyboard) {
       LuxCanvas(
         dialog,
@@ -233,6 +241,7 @@ private fun LuxContent(
         keyboard,
         focus,
         if (wantsKeyboard) textInput(keyboard) else Modifier,
+        takeFocus = !pane,
       )
     }
   }
@@ -248,8 +257,13 @@ private fun Modifier.luxPointer(
   fit: Float,
   send: (LxEvent) -> Unit,
   focus: FocusRequester,
+  /**
+   * A finger's drag scrolls what is under it (wheel events), for a panel with nothing around it to
+   * pan, e.g. the welcome project's recent projects list. Off for dialogs: the dialog pans.
+   */
+  dragScrolls: Boolean = false,
 ): Modifier =
-  pointerInput(dialog.id, fit) {
+  pointerInput(dialog.id, fit, dragScrolls) {
     val toBackend = 1f / (density * fit)
     var lastPress = 0L
     var lastPressAt = Offset.Zero
@@ -257,6 +271,9 @@ private fun Modifier.luxPointer(
     var downAt = Offset.Zero
     var inside = false
     var panned = false
+    // dragScrolls: wheel notches not yet sent, in backend pixels.
+    var scrollRemainder = 0f
+    var lastDragY = 0f
     awaitPointerEventScope {
       while (true) {
         // After the pan around the content, which takes a finger's drag once it passes the
@@ -267,6 +284,26 @@ private fun Modifier.luxPointer(
         val y = (change.position.y * toBackend).roundToInt()
         val touch = change.type == PointerType.Touch
         // xAbs/yAbs: the point on the screen the backend was told about.
+        // AWT's MouseWheelEvent: WHEEL_UNIT_SCROLL (0), 3 lines a notch, rotation +1 = down.
+        fun wheel(rotation: Int, precise: Double) =
+          send(
+            LxMouseWheelEvent(
+              0,
+              3,
+              rotation,
+              precise,
+              LxMouseEventType.Wheel,
+              x,
+              y,
+              dialog.x + x,
+              dialog.y + y,
+              0,
+              touch,
+              0,
+              false,
+              0,
+            ),
+          )
         fun mouse(
           type: LxMouseEventType,
           count: Int,
@@ -290,8 +327,25 @@ private fun Modifier.luxPointer(
           )
         when (event.type) {
           PointerEventType.Move ->
-            if (panned) Unit
-            else if (touch && change.pressed && change.isConsumed) {
+            if (panned) {
+              if (dragScrolls && change.pressed) {
+                // A finger moving up scrolls the content down: one notch per 16 backend pixels.
+                scrollRemainder += (lastDragY - change.position.y) * toBackend / WHEEL_NOTCH
+                lastDragY = change.position.y
+                val notches = scrollRemainder.toInt()
+                if (notches != 0) {
+                  scrollRemainder -= notches
+                  wheel(notches, notches.toDouble())
+                }
+              }
+            } else if (
+              touch &&
+                change.pressed &&
+                (change.isConsumed ||
+                  dragScrolls && (change.position - downAt).getDistance() > 8 * density)
+            ) {
+              lastDragY = change.position.y
+              scrollRemainder = 0f
               // The finger pans the dialog: let go of what it pressed without a click, as
               // dragging off a Swing button and releasing there does. Swing disarms the button
               // when the drag leaves it (an Exited for the window alone doesn't); e.g. a
@@ -302,6 +356,10 @@ private fun Modifier.luxPointer(
               mouse(LxMouseEventType.Released, clicks, 0, atX = OFF_WINDOW, atY = OFF_WINDOW)
               mouse(LxMouseEventType.Exited, 0, 0, atX = OFF_WINDOW, atY = OFF_WINDOW)
             } else mouse(LxMouseEventType.Moved, 0, if (change.pressed) BUTTON1_DOWN else 0)
+          PointerEventType.Scroll -> {
+            val delta = change.scrollDelta.y
+            if (delta != 0f) wheel(if (delta > 0) 1 else -1, delta.toDouble())
+          }
           PointerEventType.Enter -> {
             inside = true
             mouse(LxMouseEventType.Entered, 0, 0)
@@ -360,6 +418,7 @@ private fun LuxCanvas(
   keyboard: LuxKeyboard,
   focus: FocusRequester,
   textInput: Modifier,
+  takeFocus: Boolean,
 ) {
   Canvas(
     Modifier.size((dialog.width * fit).dp, (dialog.height * fit).dp)
@@ -371,7 +430,7 @@ private fun LuxCanvas(
     painted // read, so a painted batch redraws
     drawImage(bitmap, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()))
   }
-  LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+  if (takeFocus) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 }
 
 /**
@@ -563,5 +622,41 @@ private const val DOUBLE_CLICK_MILLIS = 500L
 /** A point well outside any dialog, where a press is let go of without a click. */
 private const val OFF_WINDOW = -10000
 
+/** Backend pixels of finger travel per wheel notch, about a line of a list. */
+private const val WHEEL_NOTCH = 16f
+
 /** The platform's shortcut modifier, as for ⌘V / Ctrl+V and ⌘A / Ctrl+A. */
 private val PASTE_MODIFIER = if (intellijandroid.client.ui.IS_MAC) META else CTRL
+
+/**
+ * A Project view pane the backend paints, e.g. the welcome project's "Projects and Files": its Lux
+ * panel fills the tool window, as JetBrains Client's `BeneluxViewControl` lays it out. The session
+ * hears the area's size and place, so the backend lays the panel out to fit and puts its popups
+ * (New ▾) next to their buttons.
+ */
+@Composable
+fun LuxPaneView(panel: LuxDialog, session: ClientSession, modifier: Modifier) {
+  val density = LocalDensity.current
+  var area by remember { mutableStateOf(IntRect.Zero) }
+  LaunchedEffect(area) {
+    if (area.width > 0 && area.height > 0)
+      session.resizeProjectPanel(area.left, area.top, area.width, area.height)
+  }
+  Box(
+    modifier.onGloballyPositioned { coordinates ->
+      val bounds = coordinates.boundsInWindow()
+      // Backend pixels are dp.
+      area =
+        with(density) {
+          IntRect(
+            bounds.left.toDp().value.roundToInt(),
+            bounds.top.toDp().value.roundToInt(),
+            bounds.right.toDp().value.roundToInt(),
+            bounds.bottom.toDp().value.roundToInt(),
+          )
+        }
+    },
+  ) {
+    LuxSurface(panel, session, 1f, session::projectPanelEvent, softKeyboard = true, pane = true)
+  }
+}

@@ -92,6 +92,7 @@ import com.jetbrains.rd.ide.model.fileEditorsModel
 import com.jetbrains.rd.ide.model.findUsagesHost
 import com.jetbrains.rd.ide.model.fleetRpcModel
 import com.jetbrains.rd.ide.model.hyperlinkHighlightingModel
+import com.jetbrains.rd.ide.model.luxModel
 import com.jetbrains.rd.ide.model.requestResponseModel
 import com.jetbrains.rd.ide.model.solutionModel
 import com.jetbrains.rd.util.lifetime.Lifetime
@@ -174,8 +175,14 @@ class ClientSession(
   private var solution: Solution? = null
   private var vfs: VfsModel? = null
   private var pane: RdProjectViewAsyncPane? = null
+  /** For the Lux components that panes and popups name by id. */
+  private var luxProtocol: IProtocol? = null
   private val projectViews =
-    ProjectViewPanes({ icon -> iconPaths(icon).firstOrNull() }) { views ->
+    ProjectViewPanes(
+      { icon -> iconPaths(icon).firstOrNull() },
+      { id -> luxProtocol?.luxModel?.components?.get(id) },
+      ::log,
+    ) { views ->
       mutableState.update { it.copy(projectViews = views) }
     }
   private val toolWindows =
@@ -520,6 +527,15 @@ class ClientSession(
     get() = luxDialogs?.images
 
   /** Input for backend dialog [dialogId]: mouse, keys, focus, closing. */
+  /** The Project window's content area for a pane the backend paints; see [ProjectViewPanes]. */
+  fun resizeProjectPanel(x: Int, y: Int, width: Int, height: Int) = onRd {
+    projectViews.resizePanel(x, y, width, height)
+  }
+
+  fun projectPanelEvent(event: com.jetbrains.rd.ide.model.LxEvent) = onRd {
+    projectViews.panelEvent(event)
+  }
+
   fun luxEvent(dialogId: Int, event: com.jetbrains.rd.ide.model.LxEvent) = onRd {
     luxDialogs?.send(dialogId, event)
   }
@@ -654,6 +670,7 @@ class ClientSession(
   }
 
   private fun createModels(protocol: IProtocol) {
+    luxProtocol = protocol
     luxDialogs =
       LuxDialogs(lifetime, protocol, ::log) { dialogs ->
           mutableState.update { it.copy(luxDialogs = dialogs) }
@@ -1092,7 +1109,9 @@ class ClientSession(
       // "ProjectPane" is the Project view; others are Packages, Project Files, Scopes, ….
       if (candidate !is RdProjectViewAsyncPane || candidate.id != PROJECT_PANE) return@view
       pane = candidate
-      projectView.currentPane.set(PROJECT_PANE)
+      // Unless the backend's default pane (e.g. the welcome project's) is already showing.
+      if ((projectView.currentPane.value as String?) == null)
+        projectView.currentPane.set(PROJECT_PANE)
       candidate.items.view(paneLifetime) { itemLifetime, id, item ->
         val node = item.toNode(id)
         mutableState.update {
