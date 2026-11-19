@@ -76,16 +76,20 @@ data class ConnectScreenState(
   val message: String?,
   /** A yes/no question, e.g. "Take over?" when Termux's backend has another client. */
   val question: Question?,
-  /**
-   * `intellij-backend start` is running for this project: shows Gateway's "Starting the remote IDE
-   * Backend" popup.
-   */
-  val starting: String?,
+  /** A project on this phone is being opened: one popup for the whole wait. */
+  val opening: OpeningProgress?,
   /** The SSH page (SshController). */
   val ssh: SshPageState = SshPageState(),
   /** `intellij-backend stop` is running for this project: the "Stopping IDE Backend" popup. */
   val stopping: String? = null,
 )
+
+/**
+ * One step of opening a project on this phone, e.g. project `…/Xflow/commons`, detail "Running
+ * intellij-backend start for commons; this takes up to 3 minutes". [cancellable]: only while
+ * `start` runs, as before.
+ */
+data class OpeningProgress(val project: String, val detail: String, val cancellable: Boolean)
 
 /** The sidebar's connection kinds: this device, Gateway's SSH and Link. */
 enum class ConnectPage {
@@ -187,12 +191,12 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
       onCancel = { choosingFolder = false },
     )
   }
-  state.starting?.let { project ->
+  state.opening?.let { progress ->
     StartProgress(
-      "Starting the remote IDE Backend",
-      "Running intellij-backend start for ${project.trimEnd('/').substringAfterLast('/')}; this takes up to 3 minutes",
+      "Connecting to ${progress.project.trimEnd('/').substringAfterLast('/')}",
+      progress.detail,
       fonts,
-      actions.cancelStart,
+      if (progress.cancellable) actions.cancelStart else null,
     )
   }
   state.stopping?.let { project ->
@@ -476,7 +480,7 @@ private fun LinkPage(state: ConnectScreenState, actions: ConnectActions, styles:
 /** Busy text, the last message and a pending question, under the header. */
 @Composable
 private fun Notices(state: ConnectScreenState, actions: ConnectActions, styles: ConnectStyles) {
-  state.busy?.let { Notice(it, styles) }
+  if (state.opening == null) state.busy?.let { Notice(it, styles) }
   state.message?.let { Notice(it, styles, color = IslandsDark.text) }
   state.question?.let { question ->
     Notice(question.text, styles, color = IslandsDark.text)

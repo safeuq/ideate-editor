@@ -87,7 +87,22 @@ class ConnectController(
 
   private var link by mutableStateOf(lastLink.read().orEmpty())
   private var file by mutableStateOf(lastFile.read().orEmpty())
-  private var message by mutableStateOf<String?>(null)
+  private val messageState = mutableStateOf<String?>(null)
+  /** The last error or hint; setting one ends the [opening] popup. */
+  private var message: String?
+    get() = messageState.value
+    set(value) {
+      messageState.value = value
+      if (value != null) opening = null
+    }
+
+  /**
+   * Opening a project on this phone: one popup from the first `status --json` until the session
+   * opens or fails; only its detail line changes ([step]).
+   */
+  private var opening by mutableStateOf<OpeningProgress?>(null)
+  /** `start` is opening a project in a backend that already serves another: Cancel keeps it. */
+  private var startingOnRunningBackend = false
   private var busy by mutableStateOf<String?>(null)
   /** `intellij-backend stop` is running for this project: the "Stopping IDE Backend" popup. */
   private var stopping by mutableStateOf<String?>(null)
@@ -100,7 +115,14 @@ class ConnectController(
    * "Take over?" (another client has Termux's backend) or "Take back" (another client took it from
    * us).
    */
-  private var question by mutableStateOf<Question?>(null)
+  private val questionState = mutableStateOf<Question?>(null)
+  private var question: Question?
+    get() = questionState.value
+    set(value) {
+      questionState.value = value
+      if (value != null) opening = null
+    }
+
   /**
    * `intellij-backend start` is running; its project. Cancel clears it, and the start's late result
    * is then ignored.
@@ -188,7 +210,7 @@ class ConnectController(
       busy,
       message,
       question,
-      starting,
+      opening,
       sshController?.state ?: SshPageState(),
       stopping,
     )
@@ -213,6 +235,7 @@ class ConnectController(
    * and its project keep running; the history entry reconnects.
    */
   fun leave() {
+    opening = null
     attempt = null
     reconnectJob?.cancel()
     reconnecting = null
@@ -349,6 +372,7 @@ class ConnectController(
 
   private fun onAccepted(current: Attempt, identity: String) {
     if (attempt !== current) return
+    opening = null
     accepted = true
     current.identity = identity
     // The SSH page lists the host's projects itself; a forwarded link is no use after a restart.
@@ -536,11 +560,13 @@ class ConnectController(
     project: String?,
     takingOver: Boolean = false,
     resumeTried: Boolean = false,
+    started: Boolean = false,
   ) {
     val termux = requireTermux()
     if (!termux.hasPermission) return termux.requestPermission()
     question = null
     busy = "Asking Termux for the backend's link…"
+    step(project, "Asking Termux for the backend's link…")
     termux.run(listOf("status", "--json")) { result ->
       busy = null
       result.fold(
@@ -554,10 +580,14 @@ class ConnectController(
             !status.flag("running") ->
               if (project != null) startInTermux(project, takingOver, resumeTried)
               else message = "No backend is running in Termux. Tap New Project to start one."
-            project != null && openProjects(status).none { samePath(it, project) } ->
-              startInTermux(project, takingOver, resumeTried)
+            // After `start` the project is open, whatever its path looks like here: no second
+            // `start`, which would loop.
+            project != null && !started && openProject(status, project, started) == null ->
+              startInTermux(project, takingOver, resumeTried, onRunningBackend = true)
             else -> {
-              val shown = project ?: openProjects(status).firstOrNull()
+              val shown =
+                project?.let { openProject(status, it, started) }
+                  ?: openProjects(status).firstOrNull()
               if (shown == null)
                 message = "intellij-backend status names no project: ${output.stdout}"
               else joinTermux(status, shown, takingOver, resumeTried)
@@ -593,6 +623,7 @@ class ConnectController(
           .maxByOrNull { it.lastConnected }
     val openFile =
       saved.firstOrNull { it.kind == ConnectionKind.TERMUX && it.project == project }?.openFile
+    step(project, "Connecting…")
     when {
       ours != null ->
         connect(
@@ -624,7 +655,24 @@ class ConnectController(
       it.jsonObject["projectPath"]?.jsonPrimitive?.contentOrNull
     } ?: listOfNotNull(status["project"]?.jsonPrimitive?.contentOrNull)
 
-  private fun samePath(first: String, second: String) = first.trimEnd('/') == second.trimEnd('/')
+  /**
+   * [wanted]'s entry in `projects`, as the backend names it. `start` resolves symlinks, so after it
+   * ([started]) `~/storage/shared/Files/Projects/Xflow/commons` is listed as
+   * `/storage/emulated/0/Files/Projects/Xflow/commons`: then the one project with the same folder
+   * name, else `project`, the backend's last opened. Null: not open.
+   */
+  private fun openProject(status: JsonObject, wanted: String, started: Boolean): String? =
+    openProjectPath(
+      openProjects(status),
+      status["project"]?.jsonPrimitive?.contentOrNull,
+      wanted,
+      started,
+    )
+
+  /** The [opening] popup's next step for [project]. */
+  private fun step(project: String?, detail: String, cancellable: Boolean = false) {
+    opening = OpeningProgress(project ?: "Termux", detail, cancellable)
+  }
 
   /**
    * `intellij-backend start <project>`: starts a backend, or opens [project] in the running one;
@@ -634,17 +682,25 @@ class ConnectController(
     project: String,
     takingOver: Boolean = false,
     resumeTried: Boolean = false,
+    /** The backend already serves another project; Cancel must not stop it. */
+    onRunningBackend: Boolean = false,
   ) {
     if (busy != null || starting != null) return
     message = null
     starting = project
+    startingOnRunningBackend = onRunningBackend
+    step(
+      project,
+      "Running intellij-backend start for ${project.trimEnd('/').substringAfterLast('/')}; this takes up to 3 minutes",
+      cancellable = true,
+    )
     requireTermux().run(listOf("start", project)) { result ->
       if (starting != project) return@run
       starting = null
       result.fold(
         onSuccess = { output ->
           when (output.exitCode) {
-            0 -> termuxStatus(project, takingOver, resumeTried)
+            0 -> termuxStatus(project, takingOver, resumeTried, started = true)
             Termux.EXIT_SETTINGS_IN_USE ->
               message =
                 output.stderr.trim().ifEmpty {
@@ -676,8 +732,16 @@ class ConnectController(
     }
   }
 
-  /** Like Gateway's Cancel: stops the backend that `start` is bringing up. */
+  /**
+   * Like Gateway's Cancel: stops the backend that `start` is bringing up. A backend that already
+   * served another project keeps running; the app only stops waiting.
+   */
   private fun cancelStart() {
+    opening = null
+    if (startingOnRunningBackend) {
+      starting = null
+      return
+    }
     stopping = starting
     starting = null
     requireTermux().run(listOf("stop")) { result ->
@@ -699,6 +763,7 @@ class ConnectController(
    * phone it is `127.0.0.1`.
    */
   private fun connectTermux(printedLink: String, project: String?) {
+    step(project, "Connecting…")
     val text = printedLink.trim().replace("tcp://0.0.0.0:", "tcp://127.0.0.1:")
     val entry = saved.firstOrNull { it.kind == ConnectionKind.TERMUX && it.project == project }
     connect(
@@ -827,4 +892,25 @@ fun EditorApp(
       )
     }
   }
+}
+
+/**
+ * Which of the backend's [open] projects is [wanted] (see `ConnectController.openProject`);
+ * [lastOpened] is status's `project`.
+ */
+internal fun openProjectPath(
+  open: List<String>,
+  lastOpened: String?,
+  wanted: String,
+  started: Boolean,
+): String? {
+  fun withoutSlash(path: String) = path.trimEnd('/')
+  open
+    .firstOrNull { withoutSlash(it) == withoutSlash(wanted) }
+    ?.let {
+      return it
+    }
+  if (!started) return null
+  val name = withoutSlash(wanted).substringAfterLast('/')
+  return open.singleOrNull { withoutSlash(it).substringAfterLast('/') == name } ?: lastOpened
 }
