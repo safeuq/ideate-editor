@@ -811,6 +811,11 @@ IDEate (`ClientScreen.EditorTabs`):
   context menu area would otherwise be the parent and every tab would read as at 0);
 - on a phone held upright, a sideways drag that starts on the tab row scrolls the tabs until they reach that end;
   only then does it switch pages (`TabRowScroll`, given to the page swiper with the drag's start point);
+- the tab's icon comes from the backend, as JetBrains Client does it: `VfsModel.getFileIcon(RdFileIconParams(projectId,
+  fileId, flags = 2))`, IntelliJ's `IconUtil.computeFileIcon(file, Iconable.ICON_FLAG_READ_STATUS, project)` for
+  tabs (`EditorsSplitters`). Before 2026-11-19 a tab took its icon from the Project tree and fell back to the plain
+  text icon for a file the tree hadn't loaded (Big.java opened from Search Everywhere). The read-only lock layer
+  is dropped, like other overlays (`iconPaths`);
 - not yet: the × on hover in the list, and the ⋮ after the ▾ (IntelliJ's editor tab actions). Desktop: checked
   only on the emulator; the mouse wheel on the row is untested.
 Row widths (IDEate, from the renderer's rules): the name in full; the location's icon only while the name and the

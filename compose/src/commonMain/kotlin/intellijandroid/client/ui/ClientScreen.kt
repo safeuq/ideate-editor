@@ -924,7 +924,8 @@ class TabRowScroll {
 
 /** The file's icon from the Project tree, or the plain text icon. */
 private fun fileIconPath(state: SessionState, path: String) =
-  state.tree.nodes.values.firstOrNull { it.path == path }?.iconPaths?.firstOrNull()
+  state.tabIcons[path]
+    ?: state.tree.nodes.values.firstOrNull { it.path == path }?.iconPaths?.firstOrNull()
     ?: "expui/fileTypes/text.svg"
 
 /** IntelliJ's tab close button: `closeSmall`, `closeSmallHovered` under the pointer. */

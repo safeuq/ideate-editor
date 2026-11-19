@@ -5,6 +5,7 @@ import com.jetbrains.rd.ide.model.KernelAwareTextControlId
 import com.jetbrains.rd.ide.model.RdCaret
 import com.jetbrains.rd.ide.model.RdCaretId
 import com.jetbrains.rd.ide.model.RdCaretState
+import com.jetbrains.rd.ide.model.RdCaretStateChange
 import com.jetbrains.rd.ide.model.RdCaretStateSnapshot
 import com.jetbrains.rd.ide.model.RdDocumentChange
 import com.jetbrains.rd.ide.model.RdDocumentIdWithFileId
@@ -150,6 +151,26 @@ class EditRetryTest {
   private val marker = RdPatch(emptyList(), emptyList(), emptyList(), emptyList())
 
   private fun typed(id: Long) = (sent.first { it.first == id }.second as RdTypeKeyRequest).char
+
+  @Test
+  fun onlyCaretMovesTheBackendMakesByItselfAreCounted() {
+    // The caret snapshot that comes with the opened file is not a move.
+    assertEquals(0, session.backendCaretMoves)
+    // Navigation: the backend moves the caret, e.g. to a symbol chosen in Search Everywhere.
+    session.backendPatch(
+      RdPatch(
+        listOf(RdCaretStateChange(caretState(0, document), caretState(0, document), control)),
+        emptyList(),
+        emptyList(),
+        listOf(RdPatchEditorVersion(editor, control)),
+      ),
+    )
+    assertEquals(1, session.backendCaretMoves)
+    // The caret in an answer to typing is not.
+    session.type('a')
+    session.response(1, insert(0, "a", 0, 1))
+    assertEquals(1, session.backendCaretMoves)
+  }
 
   @Test
   fun answersLikeTheGuessOnlyConfirmIt() {

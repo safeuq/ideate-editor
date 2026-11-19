@@ -127,8 +127,12 @@ data class EditorFile(
    * catching up with it.
    */
   val editable: Boolean = false,
-  /** Bumped when the caret was put back where it was last time; the view scrolls to it then. */
-  val caretRestored: Int = 0,
+  /**
+   * Bumped when the caret was put back where it was last time, or the backend moved it by itself
+   * (navigation); the view then centres the caret's line, like IntelliJ's
+   * `OpenFileDescriptor.navigateIn` (`scrollToCaret(ScrollType.CENTER)`).
+   */
+  val caretToShow: Int = 0,
   /** Undo may do something (true while the backend's undo stack is unknown). */
   val canUndo: Boolean = false,
   /** Redo has something: right after an undo, until the next edit. */
@@ -171,6 +175,8 @@ data class SessionState(
   val projectName: String? = null,
   val tree: ProjectTree = ProjectTree(),
   val editors: List<EditorFile> = emptyList(),
+  /** Each open file's tab icon from the backend, e.g. `/…/Main.java` to `nodes/class.svg`. */
+  val tabIcons: Map<String, String> = emptyMap(),
   val selectedEditor: String? = null,
   /**
    * Text the backend put on the clipboard (`ClipboardModel.content` set by the backend, e.g. its

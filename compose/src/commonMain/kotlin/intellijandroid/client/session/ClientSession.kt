@@ -1,6 +1,7 @@
 package intellijandroid.client.session
 
 import com.intellij.platform.split.protocol.DefaultSplitMarshallersProvider
+import com.jetbrains.codeWithMe.model.RdFileIconParams
 import com.jetbrains.codeWithMe.model.RdFindFileParams
 import com.jetbrains.codeWithMe.model.RdProjectViewAsyncPane
 import com.jetbrains.codeWithMe.model.RdProjectViewItem
@@ -57,6 +58,7 @@ import com.jetbrains.rd.ide.model.RdDocumentId
 import com.jetbrains.rd.ide.model.RdDocumentIdWithFileId
 import com.jetbrains.rd.ide.model.RdFileEditorCompositeId
 import com.jetbrains.rd.ide.model.RdFileEditorId
+import com.jetbrains.rd.ide.model.RdFileId
 import com.jetbrains.rd.ide.model.RdFileIdNew
 import com.jetbrains.rd.ide.model.RdMarkupKey
 import com.jetbrains.rd.ide.model.RdMarkupModel
@@ -177,7 +179,7 @@ class ClientSession(
   private val reopening = mutableSetOf<String>()
   /** Saved carets of reopened files, put back once each file's edit session is ready. */
   private val caretsToRestore = mutableMapOf<String, Int>()
-  /** How often each file's caret was put back, for [EditorFile.caretRestored]. */
+  /** How often each file's caret was put back, for [EditorFile.caretToShow]. */
   private val caretsRestored = mutableMapOf<String, Int>()
   private var saveScheduled = false
   private val editSessions = mutableMapOf<RdDocumentId, EditSession>()
@@ -774,15 +776,20 @@ class ClientSession(
           // path.
           (composite.fileId as? RdFileIdNew)?.let { fileId ->
             val known = documentPaths[fileId.backendId]
-            if (known != null) compositeIds.putIfAbsent(known, compositeId)
-            else {
+            if (known != null) {
+              compositeIds.putIfAbsent(known, compositeId)
+              fetchTabIcon(compositeLifetime, fileId, known)
+            } else {
               unnamedComposites[fileId.backendId] = compositeId
               vfs
                 ?.findFile
                 ?.start(compositeLifetime, RdFindFileParams(fileId, null, false, false))
                 ?.result
                 ?.advise(compositeLifetime) { found ->
-                  found.unwrap()?.properties?.path?.let { nameDocument(fileId.backendId, it) }
+                  found.unwrap()?.properties?.path?.let { path ->
+                    nameDocument(fileId.backendId, path)
+                    fetchTabIcon(compositeLifetime, fileId, path)
+                  }
                 }
             }
           }
@@ -1148,6 +1155,24 @@ class ClientSession(
     showEditor(path)
   }
 
+  /**
+   * Asks the backend for [path]'s tab icon, as JetBrains Client does (`VfsModel.getFileIcon`):
+   * IntelliJ's tabs use `IconUtil.computeFileIcon(file, ICON_FLAG_READ_STATUS, project)`
+   * (EditorsSplitters), e.g. the class icon for `Main.java`, which the file type alone can't tell.
+   */
+  private fun fetchTabIcon(compositeLifetime: Lifetime, fileId: RdFileId, path: String) {
+    val project = projectId ?: return
+    val fileSystem = vfs ?: return
+    fileSystem.getFileIcon
+      .start(compositeLifetime, RdFileIconParams(project, fileId, ICON_FLAG_READ_STATUS))
+      .result
+      .advise(compositeLifetime) { result ->
+        val icon = runCatching { result.unwrap() }.getOrNull() ?: return@advise
+        val iconPath = iconPaths(icon).firstOrNull() ?: return@advise
+        mutableState.update { it.copy(tabIcons = it.tabIcons + (path to iconPath)) }
+      }
+  }
+
   /** A backend selection whose file has no tab or path yet. */
   private var pendingBackendSelection: RdFileEditorId? = null
 
@@ -1338,7 +1363,7 @@ class ClientSession(
         selectionStart = session?.selectionStart ?: 0,
         selectionEnd = session?.selectionEnd ?: 0,
         editable = session != null,
-        caretRestored = caretsRestored[pathOf(documentId)] ?: 0,
+        caretToShow = (caretsRestored[pathOf(documentId)] ?: 0) + (session?.backendCaretMoves ?: 0),
         canUndo = session?.canUndo == true,
         canRedo = session?.canRedo == true,
       )
@@ -1438,6 +1463,9 @@ class ClientSession(
     const val MARKUP_DELAY_MS = 32L
     /** How long after an edit or caret move the open editors and carets are saved. */
     const val SAVE_DELAY_MS = 1_000L
+
+    /** `Iconable.ICON_FLAG_READ_STATUS`: the file icon with a lock when the file is read-only. */
+    const val ICON_FLAG_READ_STATUS = 2
 
     /** The default comment keys every language's comment colors fall back to. */
     val COMMENT_KEYS = setOf("DEFAULT_LINE_COMMENT", "DEFAULT_BLOCK_COMMENT", "DEFAULT_DOC_COMMENT")

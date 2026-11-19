@@ -586,9 +586,17 @@ withKernel(middleware) {                                   // withTransactor { w
      `main(String[])` (Symbols); Enter or a tap on `.gitignore` opened it and closed the popup; Escape closes.
    - Not confirmed: double ⇧. The automation tool's lone Shift press does not arrive as a key event, so it is
      covered by `DoubleShiftTest` only.
-   - **Known gap**: choosing a symbol in the file already open leaves the caret where it was. The backend sends
-     nothing the client listens to: no edit patch (checked with `CLIENT_EDIT_DEBUG`), no
-     `TextControlModel.requestFocusFromBackend`, no `scrolling`. Choosing something in another file opens it.
+   - **Fixed 2026-11-19: the caret lands on the chosen symbol.** Before, the editor stayed at line 1 (another
+     file) or where it was (the same file). The backend runs IntelliJ's own navigation (`itemSelected` →
+     `OpenFileDescriptor.navigateIn`) and the caret move does arrive: a `backendPatches` patch with one
+     `RdCaretStateChange`, e.g. `method399` in Big.java → offset 64440, line 3596. In another file it comes after
+     the opening `RdCaretStateSnapshot` (offset 0). What never comes is a scroll: `TextControlModel.scrolling`,
+     `requestFocusFromBackend` and `initialState` (null) stay silent, so the frontend has to scroll itself, as
+     `OpenFileDescriptor` asks with `scrollToCaret(ScrollType.CENTER)`. IDEate counts such caret moves in a
+     backend patch, not in an answer to its own request (`EditSession.backendCaretMoves`), and the editor
+     centres the caret's line on each (`EditorFile.caretToShow`, shared with the reopened file's caret). Checked
+     on the Pixel 3a emulator: method399 opens Big.java at line 3596; method10 in the open Big.java goes to line
+     95. Test: `EditRetryTest.onlyCaretMovesTheBackendMakesByItselfAreCounted`.
 3. All (merging, groups, "more").
 4. Actions (running one is `itemSelected`; results that open dialogs come over Lux).
 5. Filters, then the Text tab.

@@ -231,6 +231,13 @@ class EditSession(
   private var undoSizesKnown = false
 
   /**
+   * How often the backend moved the caret by itself, not in answer to a request: navigation, e.g. a
+   * symbol chosen in Search Everywhere puts the caret on `method399` at offset 64440.
+   */
+  var backendCaretMoves = 0
+    private set
+
+  /**
    * Stays true when the edit is later dropped (a failure, or a second retry in [rebase]): Undo can
    * then show enabled with nothing to undo, which does no harm.
    */
@@ -522,6 +529,8 @@ class EditSession(
   fun backendPatch(patch: RdPatch) {
     debug { "backend patch ${describe(patch)} with ${pending.size} pending" }
     if (recovering) return
+    if (patch.changes.any { it is RdCaretStateChange && it.editorId == identity.editorId })
+      backendCaretMoves++
     if (pending.isEmpty()) {
       if (applyChecked(patch)) applied++ else outOfStep("backend patch ${describe(patch)}")
     } else rebase(patch, completesHead = false, resend = false)
