@@ -46,6 +46,8 @@ import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.component.SearchHistory
 import intellijandroid.client.ui.component.SearchTextField
 import intellijandroid.client.ui.component.TextField
+import intellijandroid.client.ui.dialog.DialogAction
+import intellijandroid.client.ui.dialog.MessageDialog
 import intellijandroid.client.ui.dialog.MessageKind
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
@@ -109,6 +111,8 @@ class Question(
   val confirm: String,
   /** The message dialog's icon: a question, or a warning for a changed host key. */
   val kind: MessageKind = MessageKind.QUESTION,
+  /** The message dialog's bold title; the SSH page's host key questions bring their own. */
+  val title: String = "IDE Backend",
   val onConfirm: () -> Unit,
 )
 
@@ -207,7 +211,26 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
       onCancel = null,
     )
   }
+  state.question?.let { question -> BackendQuestionDialog(question, actions) }
   actions.ssh?.let { ssh -> SshOverlays(state.ssh, ssh, fonts) }
+}
+
+/**
+ * "Take over?" (another client has the backend) and "Take back", in IntelliJ's message dialog like
+ * the SSH page's host key question. They used to sit inline under the header. Cancel starts
+ * focused, so a stray Enter doesn't disconnect the other device.
+ */
+@Composable
+private fun BackendQuestionDialog(question: Question, actions: ConnectActions) {
+  val cancel = DialogAction("Cancel", onClick = actions.cancelQuestion)
+  MessageDialog(
+    title = question.title,
+    message = question.text,
+    kind = question.kind,
+    actions = listOf(DialogAction(question.confirm, onClick = actions.answerQuestion), cancel),
+    onCancel = actions.cancelQuestion,
+    focused = cancel,
+  )
 }
 
 /**
@@ -477,21 +500,13 @@ private fun LinkPage(state: ConnectScreenState, actions: ConnectActions, styles:
   }
 }
 
-/** Busy text, the last message and a pending question, under the header. */
+/**
+ * Busy text and the last message, under the header. A question is a dialog: BackendQuestionDialog.
+ */
 @Composable
 private fun Notices(state: ConnectScreenState, actions: ConnectActions, styles: ConnectStyles) {
   if (state.opening == null) state.busy?.let { Notice(it, styles) }
   state.message?.let { Notice(it, styles, color = IslandsDark.text) }
-  state.question?.let { question ->
-    Notice(question.text, styles, color = IslandsDark.text)
-    Row(
-      Modifier.padding(horizontal = Gateway.contentInset),
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      OutlinedButton(question.confirm, onClick = actions.answerQuestion)
-      OutlinedButton("Cancel", onClick = actions.cancelQuestion)
-    }
-  }
 }
 
 @Composable

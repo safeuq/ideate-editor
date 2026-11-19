@@ -269,7 +269,7 @@ class ConnectController(
       accepted && failed?.kind == ConnectionKind.TERMUX && "Backend terminated the wire" in lost
     ) {
       question =
-        Question("Another device took over this backend.", "Take back") {
+        Question("Another device took over this backend.", "Take back", title = "Disconnected") {
           termuxStatus(failed.project, takingOver = true)
         }
       return
@@ -640,6 +640,7 @@ class ConnectController(
           Question(
             "Another device is connected to this backend (for example Gateway on a laptop). Take over? It will be disconnected.",
             "Take over",
+            title = "IDE Backend In Use",
           ) {
             connectTermux(joinLink, project)
           }
