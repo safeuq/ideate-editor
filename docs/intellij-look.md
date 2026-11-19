@@ -813,6 +813,9 @@ IDEate (`ClientScreen.EditorTabs`):
   only then does it switch pages (`TabRowScroll`, given to the page swiper with the drag's start point);
 - not yet: the × on hover in the list, and the ⋮ after the ▾ (IntelliJ's editor tab actions). Desktop: checked
   only on the emulator; the mouse wheel on the row is untested.
+Row widths (IDEate, from the renderer's rules): the name in full; the location's icon only while the name and the
+folder leave room; then the folder; the location's text gets what is left and is cut at the row's end. Checked
+with a copy of the xtool repo (876 files): Classes "Execu", Files "build.gradle".
 History: `SearchHistoryList`, per tab, newest first, at most 50, kept while the app runs; the query is saved when the
 popup closes (`SeFrontendService`). Before 2026-11-19 a long folder took the row and left the name no room (the name
 had the row's weight, the folder didn't, so the folder was measured first).

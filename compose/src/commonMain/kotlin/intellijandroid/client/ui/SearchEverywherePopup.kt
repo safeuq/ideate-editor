@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -221,10 +222,10 @@ private fun ResultRow(row: SearchRow, selected: Boolean, onClick: () -> Unit) {
     BoxWithConstraints(Modifier.weight(1f)) {
       val measurer = rememberTextMeasurer()
       val density = LocalDensity.current
+      fun width(value: String) = measurer.measure(value, style).size.width
       val container =
         remember(row, constraints.maxWidth) {
           row.container?.let { text ->
-            fun width(value: String) = measurer.measure(value, style).size.width
             val room =
               with(density) {
                 constraints.maxWidth -
@@ -237,6 +238,25 @@ private fun ResultRow(row: SearchRow, selected: Boolean, onClick: () -> Unit) {
             shortenContainerText(text, room, ::width)
           }
         }
+      // The location's icon only when the name and the folder leave the row some room, as the
+      // renderer does (nonLocationContentWidth < width). The room goes, in order, to the name, the
+      // location's icon, the folder and last the location's text, which is cut at the row's end.
+      val widths =
+        remember(row, container, constraints.maxWidth) {
+          with(density) {
+            val gap = Looks.gap.roundToPx()
+            val icon = Looks.iconSize.roundToPx()
+            val name = width(row.name)
+            val folder = container?.let { gap + width(it) } ?: 0
+            var left = constraints.maxWidth - icon - gap - name
+            val locationIcon =
+              if (row.locationIconPath != null && left - folder > 0) gap + icon else 0
+            left -= locationIcon
+            val folderShown = folder.coerceIn(0, maxOf(left, 0))
+            left -= folderShown
+            RowWidths(folderShown, maxOf(left, 0), locationIcon > 0)
+          }
+        }
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(row.iconPath)
         Spacer(Modifier.width(Looks.gap))
@@ -246,28 +266,39 @@ private fun ResultRow(row: SearchRow, selected: Boolean, onClick: () -> Unit) {
           maxLines = 1,
           softWrap = false,
         )
-        container?.let {
-          Spacer(Modifier.width(Looks.gap))
+        if (container != null && widths.folder > 0) {
           BasicText(
-            it,
+            container,
             style = style.copy(color = IslandsDark.textSecondary),
             maxLines = 1,
             softWrap = false,
+            modifier =
+              Modifier.width(with(density) { widths.folder.toDp() }).padding(start = Looks.gap),
           )
         }
         Spacer(Modifier.weight(1f))
         row.location?.let {
+          BasicText(
+            it,
+            style = style.copy(color = secondary),
+            maxLines = 1,
+            softWrap = false,
+            modifier =
+              Modifier.widthIn(max = with(density) { widths.location.toDp() })
+                .padding(start = Looks.gap),
+          )
+        }
+        if (widths.locationIcon) {
           Spacer(Modifier.width(Looks.gap))
-          BasicText(it, style = style.copy(color = secondary), maxLines = 1, softWrap = false)
-          if (row.locationIconPath != null) {
-            Spacer(Modifier.width(Looks.gap))
-            Icon(row.locationIconPath)
-          }
+          Icon(row.locationIconPath)
         }
       }
     }
   }
 }
+
+/** A result row's widths in px: the folder (with its gap), the location's text, its icon. */
+private class RowWidths(val folder: Int, val location: Int, val locationIcon: Boolean)
 
 /**
  * IntelliJ's `SETextShortener.getShortenContainerText`: [text] as it is when it fits in [maxWidth]
@@ -311,7 +342,8 @@ internal fun shortenContainerText(text: String, maxWidth: Int, width: (String) -
 @Composable
 private fun Icon(path: String?) {
   val icons = LocalIcons.current
-  Box(Modifier.size(Looks.iconSize)) {
+  // requiredSize: a row out of room cuts the icon, never squashes it.
+  Box(Modifier.requiredSize(Looks.iconSize)) {
     path?.let(icons::painter)?.let { Image(it, null, Modifier.size(Looks.iconSize)) }
   }
 }
