@@ -168,8 +168,8 @@ private object Look {
   val radius = 8.dp
   val inset = 10.dp
   val gap = 8.dp
-  /** IntelliJ's list row is 24 (pointer); taller so a finger hits one kind, not its neighbour. */
-  val rowHeight = 32.dp
+  /** IntelliJ's list row (`List.rowHeight`), the same for mouse and touch. */
+  val rowHeight = 24.dp
   val rowInset = 8.dp
   val iconGap = 6.dp
   val selectionRadius = 4.dp

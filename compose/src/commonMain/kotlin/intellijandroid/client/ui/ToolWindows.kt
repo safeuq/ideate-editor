@@ -47,7 +47,6 @@ import androidx.compose.ui.window.PopupProperties
 import intellijandroid.client.session.BackendToolWindow
 import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.component.Menu
-import intellijandroid.client.ui.component.Menus
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.label
@@ -376,7 +375,7 @@ internal fun DropDownMenu(entries: List<MenuEntry>, beside: Boolean, onDismiss: 
     onDismissRequest = onDismiss,
     properties = PopupProperties(focusable = true),
   ) {
-    Menu({ entries }, rowHeight = Menus.touchRowHeight, close = onDismiss)
+    Menu({ entries }, close = onDismiss)
   }
 }
 

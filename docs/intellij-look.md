@@ -466,7 +466,11 @@ Checked on the desktop against the Mac backend (port 5992), `Big.java`: scrolled
 |---|---|
 | Right click (desktop, Android with a mouse) | at the pointer; moved left or up when there's no room, like a desktop menu |
 | Right click on a phone (smallest window side under 600 dp, Android's `sw600dp` line) | in the middle of the window, as there is little room |
-| Long press with a finger (phone and tablet) | in the middle of the window, rows 40 dp high for a finger (24 otherwise) |
+| Long press with a finger (phone and tablet) | in the middle of the window |
+
+Rows are IntelliJ's 24 dp however the menu was opened. Until 2026-11-20 a menu opened by a finger had 40 dp
+rows, the tool window dropdowns always had them, and New ▸ Java Class's kinds were 32 dp; the user asked for
+IntelliJ's sizes everywhere, with no extra padding for touch, now and in anything new.
 
 The gesture is watched in Compose's `Initial` pass, before the content sees it. A right click or a long press is
 consumed, so it doesn't also become a tap, a drag or a text selection underneath. A long press is a touch held for

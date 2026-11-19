@@ -20,7 +20,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -55,8 +54,7 @@ fun SearchTextField(
 ) {
   val icons = LocalIcons.current
   val currentValue by rememberUpdatedState(value)
-  // Rows as tall as the context menu's: 40 when the popup was opened by touch.
-  var popupByTouch by remember { mutableStateOf<Boolean?>(null) }
+  var historyShown by remember { mutableStateOf(false) }
   Box {
     TextField(
       value,
@@ -80,12 +78,11 @@ fun SearchTextField(
                   else
                     Modifier.pointerInput(history) {
                       awaitEachGesture {
-                        val down = awaitFirstDown()
+                        awaitFirstDown()
                         if (waitForUpOrCancellation() == null) return@awaitEachGesture
                         // showPopup(): the current text joins the history first.
                         history.add(currentValue)
-                        if (history.items.isNotEmpty())
-                          popupByTouch = down.type == PointerType.Touch
+                        if (history.items.isNotEmpty()) historyShown = true
                       }
                     },
                 ),
@@ -98,18 +95,16 @@ fun SearchTextField(
           { ClearButton { onValueChange("") } }
         },
     )
-    val byTouch = popupByTouch
-    if (history != null && byTouch != null) {
+    if (history != null && historyShown) {
       val below = with(LocalDensity.current) { 30.dp.roundToPx() }
       Popup(
         offset = IntOffset(0, below),
-        onDismissRequest = { popupByTouch = null },
+        onDismissRequest = { historyShown = false },
         properties = PopupProperties(focusable = true),
       ) {
         Menu(
           { history.items.map { item -> MenuItem(item, onClick = { onValueChange(item) }) } },
-          rowHeight = if (byTouch) Menus.touchRowHeight else Menus.pointerRowHeight,
-          close = { popupByTouch = null },
+          close = { historyShown = false },
         )
       }
     }

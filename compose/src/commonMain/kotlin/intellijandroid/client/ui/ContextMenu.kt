@@ -29,7 +29,6 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import intellijandroid.client.ui.component.Menu
-import intellijandroid.client.ui.component.Menus
 import kotlin.math.roundToInt
 
 /** One line of a context menu: plain data, so items can also come from the backend later. */
@@ -138,12 +137,7 @@ fun ContextMenuArea(
         onDismissRequest = { open = null },
         properties = PopupProperties(focusable = true),
       ) {
-        Menu(
-          entries,
-          rowHeight = if (menu.byTouch) Menus.touchRowHeight else Menus.pointerRowHeight,
-        ) {
-          open = null
-        }
+        Menu(entries) { open = null }
       }
     }
   }
@@ -152,8 +146,6 @@ fun ContextMenuArea(
 private data class OpenMenu(val anchor: Offset, val byTouch: Boolean)
 
 private val PHONE_SMALLEST_SIDE = 600.dp
-
-// IntelliJ's menu rows are 24 high; a finger needs more.
 
 private fun windowSizeOf(coordinates: LayoutCoordinates): IntSize {
   var root = coordinates

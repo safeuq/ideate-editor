@@ -46,13 +46,14 @@ import intellijandroid.client.ui.theme.label
  * IntelliJ's popup menu (`IdeaPopupMenuUI`; rows as `PopupListElementRenderer` draws them in
  * platform/platform-impl/src/com/intellij/ui/popup/list/), Jewel's `Menu`: [entries] in a popup
  * frame, submenus opening in place with a back row on top. [entries] returns null while the items
- * are still loading ("Loading…"). [rowHeight] is 24 by pointer, 40 by touch. [close] runs after an
- * item is chosen. Measurements: docs/intellij-look.md, section 13.
+ * are still loading ("Loading…"). Rows are IntelliJ's 24 dp whether a mouse or a finger opened the
+ * menu: IDEate keeps IntelliJ's sizes and adds no padding for touch. [close] runs after an item is
+ * chosen. Measurements: docs/intellij-look.md, section 13.
  */
 @Composable
 fun Menu(
   entries: () -> List<MenuEntry>?,
-  rowHeight: Dp,
+  rowHeight: Dp = Menus.rowHeight,
   close: () -> Unit,
 ) {
   val fonts = LocalClientFonts.current
@@ -191,8 +192,7 @@ private fun Separator() {
 }
 
 internal object Menus {
-  val pointerRowHeight = 24.dp // rows opened by mouse, as IntelliJ's
-  val touchRowHeight = 40.dp // rows opened by touch, easy to hit with a finger
+  val rowHeight = 24.dp // PopupMenu rows, the same for mouse and touch
   val border = IslandsDark.popupBorder // Separator.separatorColor = popup-border
   val selection = IslandsDark.selectionBackground // MenuItem.selectionBackground
   val shortcut = IslandsDark.textSecondary // MenuItem.acceleratorForeground = text-secondary

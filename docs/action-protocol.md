@@ -161,7 +161,8 @@ What held in each case:
 - The row (Project, Structure) or the caret (editor) moves to the pressed spot before the menu
   asks the backend, so the menu is for what was pressed. In the editor the caret landed in
   `greeting` (its usages lit up) with no selection, and the pager stayed on the editor page.
-- The menu opens centred over the tool-window page, 40 dp rows, and scrolls by dragging when it
+- The menu opens centred over the tool-window page (rows were 40 dp then; IntelliJ's 24 dp since
+  2026-11-20), and scrolls by dragging when it
   is taller than the screen (the Project menu is: Reload from Disk is below the fold).
 - Submenus (Copy Path/Reference… ▸) open in place, centred too.
 - Back closes the menu only; the page under it stays.
