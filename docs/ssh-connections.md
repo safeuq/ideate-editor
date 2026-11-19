@@ -105,6 +105,10 @@ Gateway connection to the phone immediately listed "smoke" with the date from th
    a join link.
 3. **If not, start one:** `host-launch`, then poll `host-status` once a second. On a timeout, show the reason from
    stderr between `###FailureReason###` and `###FailureReasonEnd###`.
+   A running backend that doesn't have the project open yet counts as "not running" for that project: the launch
+   hands the project to the running backend (the launcher exits 0 at once), and the poll waits until the project
+   is in `projects[]`. IDEate did that from 2026-11-19; before, it connected to the running backend and showed its
+   first project ([`split-protocol.md`](split-protocol.md), "One backend, several projects, one connection").
 4. **The join link** comes from that status.
 5. **Port forwarding:** Gateway listens on `127.0.0.1` at the backend's port if that's free (5990), else on a
    random port (57085 on 2026-11-17). Every accepted client connection opens a new SSH tunnel to the backend's

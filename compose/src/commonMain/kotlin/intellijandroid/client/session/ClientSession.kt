@@ -131,6 +131,12 @@ class ClientSession(
   /** Where this project's open editors are kept between connections; null keeps none. */
   private val savedEditors: OpenEditors.Slot? = null,
   /**
+   * The project to show, e.g. `/data/data/com.termux/files/home/IdeaProjects/commons`. One backend
+   * serves all its projects over one connection, each a solution; the JetBrains Client opens a
+   * window per solution, IDEate shows this one. Null: the first solution.
+   */
+  private val project: String? = null,
+  /**
    * Called on the connect thread once the backend has accepted the connection, with the identity it
    * accepted.
    */
@@ -710,15 +716,24 @@ class ClientSession(
     vfs = protocol.vfsModel
     bindClipboard(protocol.clipboardModel)
     protocol.solutionModel.solutions.view(lifetime) { solutionLifetime, _, newSolution ->
-      log("Project ${newSolution.projectId.value} added")
+      val description =
+        (newSolution.solutionOpenStrategy as? RdOpenSolution)?.description as? RdCodeWithMeProject
+      val hostPath = description?.hostProjectBasePath
+      if (!isShownProject(project, hostPath, showing = solution != null)) {
+        log("Project ${newSolution.projectId.value} ($hostPath) added; showing $project")
+        return@view
+      }
+      log("Project ${newSolution.projectId.value} ($hostPath) added")
       projectId = newSolution.projectId
       solution = newSolution
+      solutionLifetime.onTermination {
+        projectId = null
+        solution = null
+      }
       newSolution.solutionLifecycle.readyForExtsRegistration.set(true)
       // Fleet RPC names projects by the kernel id, e.g. "m3nniruk9k7j4qsibjui", not by the rd
       // project id.
-      val kernelProjectId =
-        ((newSolution.solutionOpenStrategy as? RdOpenSolution)?.description as? RdCodeWithMeProject)
-          ?.kernelProjectId
+      val kernelProjectId = description?.kernelProjectId
       if (kernelProjectId == null) {
         log("Project has no kernel id; no completion")
       } else {
@@ -1615,3 +1630,10 @@ internal fun plainText(html: String): String =
     .replace("&lt;", "<")
     .replace("&gt;", ">")
     .replace("&amp;", "&")
+
+/**
+ * Whether a solution the backend added is the one IDEate shows: the [wanted] project's (paths
+ * compared without a trailing `/`), or with none wanted the first one, while none is [showing].
+ */
+internal fun isShownProject(wanted: String?, hostPath: String?, showing: Boolean): Boolean =
+  !showing && (wanted == null || hostPath?.trimEnd('/') == wanted.trimEnd('/'))

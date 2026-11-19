@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.ssh.HostKeyCheck
+import intellijandroid.client.ssh.HostStatus
 import intellijandroid.client.ssh.IdeateKey
 import intellijandroid.client.ssh.InstalledIde
 import intellijandroid.client.ssh.KnownHosts
@@ -590,25 +591,36 @@ class SshController(
         val remote = remoteFor(entry)
         progress("Checking for already running IDE Backend")
         var status = remote.status(idePath, projectPath)
+        // A running backend serves every project it has open over one join link; Gateway's launch
+        // for another project hands it to that backend (the launcher exits 0 at once) and the
+        // project shows up in projects[].
+        fun hasProject(candidate: HostStatus?) =
+          candidate?.isReady == true &&
+            candidate.projects.any { it.projectPath.trimEnd('/') == projectPath.trimEnd('/') }
         val wasRunning = status?.isReady == true
-        if (status?.isReady != true) {
+        if (!hasProject(status)) {
           progress("Starting the remote IDE Backend")
           val logs = remote.launch(idePath, projectPath)
           progress("Waiting for the IDE Backend to start")
           val deadline = System.currentTimeMillis() + START_TIMEOUT_MILLIS
-          while (status?.isReady != true) {
+          while (!hasProject(status)) {
             check(run == openRun) { "Cancelled" }
             check(System.currentTimeMillis() < deadline) {
               "The IDE Backend didn't start within ${START_TIMEOUT_MILLIS / 60_000} minutes"
             }
             Thread.sleep(1_000)
             status = remote.status(idePath, projectPath)
-            if (status?.isReady != true)
-              remote.launchFailure(logs)?.let { failure ->
-                throw RemoteHostException(launchFailureMessage(failure, ideName))
-              }
+            if (!hasProject(status))
+              remote
+                .launchFailure(logs)
+                // Handing the project to the running backend ends the launcher with 0.
+                ?.takeUnless { wasRunning && it.exitCode == 0 && !it.settingsInUse }
+                ?.let { failure ->
+                  throw RemoteHostException(launchFailureMessage(failure, ideName))
+                }
           }
         }
+        checkNotNull(status)
         val link =
           status.joinLink?.takeIf { it.isNotEmpty() }
             ?: status.projects.firstOrNull { it.projectPath == projectPath }?.joinLink

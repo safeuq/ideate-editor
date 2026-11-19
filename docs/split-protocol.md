@@ -866,6 +866,18 @@ The desktop client keeps identities the same way, in its history (`~/.ideate/`, 
 
 **A join token works once, and one client controls a backend.** Seen on the phone on 2026-11-16 (phone `idea.log`, UTC): 07:47:10 the app connected with `jt=4fd57122…`; 07:49:28 Gateway on the Mac connected with a fresh `jt`, the backend logged `Active controller connection has been detected. Terminate existing connection.` and sent the app `FORCE_TERMINATE_WIRE` (the client shows "Backend terminated the wire"); 07:49:40 the app came back with its stored `jt=4fd57122…` and got `Declining invalid token from root`. So a used token resumes only our own session, and only while no other client has taken over. The app's answer ([`connections.md`](https://github.com/safeuq/intellij-backend-android/blob/main/docs/connections.md), "What tapping an entry does"): a Termux entry first resumes with the stored link and identity; if refused, it asks `intellij-backend status --json` for the current link (it reads it from the backend, so it is unused) and `controllerConnected`, asks "Take over?" when another client is connected, and connects with a new identity. A session ended by `FORCE_TERMINATE_WIRE` shows "Another device took over this backend" with Take back.
 
+
+**One backend, several projects, one connection** (checked 2026-11-19 18:19 IST on the Mac test backend, IntelliJ 263.7307.200). With a backend running `smoke`, `remote-dev-server.sh run <xtool-copy>` with the same config and system paths exits 0 within 1 s and prints nothing: the launcher hands the project to the running IntelliJ, which opens it as a second project. `remote-dev-server.sh status` then lists both, with the same join link and token:
+
+| `projects[]` | `joinLink` | `controllerConnected` |
+|---|---|---|
+| `…/mac-backend/smoke` | `tcp://127.0.0.1:5991#jt=8d63b7cc-…` | `false` |
+| `…/xtool-copy` | `tcp://127.0.0.1:5991#jt=8d63b7cc-…` (same) | `false` |
+
+A client connected with that link gets both as entries of `solutionModel.solutions`; each solution's `RdOpenSolution.description` is an `RdCodeWithMeProject` whose `hostProjectBasePath` is the project folder. The JetBrains Client opens a window per solution. Its project drop-down (`RecentProjectListActionProvider`, `RemoteRecentProjectAction`) gets its list from Gateway through `station-plugin` (`RecentProjectsRequest.OpenProject`); Gateway runs its usual open steps for the new path, so the project arrives as one more solution on the connection the client already has, and nobody is taken over. `controllerConnected` is the same for every project: one controller connection serves them all.
+
+IDEate shows one project per screen: `ClientSession(project = …)` binds the solution whose `hostProjectBasePath` is that project (the first one when none is given) and leaves the others alone. Checked with the desktop client on 5991 with both projects open: asking for `xtool-copy` showed the xtool tree although `smoke` was added first; asking for `smoke` showed smoke.
+
 ### Not done yet
 
 - SSH history entries (the third kind in [`connections.md`](https://github.com/safeuq/intellij-backend-android/blob/main/docs/connections.md)).

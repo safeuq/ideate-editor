@@ -40,6 +40,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -237,7 +238,8 @@ class ConnectController(
     session = null
     // A join token works once: after another client (e.g. Gateway) took over, the saved one is
     // declined.
-    if (!accepted && failed?.resumed == true) return termuxStatus(failed.project)
+    if (!accepted && failed?.resumed == true)
+      return termuxStatus(failed.project, resumeTried = true)
     // FORCE_TERMINATE_WIRE (SplitWire): the backend ends our session when another client connects
     // with a fresh token.
     if (
@@ -318,6 +320,7 @@ class ConnectController(
           openFile,
           certificate,
           openEditors.slot(current.editorsKey),
+          current.project,
         ) { acceptedCertificate ->
           val encoded = acceptedCertificate.encode()
           main.launch { onAccepted(current, encoded) }
@@ -441,6 +444,7 @@ class ConnectController(
         current.openFile,
         certificate,
         openEditors.slot(current.editorsKey),
+        current.project,
       ) { acceptedCertificate ->
         val encoded = acceptedCertificate.encode()
         main.launch {
@@ -490,22 +494,10 @@ class ConnectController(
   }
 
   /**
-   * Resumes with the saved link and identity; when that is refused, [connectionLost] asks Termux
-   * (docs/connections.md).
+   * Like Gateway ("Checking for already running IDE Backend"): the backend's status first, so a
+   * project that isn't open in the running backend is opened in it ([termuxStatus]).
    */
-  private fun openTermux(project: String?) {
-    val entry = saved.firstOrNull { it.kind == ConnectionKind.TERMUX && it.project == project }
-    if (entry == null) termuxStatus(project)
-    else
-      connect(
-        ConnectionKind.TERMUX,
-        entry.lastLink,
-        project,
-        entry.openFile,
-        entry.identity,
-        resumed = true,
-      )
-  }
+  private fun openTermux(project: String?) = termuxStatus(project)
 
   private fun openDiscovered(backend: DiscoveredBackend) {
     if (busy != null) return
@@ -529,12 +521,22 @@ class ConnectController(
   // ---- Termux ----
 
   /**
-   * `intellij-backend status --json`: connects when a backend runs, otherwise offers to start one
-   * for [project] (docs/connections.md, "Runtime contract"). `controllerConnected` counts this app
-   * too, so it is only checked after our own resume was refused; [takingOver]: the user already
-   * chose to take the backend back.
+   * `intellij-backend status --json`, then Gateway's steps (docs/connections.md, "What tapping an
+   * entry does"):
+   * - no backend: start one for [project];
+   * - a backend without [project]: `start` opens it in that backend, as a second project. One
+   *   backend serves all its projects over one connection and one join link, so the session then
+   *   shows [project] (ClientSession's `project`);
+   * - [project] is open: resume with our own identity for this backend, if we have one, so our own
+   *   earlier connection isn't taken for another device; else connect, asking "Take over?" first
+   *   when another client is connected. [takingOver]: the user already chose to. [resumeTried]: the
+   *   backend refused our identity, so don't try it again.
    */
-  private fun termuxStatus(project: String?, takingOver: Boolean = false) {
+  private fun termuxStatus(
+    project: String?,
+    takingOver: Boolean = false,
+    resumeTried: Boolean = false,
+  ) {
     val termux = requireTermux()
     if (!termux.hasPermission) return termux.requestPermission()
     question = null
@@ -550,21 +552,15 @@ class ConnectController(
                 "intellij-backend status failed (exit ${output.exitCode}): ${output.stderr.ifBlank { output.stdout }}"
             // Like Gateway: opening a project whose backend isn't running starts it.
             !status.flag("running") ->
-              if (project != null) startInTermux(project)
+              if (project != null) startInTermux(project, takingOver, resumeTried)
               else message = "No backend is running in Termux. Tap New Project to start one."
+            project != null && openProjects(status).none { samePath(it, project) } ->
+              startInTermux(project, takingOver, resumeTried)
             else -> {
-              val joinLink = status.getValue("joinLink").jsonPrimitive.content
-              val running = status["project"]?.jsonPrimitive?.contentOrNull
-              if (takingOver || !status.flag("controllerConnected"))
-                connectTermux(joinLink, running)
-              else
-                question =
-                  Question(
-                    "Another device is connected to this backend (for example Gateway on a laptop). Take over? It will be disconnected.",
-                    "Take over",
-                  ) {
-                    connectTermux(joinLink, running)
-                  }
+              val shown = project ?: openProjects(status).firstOrNull()
+              if (shown == null)
+                message = "intellij-backend status names no project: ${output.stdout}"
+              else joinTermux(status, shown, takingOver, resumeTried)
             }
           }
         },
@@ -573,7 +569,72 @@ class ConnectController(
     }
   }
 
-  private fun startInTermux(project: String) {
+  /** [project] is open in the running backend that [status] describes; see [termuxStatus]. */
+  private fun joinTermux(
+    status: JsonObject,
+    project: String,
+    takingOver: Boolean,
+    resumeTried: Boolean,
+  ) {
+    val joinLink = status.getValue("joinLink").jsonPrimitive.content
+    val backend = runCatching { JoinLink.parse(joinLink) }.getOrNull()
+    // The newest identity this backend accepted from us, from any of its projects' entries: the
+    // backend has one controller connection for all its projects. Not when taking the backend back
+    // from another client: it refuses our old identity then.
+    val ours =
+      if (resumeTried || takingOver || backend == null) null
+      else
+        saved
+          .filter {
+            it.kind == ConnectionKind.TERMUX &&
+              it.fingerprint == backend.fingerprint &&
+              it.port == backend.port
+          }
+          .maxByOrNull { it.lastConnected }
+    val openFile =
+      saved.firstOrNull { it.kind == ConnectionKind.TERMUX && it.project == project }?.openFile
+    when {
+      ours != null ->
+        connect(
+          ConnectionKind.TERMUX,
+          ours.lastLink,
+          project,
+          openFile,
+          ours.identity,
+          resumed = true,
+        )
+      takingOver || !status.flag("controllerConnected") -> connectTermux(joinLink, project)
+      else ->
+        question =
+          Question(
+            "Another device is connected to this backend (for example Gateway on a laptop). Take over? It will be disconnected.",
+            "Take over",
+          ) {
+            connectTermux(joinLink, project)
+          }
+    }
+  }
+
+  /**
+   * The projects open in the backend: `projects[].projectPath`, or `project` from an
+   * `intellij-backend` without `projects`.
+   */
+  private fun openProjects(status: JsonObject): List<String> =
+    status["projects"]?.jsonArray?.mapNotNull {
+      it.jsonObject["projectPath"]?.jsonPrimitive?.contentOrNull
+    } ?: listOfNotNull(status["project"]?.jsonPrimitive?.contentOrNull)
+
+  private fun samePath(first: String, second: String) = first.trimEnd('/') == second.trimEnd('/')
+
+  /**
+   * `intellij-backend start <project>`: starts a backend, or opens [project] in the running one;
+   * then [termuxStatus] again to connect.
+   */
+  private fun startInTermux(
+    project: String,
+    takingOver: Boolean = false,
+    resumeTried: Boolean = false,
+  ) {
     if (busy != null || starting != null) return
     message = null
     starting = project
@@ -583,10 +644,12 @@ class ConnectController(
       result.fold(
         onSuccess = { output ->
           when (output.exitCode) {
-            0 -> connectTermux(output.stdout.trim(), project)
+            0 -> termuxStatus(project, takingOver, resumeTried)
             Termux.EXIT_SETTINGS_IN_USE ->
               message =
-                "Another IntelliJ in Termux is using the same settings. Stop it first (intellij-backend stop)."
+                output.stderr.trim().ifEmpty {
+                  "Another IntelliJ in Termux is using the same settings. Stop it first (intellij-backend stop)."
+                }
             else ->
               message = "intellij-backend start failed (exit ${output.exitCode}): ${output.stderr}"
           }
@@ -632,7 +695,7 @@ class ConnectController(
 
   /**
    * A fresh join link from Termux, with a new client identity (resuming with the saved one is
-   * [openTermux]'s job). The backend prints `0.0.0.0` when it listens on every address; from this
+   * [joinTermux]'s job). The backend prints `0.0.0.0` when it listens on every address; from this
    * phone it is `127.0.0.1`.
    */
   private fun connectTermux(printedLink: String, project: String?) {
@@ -683,16 +746,18 @@ class ConnectController(
               message =
                 "intellij-backend status failed (exit ${output.exitCode}): ${output.stderr.ifBlank { output.stdout }}"
             status.flag("running") -> {
-              val project = status.getValue("project").jsonPrimitive.content
               val port = status.getValue("port").jsonPrimitive.int
-              val backend =
-                DiscoveredBackend(
-                  "$device · ${project.substringAfterLast('/')}",
-                  port,
-                  project,
-                  status.getValue("joinLink").jsonPrimitive.content,
-                )
-              localBackends = listOf(backend) + localBackends.filter { it.port != port }
+              val joinLink = status.getValue("joinLink").jsonPrimitive.content
+              val backends =
+                openProjects(status).map { project ->
+                  DiscoveredBackend(
+                    "$device · ${project.substringAfterLast('/')}",
+                    port,
+                    project,
+                    joinLink,
+                  )
+                }
+              localBackends = backends + localBackends.filter { it.port != port }
             }
             else -> localBackends = localBackends.filter { it.joinLink == null }
           }

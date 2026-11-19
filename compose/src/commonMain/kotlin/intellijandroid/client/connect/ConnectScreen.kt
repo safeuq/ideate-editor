@@ -351,9 +351,10 @@ private fun PhonePage(
       TermuxAccess.READY,
       null -> Unit
     }
-    val running = state.discovered.firstOrNull { it.joinLink != null }
+    // One row per project open in Termux's backend; they share its join link.
+    val running = state.discovered.filter { it.joinLink != null }
     val rows = buildList {
-      running?.let { backend ->
+      running.forEach { backend ->
         val entry =
           state.history.firstOrNull {
             it.kind == ConnectionKind.TERMUX && it.project == backend.project
@@ -370,7 +371,9 @@ private fun PhonePage(
         )
       }
       state.history
-        .filter { it.kind == ConnectionKind.TERMUX && it.project != running?.project }
+        .filter { entry ->
+          entry.kind == ConnectionKind.TERMUX && running.none { it.project == entry.project }
+        }
         .forEach { entry ->
           add(
             ProjectRow(
