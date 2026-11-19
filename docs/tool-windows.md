@@ -85,7 +85,6 @@ remote editor for file=ArrayList.class … selectAsCurrent=true"), and IDEate fo
 Files on disk (no `!/` in the path) still open through `findFile` and `requestComposite`. Checked on the Mac
 backend: `ArrayList.class` opened from External Libraries ▸ < 21 > ▸ java.base.
 
-<<<<<<< HEAD
 ## 6. Header buttons (2026-11-19)
 
 The backend sends no header buttons for Project or Structure. A probe of `BeIdeaToolWindow` on the Mac backend
@@ -133,8 +132,43 @@ What the backend sends (probe on the Mac backend, port 5994, 17:55–17:59 IST):
   `BeTreeGrid`.
 
 Not looked at yet: where the editor area's New Markdown File, Open File and Open Terminal buttons come from.
-=======
-## 6. Backend tool windows: Gradle's tree and action toolbar (2026-11-20)
+
+### Built (2026-11-20)
+
+Checked on the Mac test backend (port 5994, no project) with the desktop client, 00:17–00:31 IST.
+
+- **The pane.** IDEate shows the backend's default pane when it arrives (`isDefaultPane`), and draws the
+  `BeneluxView`'s `LxPanel` in the Project window (`LuxPaneView`). Its layout source is the frontend, so the
+  panel takes the tool window's size; taps, the wheel and finger drags go to it as Lux events.
+- **A choice in a list popup runs only after the client removes the popup.** New ▾ is a `WizardPopupContent`
+  list. A tap fires the row's `signal`, as JetBrains Client's `DefaultLineStep.onChosen` does. The backend
+  (`BeWizardPopupContentProvider.executeOrOpenChildPopup`) gets `FINAL_CHOICE`, keeps the action as the
+  popup's final runnable and closes the popup: result `CLOSE`. It runs the action only when the popup's entry
+  leaves `activePopups` (`BackendBeAbstractPopup`, `adviseRemoveItem`). JetBrains Client removes the entry on
+  `CLOSE` (`ThinClientPopupsHost.showBePopup`). IDEate only hid it, so New ▸ Markdown File closed the list and
+  created nothing. It now removes the entry too: Markdown File creates `Untitled.md` in the backend's
+  `HomeFiles` folder and opens it.
+- **Opening a recent project in This Window.** The backend asks "Open Project" (New Window, This Window), adds
+  the chosen project to `solutionModel.solutions`, then fires `closeRequested` on the welcome project's
+  `Solution`. JetBrains Client answers by removing that solution from the map itself
+  (`ThinClientRdProjectViewSession.closeSolution`, log "Remove protocol solution"), then closes its project.
+  IDEate ignored `closeRequested`, so it stayed on IdeaHome. It now removes any solution the backend closes,
+  and shows the new project once the welcome project is gone; the toolbar takes the new name.
+
+| Step | Before | After |
+|---|---|---|
+| New ▸ Markdown File | list closes, no file | `Untitled.md` opens |
+| smoke in the recent list, This Window | IdeaHome stays; log "smoke added; showing null" | smoke's tree, its saved tab `Other.java`, toolbar "smoke" |
+
+Still open:
+- The New ▾ list is drawn at the top of the editor area, not under the New button.
+- After a dialog closes, parts of the panel (Clone Repository, the search field) are sometimes not redrawn
+  (seen 2026-11-19, not since).
+- The editor area's buttons when nothing is open (New Markdown File, Open File, Open Terminal): JetBrains
+  Client draws them (`WelcomeScreenEmptyStateProvider`) and calls `WelcomeScreenFeatureApi.onClick` over
+  Fleet RPC; IDEate shows its own hint instead.
+
+## 8. Backend tool windows: Gradle's tree and action toolbar (2026-11-20)
 
 Checked against the Mac test backend (port 5991) on a small Gradle project (`settings.gradle.kts` with an
 `app` module and a `hello` task, Gradle 9.6.0 from the local cache), with probes in the desktop client and
@@ -200,4 +234,3 @@ selected and 0.5 s after one of its actions ran. The tree code is shared with Pa
 Not done: the 4 gear actions (`additionalGearActions`); a toggle's pressed look (Toggle Offline Mode comes
 with flags `0x88b`, the others `0x883`; which bit means "selected" isn't checked); the output of a task a
 double tap runs goes to the Run tool window, which IDEate doesn't draw yet.
->>>>>>> f818b70 (Gradle tool window: the backend's tree and action toolbar)
