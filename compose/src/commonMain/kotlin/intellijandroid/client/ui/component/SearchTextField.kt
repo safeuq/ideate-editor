@@ -23,6 +23,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -49,6 +50,8 @@ fun SearchTextField(
   placeholder: String = "Search",
   history: SearchHistory? = null,
   undecorated: Boolean = false,
+  /** From the icon to the text: 2 (`getSearchIconGap`); Search Everywhere's history icon has 6. */
+  iconGap: Dp = SearchLook.iconGap,
 ) {
   val icons = LocalIcons.current
   val currentValue by rememberUpdatedState(value)
@@ -70,7 +73,7 @@ fun SearchTextField(
             it,
             contentDescription = if (history != null) "Recent searches" else "Search",
             modifier =
-              Modifier.padding(end = SearchLook.iconGap)
+              Modifier.padding(end = iconGap)
                 .size(width = if (history != null) 22.dp else 16.dp, height = 16.dp)
                 .then(
                   if (history == null) Modifier

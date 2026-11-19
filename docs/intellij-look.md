@@ -788,10 +788,10 @@ automation used here cannot capture).
 | Place | centred; top at a quarter of the window's height less half the popup's, not above the main toolbar; fixed once shown, so it grows downward | `SeFrontendService.calcPopupPositionAndShow` |
 | Frame | `Popup.background` `#26282C`, 1 px `#33353B`, radius 8 | `PopupContainer` |
 | Header | insets 2, 4, 0, 9; tabs 24 high, 12 each side; the selected one filled `#233558` with white text, radius 4 | `SearchEverywhere.Header.insets`, `BigPopup.tabInsets`, `SearchEverywhere.Tab.*` |
-| Field | IDEate's `SearchTextField` undecorated, 12 each side | `ComplexPopup.TextField.borderInsets` |
+| Field | IDEate's `SearchTextField` undecorated, 14 each side (12 + the input insets' 2); the search-with-history icon (`AllIcons.Actions.SearchWithHistory`, magnifier with ▾), 6 to the text; a click lists the tab's earlier searches | `ComplexPopup.TextField.borderInsets`, `textFieldInputInsets`, `SePopupContentPane.addHistoryExtensionToTextField` |
 | Separators | 1 px `#33353B` under the tabs and under the field | `customLineBottom` |
 | Rows | 24 high (22 compact); selection band 8 in from the sides, radius 4, `#2A4371`; then 8 inside | `List.rowHeight`, `Popup.Selection.leftRightInset`, `innerInsets` |
-| Row | icon 16, gap 6, name, gap 6, folder in `#73767C`; project name and its icon at the right end | `SeTargetItemPresentationRenderer` |
+| Row | icon 16, gap 6, name (never cut), gap 6, folder in `#73767C` shortened to row − name − 16 − location − 20 by `SETextShortener.getShortenContainerText` (`of org.junit.jupiter.api.function` → `of org....api.function`; kept whole when that room is negative), the location and its icon at the right end, cut at the row's end when nothing is left | `SeTargetItemPresentationRenderer` |
 | Match | only on the selected row: the matched ranges on `#BA9752` in black | `SearchMatch.startBackground` = `search-match-bg` |
 | List | at most 600 high, and at most 60% of the window | `BigPopup.maxListHeight` |
 | Nothing found | "Nothing found." in `#73767C` | `SeEmptyResultInfo` |
@@ -813,4 +813,7 @@ IDEate (`ClientScreen.EditorTabs`):
   only then does it switch pages (`TabRowScroll`, given to the page swiper with the drag's start point);
 - not yet: the × on hover in the list, and the ⋮ after the ▾ (IntelliJ's editor tab actions). Desktop: checked
   only on the emulator; the mouse wheel on the row is untested.
+History: `SearchHistoryList`, per tab, newest first, at most 50, kept while the app runs; the query is saved when the
+popup closes (`SeFrontendService`). Before 2026-11-19 a long folder took the row and left the name no room (the name
+had the row's weight, the folder didn't, so the folder was measured first).
 

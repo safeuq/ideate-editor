@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,8 +20,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -35,7 +39,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -51,6 +55,7 @@ import intellijandroid.client.session.SearchEverywhere
 import intellijandroid.client.session.SearchPopup
 import intellijandroid.client.session.SearchRow
 import intellijandroid.client.session.SearchTab
+import intellijandroid.client.ui.component.SearchHistory
 import intellijandroid.client.ui.component.SearchTextField
 import intellijandroid.client.ui.component.popupContainer
 import intellijandroid.client.ui.theme.IslandsDark
@@ -73,11 +78,16 @@ internal fun SearchEverywherePopup(
   maxHeight: Dp,
   onChosen: () -> Unit,
   onUnsupported: (String) -> Unit,
+  /** The tab's earlier searches (SearchHistoryList: per tab, newest first, at most 50). */
+  history: SearchHistory,
 ) {
   val fonts = LocalClientFonts.current
   val density = LocalDensity.current
   val focus = remember { FocusRequester() }
   LaunchedEffect(Unit) { focus.requestFocus() }
+  // SeFrontendService saves the query to the tab's history when the popup closes.
+  val query by rememberUpdatedState(popup.query)
+  DisposableEffect(history) { onDispose { history.add(query) } }
   val listState = rememberLazyListState()
   LaunchedEffect(popup.selected) {
     val visible = listState.layoutInfo.visibleItemsInfo
@@ -152,6 +162,10 @@ internal fun SearchEverywherePopup(
           .padding(horizontal = Looks.fieldPadding, vertical = Looks.fieldVerticalPadding),
         placeholder = "",
         undecorated = true,
+        // SePopupContentPane.addHistoryExtensionToTextField: the search-with-history icon, a 6 gap;
+        // a click lists the tab's earlier searches.
+        history = history,
+        iconGap = 6.dp,
       )
       if (popup.rows.isNotEmpty() || (popup.query.isNotBlank() && !popup.searching)) Separator()
       if (popup.rows.isEmpty() && popup.query.isNotBlank() && !popup.searching) {
@@ -202,36 +216,96 @@ private fun ResultRow(row: SearchRow, selected: Boolean, onClick: () -> Unit) {
       .padding(horizontal = Looks.rowInset),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    // The name gets the room first, then the folder; the location stays at the right end.
-    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-      Icon(row.iconPath)
-      Spacer(Modifier.width(Looks.gap))
-      BasicText(
-        if (selected) matched(row.name, row.nameMatches) else AnnotatedString(row.name),
-        style = style,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f, fill = false),
-      )
-      row.container?.let {
+    // SeTargetItemPresentationRenderer: the name in full, the folder shortened to what is left
+    // after the name and the location (less 16 and 20), the location last and cut at the row's end.
+    BoxWithConstraints(Modifier.weight(1f)) {
+      val measurer = rememberTextMeasurer()
+      val density = LocalDensity.current
+      val container =
+        remember(row, constraints.maxWidth) {
+          row.container?.let { text ->
+            fun width(value: String) = measurer.measure(value, style).size.width
+            val room =
+              with(density) {
+                constraints.maxWidth -
+                  (Looks.iconSize + Looks.gap * 2).roundToPx() -
+                  width(row.name) -
+                  16.dp.roundToPx() -
+                  (row.location?.let(::width) ?: 0) -
+                  20.dp.roundToPx()
+              }
+            shortenContainerText(text, room, ::width)
+          }
+        }
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(row.iconPath)
         Spacer(Modifier.width(Looks.gap))
         BasicText(
-          it,
-          style = style.copy(color = IslandsDark.textSecondary),
+          if (selected) matched(row.name, row.nameMatches) else AnnotatedString(row.name),
+          style = style,
           maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
+          softWrap = false,
         )
-      }
-    }
-    row.location?.let {
-      Spacer(Modifier.width(Looks.gap))
-      BasicText(it, style = style.copy(color = secondary), maxLines = 1)
-      if (row.locationIconPath != null) {
-        Spacer(Modifier.width(Looks.gap))
-        Icon(row.locationIconPath)
+        container?.let {
+          Spacer(Modifier.width(Looks.gap))
+          BasicText(
+            it,
+            style = style.copy(color = IslandsDark.textSecondary),
+            maxLines = 1,
+            softWrap = false,
+          )
+        }
+        Spacer(Modifier.weight(1f))
+        row.location?.let {
+          Spacer(Modifier.width(Looks.gap))
+          BasicText(it, style = style.copy(color = secondary), maxLines = 1, softWrap = false)
+          if (row.locationIconPath != null) {
+            Spacer(Modifier.width(Looks.gap))
+            Icon(row.locationIconPath)
+          }
+        }
       }
     }
   }
+}
+
+/**
+ * IntelliJ's `SETextShortener.getShortenContainerText`: [text] as it is when it fits in [maxWidth]
+ * px (or [maxWidth] is negative); otherwise parts from the middle, split at `/`, `.`, `-` or a
+ * space, give way to `..` (`...` for other separators) until it fits; then the middle of the text
+ * goes. Example: `of org.junit.jupiter.api.function` → `of org.junit..api.function` → `of
+ * org...api.function`. A leading `in ` is kept.
+ */
+internal fun shortenContainerText(text: String, maxWidth: Int, width: (String) -> Int): String {
+  val startsWithIn = text.startsWith("in ")
+  val left = if (startsWithIn) "in " else ""
+  val body = if (startsWithIn) text.substring(3) else text
+  val whole = left + body
+  if (maxWidth < 0) return whole
+  val fullWidth = width(whole)
+  if (fullWidth < maxWidth) return whole
+  val separator =
+    when {
+      "/" in body -> "/"
+      "." in body -> "."
+      "-" in body -> "-"
+      else -> " "
+    }
+  val dots = if (separator != ".") "..." else ".."
+  val parts = body.split(separator).toMutableList()
+  while (parts.size > 1) {
+    val index = parts.size / 2 - 1
+    parts.removeAt(index)
+    if (width(left + parts.joinToString(separator) + dots + separator) < maxWidth) {
+      parts.add(index, dots)
+      return left + parts.joinToString(separator)
+    }
+  }
+  // StringUtil.trimMiddle: keep the start and the end, "…" between them.
+  val keep = maxOf(whole.length * maxWidth / fullWidth - 1, left.length + 3)
+  if (keep >= whole.length) return whole
+  val head = (keep - 1) / 2
+  return whole.take(head) + "…" + whole.takeLast(keep - 1 - head)
 }
 
 @Composable
@@ -298,7 +372,9 @@ private object Looks {
   val tabRadius = 4.dp
   val tabSelected = Color(0xFF233558) // SearchEverywhere.Tab.selectedBackground = blue-40
   val tabSelectedText = Color.White // SearchEverywhere.Tab.selectedForeground = text-over-accent
-  val fieldPadding = 12.dp // ComplexPopup.TextField.borderInsets 0,12
+  // ComplexPopup.TextField.borderInsets 0,12, then textFieldInputInsets' 2 inside: the icon is 14
+  // in.
+  val fieldPadding = 14.dp
   val fieldVerticalPadding = 2.dp // with the field's own 4: ComplexPopup.TextField.inputInsets 6,2
   val maxListHeight = 600.dp // BigPopup.maxListHeight
   val listVerticalPadding = 4.dp

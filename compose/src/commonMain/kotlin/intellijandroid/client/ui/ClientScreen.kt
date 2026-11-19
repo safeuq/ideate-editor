@@ -80,6 +80,7 @@ import intellijandroid.client.session.ClientSession
 import intellijandroid.client.session.SearchTab
 import intellijandroid.client.session.SessionState
 import intellijandroid.client.ui.component.IconButton
+import intellijandroid.client.ui.component.SearchHistory
 import intellijandroid.client.ui.component.SplitPane
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -139,6 +140,8 @@ fun ClientScreen(
   var gradientCenter by remember { mutableFloatStateOf(Float.NaN) }
   val projectColor = state.projectName?.let(::projectGradientColor)
   val doubleShift = remember { DoubleShift() }
+  // Search Everywhere's earlier searches, per tab, for as long as this screen lives.
+  val searchHistories = remember { mutableMapOf<SearchTab, SearchHistory>() }
   BoxWithConstraints(
     Modifier.fillMaxSize()
       .onPreviewKeyEvent { event ->
@@ -475,6 +478,7 @@ fun ClientScreen(
         maxHeight = maxHeight * 0.6f,
         onChosen = ::onNavigated,
         onUnsupported = unsupported,
+        history = searchHistories.getOrPut(state.search.tab) { SearchHistory(size = 50) },
       )
     }
   }
