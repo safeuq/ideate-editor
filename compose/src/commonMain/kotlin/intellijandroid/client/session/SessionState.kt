@@ -205,6 +205,8 @@ data class SessionState(
   val toolWindows: List<BackendToolWindow> = emptyList(),
   /** The Project tool window's views (Project, Packages, scopes) and the current one. */
   val projectViews: ProjectViews = ProjectViews(),
+  /** What the backend's tool windows on screen show, by id, e.g. `Gradle`. */
+  val backendViews: Map<String, BackendToolWindowView> = emptyMap(),
 )
 
 /** Context menu number [serial]; [entries] null until the backend has answered ("Loading…"). */

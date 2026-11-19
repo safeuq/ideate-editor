@@ -204,7 +204,12 @@ internal class ActionMenus(
             else -> {
               val items = tidy(entries(child.actionId, unshown))
               listOf(
-                SubMenu(label(presentation), items, presentation.isEnabled && items.isNotEmpty()),
+                SubMenu(
+                  label(presentation),
+                  items,
+                  presentation.isEnabled && items.isNotEmpty(),
+                  presentation.icon?.icon?.let(iconPath),
+                ),
               )
             }
           }

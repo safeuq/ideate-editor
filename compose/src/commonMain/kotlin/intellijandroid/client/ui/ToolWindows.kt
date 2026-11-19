@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -87,8 +88,9 @@ enum class Place(val side: Side, val split: Boolean) {
 
 /**
  * A tool window button: one of the backend's tool windows ([BackendToolWindow]) or Project, which
- * JetBrains Client registers itself. Every one opens; only Project and Structure have content so
- * far, the others show "Tool window not implemented". Two are the same window when their [id]s are.
+ * JetBrains Client registers itself. Every one opens: Project and Structure are IDEate's own; a
+ * backend window shows the toolbar and tree the backend sends (Gradle), or "Tool window not
+ * implemented" when it sends neither. Two are the same window when their [id]s are.
  */
 class ToolWindow(val id: String, val title: String, val icon: String?, val place: Place) {
 
@@ -519,6 +521,62 @@ fun ToolWindowPanel(
  * `expui/general/locate.svg`, "Select Opened File".
  */
 class HeaderAction(val iconPath: String, val name: String, val onClick: () -> Unit)
+
+/**
+ * A tool window's action toolbar from the backend, e.g. Gradle's: IntelliJ's horizontal
+ * `ActionToolbarImpl` inside the content, insets 5 top and bottom and 7 at the sides
+ * (`ToolBar.horizontalToolbarInsets` in the new UI), 22 dp buttons with 16 dp icons, separators 7
+ * dp wide with a 1 dp line (`MySeparator`). A disabled action shows its icon faded and does
+ * nothing; a group with an icon (Gradle's settings) opens its items below it. The text goes in the
+ * description, as IntelliJ shows it in the tooltip.
+ */
+@Composable
+fun ToolWindowToolbar(entries: List<MenuEntry>, modifier: Modifier = Modifier) {
+  if (entries.isEmpty()) return
+  Row(
+    modifier
+      .fillMaxWidth()
+      .horizontalScroll(rememberScrollState())
+      .padding(horizontal = 7.dp, vertical = 5.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    for (entry in entries) {
+      when (entry) {
+        is MenuItem -> {
+          val icon = entry.iconPath ?: continue
+          IconButton(
+            icon,
+            entry.label,
+            onClick = if (entry.enabled) entry.onClick else ({}),
+            modifier = if (entry.enabled) Modifier else Modifier.alpha(DISABLED_ALPHA),
+          )
+        }
+        is SubMenu -> {
+          val icon = entry.iconPath ?: continue
+          var open by remember { mutableStateOf(false) }
+          Box {
+            IconButton(
+              icon,
+              entry.label,
+              onClick = { if (entry.enabled) open = true },
+              modifier = if (entry.enabled) Modifier else Modifier.alpha(DISABLED_ALPHA),
+            )
+            if (open) DropDownMenu(entry.entries, beside = false, onDismiss = { open = false })
+          }
+        }
+        MenuSeparator ->
+          Box(
+            Modifier.padding(horizontal = 3.dp)
+              .size(1.dp, 18.dp)
+              .background(IslandsDark.toolbarSeparator),
+          )
+      }
+    }
+  }
+}
+
+/** IntelliJ draws a disabled action's icon with `IconLoader.getDisabledIcon`, about this faint. */
+private const val DISABLED_ALPHA = 0.4f
 
 /**
  * Colors and fixed sizes of the bars; the sizes that follow the UI density are in [IslandsDark].

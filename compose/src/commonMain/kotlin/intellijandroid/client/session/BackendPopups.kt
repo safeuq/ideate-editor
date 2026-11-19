@@ -299,7 +299,10 @@ internal class BeRow(val icon: String?, val fragments: List<TextFragment>) {
         when (each) {
           is BeIcon -> if (icon == null) icon = each.icon.valueOrNull?.let(iconPath)
           is BeLabel -> fragments += TextFragment(each.text.value, 0, null)
-          is BeRichText ->
+          is BeRichText -> {
+            // Gradle's rows carry the icon on the text, e.g. `icons/expui/gradle.svg` on
+            // "gradle-smoke" and `expui/build/taskGroup.svg` on "Tasks".
+            if (icon == null) icon = each.icon.value?.let(iconPath)
             each.text.valueOrNull?.parts.orEmpty().forEach { part ->
               fragments +=
                 TextFragment(
@@ -313,6 +316,7 @@ internal class BeRow(val icon: String?, val fragments: List<TextFragment>) {
                   resolveLuxColor(part.foregroundColor)?.toArgb()?.toLong()?.and(0xFFFFFFFFL),
                 )
             }
+          }
           is BeGrid -> each.items.valueOrNull.orEmpty().forEach { look(it.content) }
           is BeControlContainer -> look(each.content)
           else -> Unit

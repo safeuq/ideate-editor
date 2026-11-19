@@ -49,9 +49,16 @@ data class MenuItem(
   val onClick: () -> Unit = {},
 ) : MenuEntry
 
-/** A submenu; it opens in place of the menu, with a row to go back. */
-data class SubMenu(val label: String, val entries: List<MenuEntry>, val enabled: Boolean = true) :
-  MenuEntry
+/**
+ * A submenu; it opens in place of the menu, with a row to go back. [iconPath]: the group's icon,
+ * which a toolbar shows as a button that opens the items below it.
+ */
+data class SubMenu(
+  val label: String,
+  val entries: List<MenuEntry>,
+  val enabled: Boolean = true,
+  val iconPath: String? = null,
+) : MenuEntry
 
 data object MenuSeparator : MenuEntry
 

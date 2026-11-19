@@ -85,6 +85,7 @@ remote editor for file=ArrayList.class … selectAsCurrent=true"), and IDEate fo
 Files on disk (no `!/` in the path) still open through `findFile` and `requestComposite`. Checked on the Mac
 backend: `ArrayList.class` opened from External Libraries ▸ < 21 > ▸ java.base.
 
+<<<<<<< HEAD
 ## 6. Header buttons (2026-11-19)
 
 The backend sends no header buttons for Project or Structure. A probe of `BeIdeaToolWindow` on the Mac backend
@@ -132,3 +133,71 @@ What the backend sends (probe on the Mac backend, port 5994, 17:55–17:59 IST):
   `BeTreeGrid`.
 
 Not looked at yet: where the editor area's New Markdown File, Open File and Open Terminal buttons come from.
+=======
+## 6. Backend tool windows: Gradle's tree and action toolbar (2026-11-20)
+
+Checked against the Mac test backend (port 5991) on a small Gradle project (`settings.gradle.kts` with an
+`app` module and a `hello` task, Gradle 9.6.0 from the local cache), with probes in the desktop client and
+the JetBrains Client 263.7307.200 jars decompiled (`intellij.platform.frontend.split.jar`
+`com.jetbrains.thinclient.toolWindow.*`, `intellij.rd.ui.jar` `IdeToolbarViewControl`,
+`BackendIdeActionViewControlKt`, `intellij.rd.client.jar` `BeContextIdTimestampModelProvider`).
+
+**The client says when a window shows.** `FrontendToolWindowHost` sets `BeToolWindow.state` to
+`ActiveAndFocused`, `Active` or `Hidden` as the window opens and closes (a window never shown isn't told
+it is hidden). The backend builds the content only after that: IntelliJ's
+`AbstractExternalSystemToolWindowFactory.createToolWindowContent` runs then.
+
+**The content is a list of tabs.** `BeToolWindow.content` is a `BeTabbedControl` (`tabs`, `selectedIndex`).
+Gradle first adds a tab with only the label "Initializing Gradle projects data…", then removes it and adds
+the view once its projects are loaded (`removeAllContents` + `addContent`). A client that connects later gets
+only the second. The view's tab:
+
+```
+BeStyleControl (dataId 73)
+  BeGrid
+    BeIdeToolbar (dataId 72; place "Gradle View Toolbar", target "73",
+                  group = GroupModel("ExternalSystemView.ActionsToolbar"))
+    BeGrid
+      BeDynamicControlContainer (71) → BeContextActionBehavior (70) → BeBehaviorControl → BeTreeGrid
+```
+
+`BeIdeToolbar` is IntelliJ's `createActionToolbar(place, group, horizontal)` from
+`ExternalProjectsViewImpl.initTree`; `target` is the component whose data the actions read
+(`setTargetComponent(this)`), the whole Gradle panel. Rows: `BeTreeGridLine` cells are a `BeGrid` with a
+`BeRichText` that carries the icon itself (`BeRichText.icon`), e.g. `icons/expui/gradle.svg` on
+"gradle-smoke", `expui/build/taskGroup.svg` on "Tasks", `icons/newui/task.svg` on "assemble". The task icon
+comes without its SVG: it is in the client's own `intellij.platform.externalSystem.impl.jar`, not the
+icons jar. `BeIdeaToolWindow.headerToolbar` was empty for Gradle; `additionalGearActions` had 4 items.
+
+**The toolbar is an ordinary action group.** The client turns `BeIdeToolbar.group` into its proxy AnAction
+(`ActionsKt.fromModel`) and runs the usual async update, so IDEate asks as it does for menus:
+
+```
+asyncActionsModel.expandGroup(AsyncActionUpdateRequest(
+  actionId          = "ExternalSystemView.ActionsToolbar",
+  timestampSetModel = ActionTimestampSetModel([
+                        ProjectTimestampModel(projectId),
+                        BeToolWindowIdTimestampModel("Gradle"),   // BeToolWindowIdTimestampModelProvider
+                        BeContextIdTimestampModel(73, null)]),    // the target's dataId
+  place             = "Gradle View Toolbar", …))
+```
+
+`BeContextIdTimestampModelProvider` sends the `dataId` of the nearest BeControl above the context
+component (`ConverterStorage.getComponentId`); for a toolbar that is its target. The backend knows the
+tree's selection itself (`BeTreeGridLine.isSelected`). Answer on the Mac backend: Sync All Gradle Projects,
+Select Project Data To Import, Download Sources | Link Gradle Project, Unlink Gradle Project (disabled) |
+Execute Gradle Task, Toggle Offline Mode | Analyze Dependencies…, Show Diagram… | Expand All, Collapse All |
+Build Tool Settings (a popup group: Auto-Sync Settings…, External Settings…). Composite Build
+Configuration was invisible (flags `0x880`). Expand All ran and the backend expanded the tree, which
+IDEate follows.
+
+**IDEate** (`session/BackendToolWindowViews.kt`, `BeTreeRows.kt`, `ui/ToolWindows.kt`
+`ToolWindowToolbar`): any backend tool window on screen gets `state` Active; the selected tab's toolbar
+and tree are drawn like IntelliJ's (`ToolBar.horizontalToolbarInsets` 5/7, 22 dp buttons, 7 dp
+separators; a group with an icon opens its items below it). The toolbar is asked for again when a row is
+selected and 0.5 s after one of its actions ran. The tree code is shared with Packages and Scopes.
+
+Not done: the 4 gear actions (`additionalGearActions`); a toggle's pressed look (Toggle Offline Mode comes
+with flags `0x88b`, the others `0x883`; which bit means "selected" isn't checked); the output of a task a
+double tap runs goes to the Run tool window, which IDEate doesn't draw yet.
+>>>>>>> f818b70 (Gradle tool window: the backend's tree and action toolbar)

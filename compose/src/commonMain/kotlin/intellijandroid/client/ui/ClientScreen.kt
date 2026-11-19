@@ -243,6 +243,13 @@ fun ClientScreen(
       if (!structureShown) delay(STRUCTURE_HIDE_DELAY_MS)
       session.setStructureVisible(structureShown)
     }
+    // And builds a backend tool window's content (Gradle's tree and toolbar) only while it shows.
+    val backendShown =
+      shown
+        .map { it.id }
+        .filter { it != ToolWindow.PROJECT.id && it != ToolWindow.STRUCTURE.id }
+        .toSet()
+    LaunchedEffect(backendShown) { session.setBackendToolWindowsShown(backendShown) }
 
     // Opening a file from a tool window shows the editor on a phone held upright.
     fun onNavigated() {
@@ -608,15 +615,44 @@ private fun ToolWindowContent(
         structureCollapsed,
         onStructureCollapsedChange,
       )
-    // A tool window IDEate doesn't draw yet: it opens with its header, as any other.
-    else ->
-      Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        BasicText(
-          "Tool window not implemented",
-          style = LocalClientFonts.current.label().copy(color = IslandsDark.textSecondary),
-        )
-      }
+    else -> BackendToolWindowContent(window, state, session, scroll)
   }
+
+/**
+ * A tool window the backend fills, e.g. Gradle: its action toolbar above its tree, as JetBrains
+ * Client shows them. While it loads, the text of its label ("Initializing Gradle projects data…");
+ * a window whose content IDEate can't draw yet says so, with its header as any other.
+ */
+@Composable
+private fun BackendToolWindowContent(
+  window: ToolWindow,
+  state: SessionState,
+  session: ClientSession,
+  scroll: SidewaysScroll,
+) {
+  val view = state.backendViews[window.id]
+  if (view == null || (view.tree.nodes.isEmpty() && view.toolbar.isEmpty())) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+      BasicText(
+        view?.label ?: if (view == null) "Tool window not implemented" else "",
+        style = LocalClientFonts.current.label().copy(color = IslandsDark.textSecondary),
+      )
+    }
+    return
+  }
+  Column(Modifier.fillMaxSize()) {
+    ToolWindowToolbar(view.toolbar)
+    ProjectTreeView(
+      tree = view.tree,
+      onToggle = { session.backendToggle(window.id, it.id) },
+      onSelect = { session.backendSelect(window.id, it.id) },
+      // E.g. Gradle runs the task; the window stays, as in IntelliJ.
+      onOpen = { session.backendOpen(window.id, it.id) },
+      modifier = Modifier.fillMaxWidth().weight(1f),
+      scroll = scroll,
+    )
+  }
+}
 
 /**
  * Phone upright: the left page, the middle page (editor or bottom windows) and the right page side

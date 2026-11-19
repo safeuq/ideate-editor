@@ -106,6 +106,9 @@ import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.connection.SplitWire
 import intellijandroid.client.kernel.SearchKernel
 import intellijandroid.client.ui.IconJar
+import intellijandroid.client.ui.MenuEntry
+import intellijandroid.client.ui.MenuItem
+import intellijandroid.client.ui.SubMenu
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Base64
@@ -179,6 +182,20 @@ class ClientSession(
     BackendToolWindows({ icon -> iconPaths(icon).firstOrNull() }) { windows ->
       mutableState.update { it.copy(toolWindows = windows) }
     }
+  /**
+   * Toolbars being loaded for backend tool windows: the menu serial and the window, e.g. Gradle.
+   */
+  private val toolbarSerials = mutableMapOf<Int, String>()
+  private val backendViews =
+    BackendToolWindowViews(
+      { icon -> iconPaths(icon).firstOrNull() },
+      loadToolbar = { windowId, groupId, place, timestamps ->
+        val serial = menuSerials.incrementAndGet()
+        toolbarSerials[serial] = windowId
+        actionMenus?.show(serial, groupId, place, timestamps)
+      },
+      publish = { views -> mutableState.update { it.copy(backendViews = views) } },
+    )
   private val compositeIds = mutableMapOf<String, RdFileEditorCompositeId>()
   /** Editors the backend opened itself, by `RdFileIdNew.backendId`, until their path is known. */
   private val unnamedComposites = mutableMapOf<Int, RdFileEditorCompositeId>()
@@ -302,6 +319,20 @@ class ClientSession(
 
   /** Opens a Packages or Scopes row's file; the backend opens the editor. */
   fun paneOpen(nodeId: Int) = onRd { projectViews.open(nodeId) }
+
+  /**
+   * The backend tool windows on screen, e.g. `{"Gradle"}`: the backend builds their content only
+   * while they show.
+   */
+  fun setBackendToolWindowsShown(ids: Set<String>) = onRd { backendViews.setShown(ids) }
+
+  /** Expands or collapses a row of a backend tool window's tree, e.g. Gradle's. */
+  fun backendToggle(windowId: String, nodeId: Int) = onRd { backendViews.toggle(windowId, nodeId) }
+
+  fun backendSelect(windowId: String, nodeId: Int) = onRd { backendViews.select(windowId, nodeId) }
+
+  /** Double tap: the backend's default action for the row, e.g. Gradle runs a task. */
+  fun backendOpen(windowId: String, nodeId: Int) = onRd { backendViews.open(windowId, nodeId) }
 
   /** Opens a file of the backend in an editor tab, or switches to its tab if it is already open. */
   fun open(path: String) = onRd {
@@ -672,13 +703,20 @@ class ClientSession(
         ::onRd,
         { icon -> iconPaths(icon).firstOrNull() },
         ::log,
-        publish = { serial, entries ->
-          mutableState.update {
-            if (it.contextMenu?.serial == serial)
-              it.copy(contextMenu = BackendMenu(serial, entries))
-            else it
-          }
-        },
+        publish = publish@{ serial, entries ->
+            toolbarSerials.remove(serial)?.let { windowId ->
+              backendViews.toolbarLoaded(
+                windowId,
+                afterEach(entries) { refreshToolbarSoon(windowId) },
+              )
+              return@publish
+            }
+            mutableState.update {
+              if (it.contextMenu?.serial == serial)
+                it.copy(contextMenu = BackendMenu(serial, entries))
+              else it
+            }
+          },
         applyPatch = { patch ->
           editSessions.values.filter { it.concerns(patch) }.forEach { it.backendPatch(patch) }
         },
@@ -879,6 +917,7 @@ class ClientSession(
       createProjectView(solutionLifetime, newSolution)
       projectViews.bind(solutionLifetime, newSolution.projectViewModel)
       toolWindows.bind(solutionLifetime, newSolution)
+      backendViews.bind(solutionLifetime, newSolution)
       bindStructure(solutionLifetime, newSolution)
       bindUsages(solutionLifetime, newSolution)
       newSolution.isLoaded.advise(solutionLifetime) { loaded ->
@@ -887,6 +926,18 @@ class ClientSession(
         if (initialFile != null) openFile(initialFile)
       }
     }
+  }
+
+  /**
+   * A toolbar's items asked for again a moment after one ran, so a toggle or an enabled state the
+   * action changed shows (e.g. Gradle's offline mode).
+   */
+  private fun refreshToolbarSoon(windowId: String) {
+    markupTimer.schedule(
+      { onRd { backendViews.refreshToolbar(windowId) } },
+      TOOLBAR_REFRESH_MILLIS,
+      TimeUnit.MILLISECONDS,
+    )
   }
 
   /** Whether the Structure tool window is showing; the backend builds the tree only while it is. */
@@ -1543,6 +1594,8 @@ class ClientSession(
     const val MARKUP_DELAY_MS = 32L
     /** How long after an edit or caret move the open editors and carets are saved. */
     const val SAVE_DELAY_MS = 1_000L
+    /** How long after a toolbar action its toolbar is asked for again. */
+    const val TOOLBAR_REFRESH_MILLIS = 500L
 
     /** `Iconable.ICON_FLAG_READ_STATUS`: the file icon with a lock when the file is read-only. */
     const val ICON_FLAG_READ_STATUS = 2
@@ -1702,3 +1755,19 @@ internal fun plainText(html: String): String =
  */
 internal fun isShownProject(wanted: String?, hostPath: String?, showing: Boolean): Boolean =
   !showing && (wanted == null || hostPath?.trimEnd('/') == wanted.trimEnd('/'))
+
+/** [entries] with [after] run after each item's own click, also inside submenus. */
+internal fun afterEach(entries: List<MenuEntry>, after: () -> Unit): List<MenuEntry> =
+  entries.map { entry ->
+    when (entry) {
+      is MenuItem ->
+        entry.copy(
+          onClick = {
+            entry.onClick()
+            after()
+          },
+        )
+      is SubMenu -> entry.copy(entries = afterEach(entry.entries, after))
+      else -> entry
+    }
+  }

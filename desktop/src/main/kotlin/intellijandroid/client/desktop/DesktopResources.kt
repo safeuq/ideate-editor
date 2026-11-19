@@ -13,6 +13,7 @@ import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.UiDensity
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.ZipFile
 
 /**
  * Desktop sources for fonts and icons: both ship with JetBrains Client, next to the protocol jars.
@@ -84,14 +85,47 @@ object DesktopResources {
     }
   }
 
-  /** Icons from [IconJar], drawn with Skia. */
-  class JarIcons(clientLib: File, private val density: Density) : IconProvider {
+  /**
+   * Icons from [IconJar], drawn with Skia: the platform icons jar first, then the client's other
+   * jars, as the Android app packs them. The backend names some icons it expects the client to have
+   * outside the icons jar, e.g. Gradle's task icon `icons/newui/task.svg` in
+   * `intellij.platform.externalSystem.impl.jar`.
+   */
+  class JarIcons(private val clientLib: File, private val density: Density) : IconProvider {
     private val jar = IconJar(clientLib.resolve("intellij.platform.icons.jar"))
     private val cache = ConcurrentHashMap<String, Painter?>()
 
+    /**
+     * Which jar of the client has each SVG, e.g. `icons/newui/task.svg` →
+     * `lib/intellij.platform.externalSystem.impl.jar`; the first one wins.
+     */
+    // ponytail: built on the first icon the platform jar lacks, about a second for the client's
+    // jars; an index file at build time if that pause matters.
+    private val otherJars: Map<String, IconJar> by lazy {
+      val jars = mutableMapOf<File, IconJar>()
+      val byPath = mutableMapOf<String, IconJar>()
+      (clientLib.walk() + clientLib.resolveSibling("plugins").walk())
+        .filter { it.isFile && it.extension == "jar" }
+        .forEach { file ->
+          runCatching {
+            ZipFile(file).use { zip ->
+              zip
+                .entries()
+                .asSequence()
+                .filter { it.name.endsWith(".svg") }
+                .forEach { entry ->
+                  byPath.putIfAbsent(entry.name, jars.getOrPut(file) { IconJar(file) })
+                }
+            }
+          }
+        }
+      byPath
+    }
+
     override fun painter(path: String): Painter? =
       cache.computeIfAbsent(path) {
-        (jar.svg(it) ?: IconJar.EXTRA_ICONS[it])?.let { svg ->
+        (jar.svg(it) ?: otherJars[it.removePrefix("/")]?.svg(it) ?: IconJar.EXTRA_ICONS[it])?.let {
+          svg ->
           loadSvgPainter(svg.byteInputStream(), density)
         }
       }
