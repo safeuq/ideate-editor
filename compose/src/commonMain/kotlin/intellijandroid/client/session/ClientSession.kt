@@ -97,6 +97,7 @@ import com.jetbrains.rd.ide.model.requestResponseModel
 import com.jetbrains.rd.ide.model.solutionModel
 import com.jetbrains.rd.util.lifetime.Lifetime
 import com.jetbrains.rd.util.lifetime.LifetimeDefinition
+import com.jetbrains.rd.util.lifetime.isAlive
 import com.jetbrains.rd.util.reactive.AddRemove
 import com.jetbrains.rd.util.reactive.IScheduler
 import com.jetbrains.rd.util.reactive.hasTrueValue
@@ -173,6 +174,8 @@ class ClientSession(
   }
   private var projectId: RdProjectId? = null
   private var solution: Solution? = null
+  /** The shown solution's lifetime: ends when the backend removes it. */
+  private var shownSolutionLifetime: Lifetime? = null
   private var vfs: VfsModel? = null
   private var pane: RdProjectViewAsyncPane? = null
   /** For the Lux components that panes and popups name by id. */
@@ -821,20 +824,25 @@ class ClientSession(
 
     vfs = protocol.vfsModel
     bindClipboard(protocol.clipboardModel)
-    protocol.solutionModel.solutions.view(lifetime) { solutionLifetime, _, newSolution ->
-      val description =
-        (newSolution.solutionOpenStrategy as? RdOpenSolution)?.description as? RdCodeWithMeProject
-      val hostPath = description?.hostProjectBasePath
-      if (!isShownProject(project, hostPath, showing = solution != null)) {
-        log("Project ${newSolution.projectId.value} ($hostPath) added; showing $project")
-        return@view
-      }
+    fun bindSolution(
+      solutionLifetime: Lifetime,
+      newSolution: Solution,
+      description: RdCodeWithMeProject?,
+      hostPath: String?,
+    ) {
       log("Project ${newSolution.projectId.value} ($hostPath) added")
       projectId = newSolution.projectId
       solution = newSolution
+      shownSolutionLifetime = solutionLifetime
+      // Its Project tree names it (the root row): IdeaHome, then smoke after This Window.
+      mutableState.update { it.copy(projectName = null) }
       solutionLifetime.onTermination {
-        projectId = null
-        solution = null
+        // Not when another project has taken over already (the welcome project's hand-over).
+        if (solution === newSolution) {
+          projectId = null
+          solution = null
+          shownSolutionLifetime = null
+        }
       }
       newSolution.solutionLifecycle.readyForExtsRegistration.set(true)
       // Fleet RPC names projects by the kernel id, e.g. "m3nniruk9k7j4qsibjui", not by the rd
@@ -942,6 +950,36 @@ class ClientSession(
         reopenEditors()
         if (initialFile != null) openFile(initialFile)
       }
+    }
+    protocol.solutionModel.solutions.view(lifetime) { solutionLifetime, solutionKey, newSolution ->
+      // The backend asks the client to close a project (e.g. the welcome project after This
+      // Window): the client removes it from the map, as JetBrains Client's
+      // ThinClientRdProjectViewSession.closeSolution does; the entry's lifetime then ends.
+      newSolution.closeRequested.adviseOn(solutionLifetime, rdScheduler) {
+        log("Backend closed project ${newSolution.projectId.value}")
+        protocol.solutionModel.solutions.remove(solutionKey)
+      }
+      val description =
+        (newSolution.solutionOpenStrategy as? RdOpenSolution)?.description as? RdCodeWithMeProject
+      val hostPath = description?.hostProjectBasePath
+      if (isShownProject(project, hostPath, showing = solution != null)) {
+        return@view bindSolution(solutionLifetime, newSolution, description, hostPath)
+      }
+      // A project opened from the welcome project in This Window: the backend adds it first, then
+      // closes the welcome project (closeRequested). JetBrains Client moves its window over to it;
+      // IDEate shows it as soon as the welcome project is gone.
+      val welcomeLifetime = shownSolutionLifetime
+      if (project == null && welcomeLifetime != null && isWelcomeProject(solution)) {
+        log(
+          "Project ${newSolution.projectId.value} ($hostPath) added; shown once the welcome project closes",
+        )
+        welcomeLifetime.onTermination {
+          if (solutionLifetime.isAlive)
+            bindSolution(solutionLifetime, newSolution, description, hostPath)
+        }
+        return@view
+      }
+      log("Project ${newSolution.projectId.value} ($hostPath) added; showing $project")
     }
   }
 
@@ -1790,3 +1828,7 @@ internal fun afterEach(entries: List<MenuEntry>, after: () -> Unit): List<MenuEn
       else -> entry
     }
   }
+
+/** IntelliJ's welcome project (IdeaHome), which the backend opens when no project was given. */
+internal fun isWelcomeProject(solution: Solution?): Boolean =
+  solution?.welcomeScreenProject?.valueOrNull != null
