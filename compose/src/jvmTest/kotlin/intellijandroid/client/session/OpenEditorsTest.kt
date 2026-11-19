@@ -48,4 +48,21 @@ class OpenEditorsTest {
     assertEquals(SavedEditors(emptyList(), null), store.read(project))
     assertEquals(mapOf("left" to 0.4f), store.readPanes(project))
   }
+
+  @Test
+  fun keepsEditorsByProjectIdAndPanesByConnection() {
+    val store = OpenEditors(MemoryText())
+    // One backend on one port opens different projects (no project folder: IdeaHome).
+    val port5993 = store.slot("link:127.0.0.1:5993")
+    val smokeId = "23888a6f-a97e-4246-b9a9-20a835ed6667:3MDuM4gn3BvOPth1xHooNd9f6Q3"
+    val smoke = SavedEditors(listOf("/p/smoke/Main.java"), "/p/smoke/Main.java")
+    port5993.save(smokeId, smoke)
+    port5993.savePanes(mapOf("left" to 0.3f))
+    assertNull(port5993.read("23888a6f-a97e-4246-b9a9-20a835ed6667:3LibQCLOYF1HXBYEh7knQaw3xks"))
+    // The same project through another address finds its tabs; panes stay with the connection.
+    val tunnel = store.slot("ssh:me@mac:/p/smoke")
+    assertEquals(smoke, tunnel.read(smokeId))
+    assertEquals(emptyMap(), tunnel.readPanes())
+    assertEquals(mapOf("left" to 0.3f), port5993.readPanes())
+  }
 }

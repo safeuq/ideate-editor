@@ -905,9 +905,32 @@ is skipped and dropped from the list.
 
 | Connection | Key | Stored on |
 | --- | --- | --- |
-| Link | `link:127.0.0.1:5991` | desktop `~/.ideate/open-editors.json`, Android preferences `connection` / `openEditors` |
+| Link | `link:127.0.0.1:5991` (since 2026-11-19 only the panes; the editors are under `project:<project id>`, see below) | desktop `~/.ideate/open-editors.json`, Android preferences `connection` / `openEditors` |
 | Termux | `termux:/data/data/com.termux/files/home/intellij/smoke` | the same |
 | SSH | `ssh:me@mac.local:/Users/me/smoke` (the forwarded port changes each time, so the SSH host name stands in) | the same |
+
+**Editors are kept by the backend's project id (2026-11-19), as JetBrains Client does.**
+- Before, the key was the connection, and a join link's key names only the backend. One backend on one port
+  can open different projects: started without a project folder, it opens `~/IdeaProjects/IdeaHome` when a
+  client joins, and IDEate then reopened the `smoke` tabs saved for the same port.
+- JetBrains Client keys this state by `Solution.projectId`:
+  - `ThinClientProjectUtil.createProjectDir(RdProjectId)` (`intellij.platform.frontend.split.base.jar`)
+    calls `createLightProjectStoreDir`, which uses `<config>/projects/<sha1 of the id>/` while the registry
+    key `rdct.persist.project.settings` is on (otherwise a temporary folder).
+  - On this Mac the client's config folder is `IntelliJIdea2026.3`, the same name as the IDE's. Four such
+    folders exist (smoke twice, xtool, commons), each a small project with `.idea/workspace.xml`. None of
+    those files has a `FileEditorManager` entry, so where the client keeps its tab list is not confirmed.
+- The id looks like `23888a6f-a97e-4246-b9a9-20a835ed6667:3MDuM4gn3BvOPth1xHooNd9f6Q3`:
+  - The part after the colon was different for `smoke` and IdeaHome on the same backend, and the same for
+    `smoke` over 17 connections across backend restarts.
+  - The part before it differs between backend instances, so each backend has its own state for a project.
+- IDEate now keeps the editors under `project:<id>`, for links, SSH and Termux alike. The same project
+  reached through another address or tunnel finds its tabs.
+- Pane sizes stay under the connection's key, because the screen reads them before the backend names the
+  project.
+- Tabs saved under the old connection keys aren't reopened any more (once).
+- IDEate doesn't write into JetBrains Client's folders: the phone can't reach them, the tab list's place there
+  is unknown, and both programs would write the same `workspace.xml`.
 
 Example entry: `{"files": ["…/Other.java", "…/Util.kt", "…/Main.java"], "selected": "…/Util.kt"}`.
 

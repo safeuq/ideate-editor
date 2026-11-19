@@ -1093,7 +1093,8 @@ class ClientSession(
    * is gone is skipped and dropped from the saved list. [initialFile], when given, opens on top.
    */
   private fun reopenEditors() {
-    val saved = savedEditors?.read() ?: return
+    val id = projectId?.value ?: return
+    val saved = savedEditors?.read(id) ?: return
     val files = saved.files.filter { it != initialFile }
     if (files.isNotEmpty()) log("Reopening ${files.size} editors: ${files.joinToString()}")
     reopening += files
@@ -1105,13 +1106,14 @@ class ClientSession(
   /** Keeps the open editors and the selected one for the next connection. */
   private fun saveEditors() {
     val slot = savedEditors ?: return
+    val id = projectId?.value ?: return
     if (reopening.isNotEmpty()) return
     val files = tabOrder.filter { it in compositeIds }
     val carets =
       files
         .mapNotNull { path -> (caretsToRestore[path] ?: caretOf(path))?.let { path to it } }
         .toMap()
-    slot.save(SavedEditors(files, mutableState.value.selectedEditor, carets))
+    slot.save(id, SavedEditors(files, mutableState.value.selectedEditor, carets))
   }
 
   /** [path]'s caret offset in its edit session, once the backend has sent it. */

@@ -79,26 +79,40 @@ class OpenEditors(private val storage: StoredText) {
     storage.write(JsonObject(all + (project to JsonObject(kept + fields))).toString())
   }
 
-  /** [project]'s editors in this store, for one [ClientSession]. */
-  fun slot(project: String) =
+  /**
+   * One [ClientSession]'s editors and panes. The editors are kept by the backend's project id, as
+   * JetBrains Client keeps its state (`ThinClientProjectUtil.createProjectDir(RdProjectId)`):
+   * `project:23888a6f-a97e-4246-b9a9-20a835ed6667:3MDuM4gn3BvOPth1xHooNd9f6Q3`. One backend can
+   * open different projects on the same port, and one project can be reached by different
+   * addresses. The panes stay under the connection's key [connection] (`link:127.0.0.1:5993`),
+   * because the screen reads them before the backend names the project.
+   */
+  fun slot(connection: String) =
     object : Slot {
-      override fun read() = read(project)
+      override fun read(projectId: String): SavedEditors? =
+        this@OpenEditors.read(PROJECT_PREFIX + projectId)
 
-      override fun save(editors: SavedEditors) = save(project, editors)
+      override fun save(projectId: String, editors: SavedEditors) =
+        this@OpenEditors.save(PROJECT_PREFIX + projectId, editors)
 
-      override fun readPanes() = readPanes(project)
+      override fun readPanes() = readPanes(connection)
 
-      override fun savePanes(panes: Map<String, Float>) = savePanes(project, panes)
+      override fun savePanes(panes: Map<String, Float>) = savePanes(connection, panes)
     }
 
+  /** Editors by the backend's project id (`Solution.projectId`), panes by the connection. */
   interface Slot {
-    fun read(): SavedEditors?
+    fun read(projectId: String): SavedEditors?
 
-    fun save(editors: SavedEditors)
+    fun save(projectId: String, editors: SavedEditors)
 
     fun readPanes(): Map<String, Float>
 
     fun savePanes(panes: Map<String, Float>)
+  }
+
+  private companion object {
+    const val PROJECT_PREFIX = "project:"
   }
 
   private fun all(): JsonObject = Json.parseToJsonElement(storage.read() ?: "{}").jsonObject
