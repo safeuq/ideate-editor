@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -126,7 +127,9 @@ private fun ProgressText(
 /**
  * IntelliJ's `InplaceButton` with `AllIcons.Process.Stop`: the 14 px round ×, no frame, the
  * brighter `stopHovered` under the pointer. A 20 × 24 dp tap area with the icon at its right end: 6
- * dp after the bar, and flush with the text's right edge.
+ * dp after the bar, and flush with the text's right edge. It reports zero height, so the bar's row
+ * stays as tall as the bar (4 dp) and the popup as compact as without it; drawn centred on the bar,
+ * the 14 dp icon stays inside the 6 dp gaps to the title and the detail line.
  */
 @Composable
 private fun StopButton(modifier: Modifier, onClick: () -> Unit) {
@@ -137,6 +140,10 @@ private fun StopButton(modifier: Modifier, onClick: () -> Unit) {
       ?: return
   Box(
     modifier
+      .layout { measurable, constraints ->
+        val button = measurable.measure(constraints)
+        layout(button.width, 0) { button.place(0, -button.height / 2) }
+      }
       .size(width = 20.dp, height = 24.dp)
       .hoverable(interaction)
       .clickable(interactionSource = interaction, indication = null, onClick = onClick),
