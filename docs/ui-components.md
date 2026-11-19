@@ -427,6 +427,12 @@ no track and no segment; the whole rounded bar is one mirrored gradient that mov
 One 800 ms cycle moves the gradient 192 dp, one full mirrored period, so the loop has no jump.
 
 **The popup** keeps Gateway's 459 dp when the window has 459 + 2 × 16 dp; narrower, it takes the
-width minus 16 dp each side and Cancel moves under the detail line, at the right end. Example: a
-411 dp phone held upright gives a 379 dp popup. Checked in the gallery: `CLIENT_GALLERY=<out>.png`
+width minus 16 dp each side. Example: a 411 dp phone held upright gives a 379 dp popup. There,
+instead of the Cancel button (which used to take a row of its own under the detail line), the bar
+ends with IntelliJ's compact cancel: `InlineProgressIndicator.createCancelButton()`, an
+`InplaceButton` with `AllIcons.Process.Stop` (`process/stop.svg`, a round ×, 14 px, grey at 50 %;
+`stopHovered.svg` at 90 % under the pointer), as in IntelliJ's status bar and Background Tasks
+popup. Its tap area is 20 × 24 dp with the icon at the right end: 6 dp after the bar, flush with the
+detail line's right edge. The user chose this on 2026-11-19 from three options (× after the bar,
+Cancel beside the text everywhere, detail and Cancel sharing the last row). Checked in the gallery: `CLIENT_GALLERY=<out>.png`
 now also writes `<out>-progress.png` (900 dp) and `<out>-progress-narrow.png` (411 dp).

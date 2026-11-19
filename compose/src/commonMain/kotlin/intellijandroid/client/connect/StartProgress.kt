@@ -1,5 +1,10 @@
 package intellijandroid.client.connect
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -7,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -21,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.component.IndeterminateHorizontalProgressBar
 import intellijandroid.client.ui.component.OutlinedButton
 import intellijandroid.client.ui.component.popupContainer
@@ -46,8 +53,10 @@ fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: (
         usePlatformDefaultWidth = false,
       ),
   ) {
-    // Gateway's 459 dp when it fits with a 16 dp margin each side; narrower screens get the space
-    // left and Cancel moves under the text, at the right end. E.g. a 411 dp phone: 379 dp wide.
+    // Gateway's 459 dp when it fits with a 16 dp margin each side, Cancel beside the text.
+    // Narrower screens get the space left (a 411 dp phone: 379 dp) and, instead of the button,
+    // IntelliJ's compact cancel: the round × after the bar, as in its status bar and Background
+    // Tasks popup (InlineProgressIndicator.createCancelButton).
     BoxWithConstraints {
       val narrow = maxWidth < Popup.width + Popup.screenMargin * 2
       val width = if (narrow) maxWidth - Popup.screenMargin * 2 else Popup.width
@@ -63,11 +72,14 @@ fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: (
           .popupContainer(0.dp) // Gateway's popup is square (measured)
           .padding(start = Popup.inset, end = Popup.inset, top = 10.dp, bottom = 12.dp)
       if (narrow) {
-        Column(popup, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-          ProgressText(title, detail, fonts)
-          if (onCancel != null) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { cancel() }
-          }
+        Box(popup) {
+          ProgressText(
+            title,
+            detail,
+            fonts,
+            afterBar =
+              onCancel?.let { { StopButton(Modifier.focusRequester(cancelFocus), onClick = it) } },
+          )
         }
       } else {
         Row(
@@ -84,24 +96,53 @@ fun StartProgress(title: String, detail: String, fonts: ClientFonts, onCancel: (
   }
 }
 
-/** The title, the bar and the detail line. */
+/** The title, the bar (with [afterBar] at its right end) and the detail line. */
 @Composable
 private fun ProgressText(
   title: String,
   detail: String,
   fonts: ClientFonts,
   modifier: Modifier = Modifier,
+  afterBar: (@Composable () -> Unit)? = null,
 ) {
   val text = fonts.label()
   Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
     BasicText(title, style = text)
-    IndeterminateHorizontalProgressBar(Modifier.fillMaxWidth())
+    if (afterBar == null) IndeterminateHorizontalProgressBar(Modifier.fillMaxWidth())
+    else
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        IndeterminateHorizontalProgressBar(Modifier.weight(1f))
+        afterBar()
+      }
     BasicText(
       detail,
       style = text.copy(color = IslandsDark.textSecondary),
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
     )
+  }
+}
+
+/**
+ * IntelliJ's `InplaceButton` with `AllIcons.Process.Stop`: the 14 px round ×, no frame, the
+ * brighter `stopHovered` under the pointer. A 20 × 24 dp tap area with the icon at its right end: 6
+ * dp after the bar, and flush with the text's right edge.
+ */
+@Composable
+private fun StopButton(modifier: Modifier, onClick: () -> Unit) {
+  val interaction = remember { MutableInteractionSource() }
+  val hovered by interaction.collectIsHoveredAsState()
+  val icon =
+    LocalIcons.current.painter(if (hovered) "process/stopHovered.svg" else "process/stop.svg")
+      ?: return
+  Box(
+    modifier
+      .size(width = 20.dp, height = 24.dp)
+      .hoverable(interaction)
+      .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+    contentAlignment = Alignment.CenterEnd,
+  ) {
+    Image(icon, contentDescription = "Cancel", modifier = Modifier.size(14.dp))
   }
 }
 

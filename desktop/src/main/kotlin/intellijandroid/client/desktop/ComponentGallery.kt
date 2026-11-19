@@ -134,7 +134,7 @@ object ComponentGallery {
     page(File("$base-message.png")) { Backdrop { SampleMessage() } }
     page(File("$base-lux.png")) { Backdrop { SampleLuxDialog() } }
     page(File("$base-progress.png")) { Backdrop { SampleProgress() } }
-    // A phone held upright (411 dp): Cancel moves under the bar.
+    // A phone held upright (411 dp): the round × after the bar instead of the Cancel button.
     page(File("$base-progress-narrow.png"), widthDp = 411, heightDp = 300) {
       Backdrop { SampleProgress() }
     }
@@ -167,7 +167,7 @@ private fun SampleDialog() {
 private fun SampleProgress() {
   StartProgress(
     "Starting the remote IDE Backend",
-    "Running intellij-backend start for xtool; this takes up to a minute",
+    "Running intellij-backend start for xtool; this takes up to 3 minutes",
     LocalClientFonts.current,
     onCancel = {},
   )
