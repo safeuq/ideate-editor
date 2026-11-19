@@ -119,7 +119,9 @@ internal class BackendPopups(
         model.loaded.advise(popupLifetime) {
           showList(popupLifetime, id, model, wizard, wizard.step)
         }
-        model.result.advise(popupLifetime) { result -> if (result == DialogResult.CLOSE) close(id) }
+        model.result.advise(popupLifetime) { result ->
+          if (result == DialogResult.CLOSE) closed(id)
+        }
         popupLifetime.onTermination { close(id) }
         return@view
       }
@@ -152,7 +154,7 @@ internal class BackendPopups(
         log("Backend popup '${popup.title}'")
         publish(shown.values.toList())
       }
-      model.result.advise(popupLifetime) { result -> if (result == DialogResult.CLOSE) close(id) }
+      model.result.advise(popupLifetime) { result -> if (result == DialogResult.CLOSE) closed(id) }
       popupLifetime.onTermination { close(id) }
     }
   }
@@ -284,6 +286,17 @@ internal class BackendPopups(
   }
 
   /**
+   * The backend set result CLOSE: hidden, and removed from `activePopups`, as JetBrains Client's
+   * `ThinClientPopupsHost.showBePopup` does. The backend runs a list popup's chosen action only
+   * once the entry is gone (`BackendBeAbstractPopup`: the final runnable, on the model's removal);
+   * before this, New ▸ Markdown File closed the list and created nothing.
+   */
+  private fun closed(id: Int) {
+    close(id)
+    protocol.uIAutomationInteractionModel.activePopups.remove(id)
+  }
+
+  /**
    * The user typed into [field]: the backend's text box gets it (`updateSourceTrigger`
    * TextChanged).
    */
@@ -307,10 +320,9 @@ internal class BackendPopups(
     wizard.selectedValueChanged.fire(list.rows.indexOf(row))
     if (!line.hasSubstep) {
       log("Backend list popup ${popup.id}: chose '${row.text}'")
+      // As JetBrains Client's DefaultLineStep: the signal is the choice. The backend then closes
+      // the popup (result CLOSE, see [closed]) and runs the action once the entry is removed.
       line.signal.fire(Unit)
-      // The popup closes on a final choice; an action list runs the action once it has closed
-      // (IntelliJ's doFinalStep), which the backend hears as the result.
-      popup.model.result.set(DialogResult.OK)
       return
     }
     list.rows.forEach { each ->
