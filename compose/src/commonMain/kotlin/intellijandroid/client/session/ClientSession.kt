@@ -117,6 +117,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
@@ -746,7 +747,7 @@ class ClientSession(
 
   private fun onRd(action: () -> Unit) {
     val rdScheduler = scheduler ?: return log("Not connected yet")
-    rdScheduler.queue { runCatching(action).onFailure(::fail) }
+    rdScheduler.queueUnlessStopped(::log) { runCatching(action).onFailure(::fail) }
   }
 
   private fun createModels(protocol: IProtocol) {
@@ -1324,7 +1325,7 @@ class ClientSession(
     saveScheduled = true
     markupTimer.schedule(
       {
-        rdScheduler.queue {
+        rdScheduler.queueUnlessStopped(::log) {
           saveScheduled = false
           saveEditors()
         }
@@ -1568,7 +1569,7 @@ class ClientSession(
     val rdScheduler = scheduler ?: return publishDocument(documentId)
     markupTimer.schedule(
       {
-        rdScheduler.queue {
+        rdScheduler.queueUnlessStopped(::log) {
           val documents = markupChanged.toList()
           markupChanged.clear()
           documents.forEach(::publishDocument)
@@ -1921,3 +1922,17 @@ internal fun afterEach(entries: List<MenuEntry>, after: () -> Unit): List<MenuEn
 /** IntelliJ's welcome project (IdeaHome), which the backend opens when no project was given. */
 internal fun isWelcomeProject(solution: Solution?): Boolean =
   solution?.welcomeScreenProject?.valueOrNull != null
+
+/**
+ * Queues [action] on the rd thread unless the session has stopped. After [ClientSession.stop] the
+ * screen stays up while IDEate reconnects, and the rd thread is gone (`SingleThreadScheduler` ends
+ * with the session's lifetime). A tap then has nothing to reach, so it is dropped and logged rather
+ * than thrown into the UI as "Task … rejected from … [Terminated …]".
+ */
+internal fun IScheduler.queueUnlessStopped(log: (String) -> Unit, action: () -> Unit) {
+  try {
+    queue(action)
+  } catch (stopped: RejectedExecutionException) {
+    log("Session stopped; dropped an action")
+  }
+}

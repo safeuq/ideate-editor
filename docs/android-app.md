@@ -74,6 +74,10 @@ For this and any other drop (a network change, a backend on another machine, the
   reopens the file it was opened with.
 - After 2 minutes, or on Cancel, it shows the connect screen, where the history entry still reconnects.
 - A backend taken over by another client isn't retried; that keeps its "Take back" question.
+- While it reconnects, the old session has stopped but its screen is still shown. A tap or key there used to
+  reach the old session's stopped rd thread and came up as "Task … rejected from …SingleThreadSchedulerBase…
+  [Terminated …]" (desktop, 2026-11-20). Such an action is now dropped and logged ("Session stopped; dropped an
+  action"); `StoppedSchedulerTest` covers it.
 - Tested on the emulator: the app was paused for 40 s (`kill -STOP` via `run-as`), so the backend closed the
   wire. After the resume the app reconnected in under half a second.
 
