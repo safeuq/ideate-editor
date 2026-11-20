@@ -858,7 +858,14 @@ private fun EditorIsland(
         editorScroll,
         backendMenu = { state.contextMenu?.entries },
       )
-      if (breadcrumbsFooter) EditorBreadcrumbs(state, session)
+      if (breadcrumbsFooter)
+        EditorBreadcrumbs(
+          state,
+          session,
+          // EditorColors.BREADCRUMBS_BORDER_COLOR falls back to INDENT_GUIDE_COLOR.
+          (scheme.color("BREADCRUMBS_BORDER_COLOR") ?: scheme.color("INDENT_GUIDE"))?.let(::Color)
+            ?: IslandsDark.popupBorder,
+        )
     } else {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         BasicText(

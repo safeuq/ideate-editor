@@ -110,7 +110,8 @@ fill control-brand-bg `#3871E1`. Sizes are the same for mouse and touch.
 A phone held upright (decided 2026-11-20) gets one row that scrolls sideways: the task's short bar with its
 count (no text), Position, then the other widgets. The breadcrumbs are the editor island's footer there
 (user request, 2026-11-20): the same crumbs in a 28 dp row under the editor, 4 in from its edge, their end in
-view; `EditorBreadcrumbs`. IntelliJ can place its editor breadcrumbs below the editor too (Settings › Editor ›
+view, with a 1 dp line above them as IntelliJ's new UI draws over bottom breadcrumbs (`BreadcrumbsXmlWrapper`:
+`insetsTop(1)` in the scheme's `BREADCRUMBS_BORDER_COLOR`, which falls back to `INDENT_GUIDE`); `EditorBreadcrumbs`. IntelliJ can place its editor breadcrumbs below the editor too (Settings › Editor ›
 General › Breadcrumbs › Bottom), but those are another component (`BreadcrumbsPanel`): only the code
 structure, in the editor's colours. IDEate keeps the status bar's crumbs, the path down to the member. It
 shows a notice or failure as info text, not the last log line, which the desktop keeps as a debugging aid.

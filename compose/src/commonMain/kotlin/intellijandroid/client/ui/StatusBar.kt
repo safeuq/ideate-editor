@@ -135,15 +135,20 @@ fun StatusBar(
  * The breadcrumbs as the editor island's footer on a phone held upright, where the status bar has
  * no room for them, as IntelliJ can put its editor breadcrumbs below the editor (Settings › Editor
  * › General › Breadcrumbs › Bottom). The status bar's height and crumbs; the end stays in view.
+ * Above them a 1 dp line in [borderColor], as `BreadcrumbsXmlWrapper` draws in the new UI
+ * (`insetsTop(1)` in the scheme's `BREADCRUMBS_BORDER_COLOR`).
  */
 @Composable
-fun EditorBreadcrumbs(state: SessionState, session: ClientSession) {
+fun EditorBreadcrumbs(state: SessionState, session: ClientSession, borderColor: Color) {
   if (state.breadcrumbs.isEmpty()) return
-  Box(
-    Modifier.fillMaxWidth().height(Look.height).padding(horizontal = Look.footerInset),
-    contentAlignment = Alignment.CenterStart,
-  ) {
-    Breadcrumbs(state, session, Modifier)
+  Column(Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(borderColor))
+    Box(
+      Modifier.fillMaxWidth().height(Look.height).padding(horizontal = Look.footerInset),
+      contentAlignment = Alignment.CenterStart,
+    ) {
+      Breadcrumbs(state, session, Modifier)
+    }
   }
 }
 
