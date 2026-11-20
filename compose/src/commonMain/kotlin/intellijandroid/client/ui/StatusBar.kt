@@ -64,9 +64,9 @@ import intellijandroid.client.ui.theme.label
  * IntelliJ's status bar in the new UI (`IdeStatusBarImpl`, docs/status-bar.md): the breadcrumbs on
  * the left (`NavBar`), the info text or the newest background task in the middle
  * (`InfoAndProgressPanel`), and the backend's widgets on the right (Position, LF, UTF-8, indent,
- * read-only). On a phone held upright ([narrow]) the bar scrolls sideways: the breadcrumbs keep
- * their end (the file and member) in view, then the task's short bar, then Position and the rest.
- * Sizes are IntelliJ's for mouse and touch alike.
+ * read-only). On a phone held upright ([narrow]) the breadcrumbs are the editor's footer instead
+ * ([EditorBreadcrumbs]), and the bar scrolls sideways: the task's short bar, then Position and the
+ * rest. Sizes are IntelliJ's for mouse and touch alike.
  */
 @Composable
 fun StatusBar(
@@ -90,7 +90,6 @@ fun StatusBar(
         bar.horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        Breadcrumbs(state, session, Modifier.widthIn(max = Look.narrowCrumbsWidth))
         if (progress != null)
           InlineProgressPanel(
             progress,
@@ -129,6 +128,22 @@ fun StatusBar(
     }
     if (processesShown && tasks.isNotEmpty())
       ProcessesPopup(tasks, session, onDismiss = { processesShown = false })
+  }
+}
+
+/**
+ * The breadcrumbs as the editor island's footer on a phone held upright, where the status bar has
+ * no room for them, as IntelliJ can put its editor breadcrumbs below the editor (Settings › Editor
+ * › General › Breadcrumbs › Bottom). The status bar's height and crumbs; the end stays in view.
+ */
+@Composable
+fun EditorBreadcrumbs(state: SessionState, session: ClientSession) {
+  if (state.breadcrumbs.isEmpty()) return
+  Box(
+    Modifier.fillMaxWidth().height(Look.height).padding(horizontal = Look.footerInset),
+    contentAlignment = Alignment.CenterStart,
+  ) {
+    Breadcrumbs(state, session, Modifier)
   }
 }
 
@@ -503,8 +518,8 @@ private object Look {
   /** `InlineProgressIndicator`'s compact bar: 104 wide. */
   val compactBarWidth = 104.dp
   val titleMaxWidth = 320.dp
-  /** Phone held upright: room left for the progress and Position after the breadcrumbs. */
-  val narrowCrumbsWidth = 220.dp
+  /** The editor footer's crumbs: 4 in from the island's edge, as the editor gutter's first gap. */
+  val footerInset = 4.dp
   val narrowInfoWidth = 220.dp
   val infoMaxWidth = 400.dp
   val text = Color(0xFF9FA2A8) // StatusBar.Widget.foreground = text-muted = gray-100

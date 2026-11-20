@@ -362,7 +362,15 @@ fun ClientScreen(
     }
 
     @Composable
-    fun Editor(modifier: Modifier) = EditorIsland(state, session, editorScroll, tabRow, modifier)
+    fun Editor(modifier: Modifier) =
+      EditorIsland(
+        state,
+        session,
+        editorScroll,
+        tabRow,
+        breadcrumbsFooter = layout == ScreenLayout.PORTRAIT,
+        modifier,
+      )
 
     Column(Modifier.fillMaxSize()) {
       MainToolbar(
@@ -803,6 +811,8 @@ private fun EditorIsland(
   session: ClientSession,
   editorScroll: SidewaysScroll,
   tabRow: TabRowScroll,
+  /** A phone held upright: the breadcrumbs under the editor, not in the status bar. */
+  breadcrumbsFooter: Boolean,
   modifier: Modifier,
 ) {
   val fonts = LocalClientFonts.current
@@ -842,12 +852,13 @@ private fun EditorIsland(
         selected,
         scheme,
         actions,
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxWidth().weight(1f),
         state.lookup?.takeIf { it.path == selected.path },
         state.usages?.takeIf { it.path == selected.path },
         editorScroll,
         backendMenu = { state.contextMenu?.entries },
       )
+      if (breadcrumbsFooter) EditorBreadcrumbs(state, session)
     } else {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         BasicText(
