@@ -38,9 +38,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import intellijandroid.client.session.BackendPopup
@@ -74,6 +76,9 @@ fun BackendPopups(popups: List<BackendPopup>, session: ClientSession) {
   LocalBackHandler.current(true) { session.popupCancel(top) }
   // Modal: the screen under them takes no taps. A later popup (the name popup's error hint) shows
   // under the earlier one, where IntelliJ puts it.
+  // A popup the backend placed next to something it paints (New ▾ under its button on the welcome
+  // panel) goes there, kept inside the window; the others at the top, as IntelliJ shows New ▸ File.
+  val anchor = popups.first().anchor
   Box(
     Modifier.fillMaxSize().clickable(remember { MutableInteractionSource() }, indication = null) {
       if (top.cancelOnClickOutside) session.popupCancel(top)
@@ -81,7 +86,9 @@ fun BackendPopups(popups: List<BackendPopup>, session: ClientSession) {
     contentAlignment = Alignment.TopCenter,
   ) {
     Column(
-      Modifier.padding(top = 48.dp, start = 16.dp, end = 16.dp).widthIn(max = Look.width),
+      if (anchor == null)
+        Modifier.padding(top = 48.dp, start = 16.dp, end = 16.dp).widthIn(max = Look.width)
+      else Modifier.anchoredAt(anchor.x.dp, anchor.y.dp).widthIn(max = Look.width),
       verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
       popups.forEach { popup -> key(popup.id) { BackendPopupView(popup, session) } }
@@ -230,5 +237,21 @@ private fun LuxSurface(surface: LuxDialog, session: ClientSession) {
   Canvas(Modifier.size(surface.width.dp, surface.height.dp)) {
     painted // read, so a painted batch redraws
     drawImage(bitmap, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()))
+  }
+}
+
+/**
+ * Places the content with its top-left corner at ([x], [y]) in the parent, moved left or up as far
+ * as needed to stay inside it.
+ */
+private fun Modifier.anchoredAt(x: Dp, y: Dp): Modifier = layout { measurable, constraints ->
+  val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+  val width = constraints.maxWidth
+  val height = constraints.maxHeight
+  layout(width, height) {
+    placeable.place(
+      x.roundToPx().coerceIn(0, (width - placeable.width).coerceAtLeast(0)),
+      y.roundToPx().coerceIn(0, (height - placeable.height).coerceAtLeast(0)),
+    )
   }
 }

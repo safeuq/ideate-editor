@@ -160,10 +160,17 @@ Checked on the Mac test backend (port 5994, no project) with the desktop client,
 | New ▸ Markdown File | list closes, no file | `Untitled.md` opens |
 | smoke in the recent list, This Window | IdeaHome stays; log "smoke added; showing null" | smoke's tree, its saved tab `Other.java`, toolbar "smoke" |
 
+- **Where New ▾'s list goes (2026-11-20, 07:00 IST).** Its popup model's `context` is a
+  `BePopupPositionDirectTransferContext`: `luxId = 3` (the welcome panel), `x = 17`, `y = 91`, `position =
+  TOP`, the point just under the New button inside the panel. IDEate put every backend popup at the top of the
+  window. It now places a popup with this context at the panel's window position (its `LxPanel.position`,
+  which `ProjectViews.resizePanel` sets) plus the point, kept inside the window. Popups without it (New ▸
+  File's name popup: active window, TOP) stay at the top.
+
 Still open:
-- The New ▾ list is drawn at the top of the editor area, not under the New button.
-- After a dialog closes, parts of the panel (Clone Repository, the search field) are sometimes not redrawn
-  (seen 2026-11-19, not since).
+- Parts of the panel (the buttons, the search field) are sometimes not drawn: seen after a dialog closed
+  (2026-11-19) and after a client reconnected to a running backend (2026-11-20, 07:00); the recent projects
+  were drawn both times.
 - The editor area's buttons when nothing is open (New Markdown File, Open File, Open Terminal): JetBrains
   Client draws them (`WelcomeScreenEmptyStateProvider`) and calls `WelcomeScreenFeatureApi.onClick` over
   Fleet RPC; IDEate shows its own hint instead.

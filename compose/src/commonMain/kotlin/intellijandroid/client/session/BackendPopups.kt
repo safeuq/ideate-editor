@@ -24,6 +24,7 @@ import com.jetbrains.ide.model.uiautomation.uIAutomationInteractionModel
 import com.jetbrains.rd.framework.IProtocol
 import com.jetbrains.rd.ide.model.BeAbstractPopup
 import com.jetbrains.rd.ide.model.BeListPopupLine
+import com.jetbrains.rd.ide.model.BePopupPositionDirectTransferContext
 import com.jetbrains.rd.ide.model.DefaultPopupContent
 import com.jetbrains.rd.ide.model.FontStyle
 import com.jetbrains.rd.ide.model.IconModel
@@ -93,6 +94,13 @@ class BackendPopup(
   internal val shortcuts: Map<String, List<BeShortcutListener>>,
 ) {
   var title by mutableStateOf(title)
+
+  /**
+   * Where the popup's top-left corner goes, in window dp, when the backend placed it next to a Lux
+   * component (`BePopupPositionDirectTransferContext`), e.g. New ▾ on the welcome panel: lux 3,
+   * (17, 91), just under the New button. Null: the usual place at the top of the window.
+   */
+  var anchor by mutableStateOf<LxPoint?>(null)
 }
 
 /**
@@ -150,6 +158,7 @@ internal class BackendPopups(
             shortcuts,
           )
         model.title?.text?.advise(popupLifetime) { popup.title = it }
+        place(popup)
         shown[id] = popup
         log("Backend popup '${popup.title}'")
         publish(shown.values.toList())
@@ -276,9 +285,26 @@ internal class BackendPopups(
         model,
         emptyMap(),
       )
+    place(popup)
     shown[id] = popup
     log("Backend list popup '${popup.title}': ${list.rows.joinToString { it.text }}")
     publish(shown.values.toList())
+  }
+
+  /**
+   * [popup]'s [BackendPopup.anchor], when the backend placed it at a point of a Lux component it
+   * paints: that component's place in the window (an `LxPanel`'s `position`, e.g. the welcome
+   * panel's, set by `ProjectViews.resizePanel`) plus the point.
+   */
+  private fun place(popup: BackendPopup) {
+    val context = popup.model.context.valueOrNull as? BePopupPositionDirectTransferContext ?: return
+    val panel = protocol.luxModel.components[context.luxId] as? LxPanel
+    val origin = panel?.position?.valueOrNull
+    if (origin == null) {
+      log("Backend popup ${popup.id}: placed at lux ${context.luxId}, which IDEate doesn't show")
+      return
+    }
+    popup.anchor = LxPoint(origin.x + context.x, origin.y + context.y)
   }
 
   private fun close(id: Int) {
