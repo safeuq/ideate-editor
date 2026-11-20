@@ -25,7 +25,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.MenuItem
 
@@ -96,11 +95,9 @@ fun SearchTextField(
     )
     if (history != null && historyShown) {
       val below = with(LocalDensity.current) { 30.dp.roundToPx() }
-      val screen = LocalScreenBounds.current
-      Popup(
-        popupPositionProvider = PopupPlacement(IntOffset(0, below), below, screen),
+      AppPopup(
+        PopupPlacement(IntOffset(0, below), below),
         onDismissRequest = { historyShown = false },
-        properties = popupProperties(screen),
       ) {
         Menu(
           { history.items.map { item -> MenuItem(item, onClick = { onValueChange(item) }) } },

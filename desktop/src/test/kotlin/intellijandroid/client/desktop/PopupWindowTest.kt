@@ -11,13 +11,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.ComposeWindow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import intellijandroid.client.screenInWindow
-import intellijandroid.client.ui.component.LocalScreenBounds
+import androidx.compose.ui.window.PopupPositionProvider
+import intellijandroid.client.ui.component.AppPopup
+import intellijandroid.client.ui.component.LocalPopupHost
 import intellijandroid.client.ui.component.PopupPlacement
-import intellijandroid.client.ui.component.popupProperties
 import java.awt.GraphicsEnvironment
+import java.awt.Rectangle
+import java.awt.Robot
 import java.awt.Window
 import javax.swing.SwingUtilities
 import kotlin.test.Test
@@ -25,34 +29,54 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Popups are their own windows and go past the main window's edge, as the desktop app sets them up
- * (docs/intellij-look.md section 24). Compose's test scene draws popups on one canvas, so this
- * opens a real window. Example: a 400 × 300 window at (100, 100) with a 200 × 200 popup under its
- * bottom edge: the popup window ends near y 600, past the main window's 400.
+ * [WindowPopupHost] gives a popup its own window that can go past the main window's edge and is
+ * measured against the screen, not the window (docs/intellij-look.md section 24). Compose's test
+ * scene draws popups on one canvas, so this opens real windows.
  */
 class PopupWindowTest {
+  /** A 200 dp popup above a 400 × 300 window at (100, 400): all of it above the window's top. */
   @Test
-  fun popupGoesPastTheWindowBottom() {
-    if (GraphicsEnvironment.isHeadless()) return
-    System.setProperty("compose.layers.type", "WINDOW")
+  fun popupAboveTheWindowIsWholeAndDrawn() {
+    val popup = showPopup(Rectangle(100, 400, 400, 300), Above) ?: return
+    assertTrue(
+      popup.bounds.y + popup.bounds.height <= 400 + 30,
+      "popup ${popup.bounds} above y 400",
+    )
+    assertTrue(popup.bounds.height >= 195, "popup ${popup.bounds} should be 200 points tall")
+    popup.drawnColor?.let { assertTrue(it.red > 200 && it.green < 60, "popup drawn $it, not red") }
+  }
+
+  /** The same popup under a 160 × 120 window: 200 points tall, not cut to the window. */
+  @Test
+  fun popupLargerThanTheWindowIsNotCut() {
+    val popup =
+      showPopup(Rectangle(100, 100, 160, 120), PopupPlacement(IntOffset(0, 0), 0)) ?: return
+    assertTrue(popup.bounds.height >= 195, "popup ${popup.bounds} should be 200 points tall")
+    assertTrue(popup.bounds.y >= 100 + 120 - 30, "popup ${popup.bounds} under the window")
+    popup.drawnColor?.let { assertTrue(it.red > 200 && it.green < 60, "popup drawn $it, not red") }
+  }
+
+  private class Shown(val bounds: Rectangle, val drawnColor: java.awt.Color?)
+
+  /**
+   * Opens [frameBounds] with a red 200 dp popup anchored to a 10 dp box at its bottom left, placed
+   * by [position]; the popup's window bounds and the colour at its centre (null when the screen
+   * can't be read). Null when there is no display.
+   */
+  private fun showPopup(frameBounds: Rectangle, position: PopupPositionProvider): Shown? {
+    if (GraphicsEnvironment.isHeadless()) return null
     lateinit var frame: ComposeWindow
-    // Opened once the window is on screen, as menus are: a popup in the window's first frame gets
-    // a 1 × 1 window from Compose, before the main window has a size.
+    // Opened once the window is on screen, as menus are.
     val shown = mutableStateOf(false)
     SwingUtilities.invokeAndWait {
       frame = ComposeWindow()
-      frame.setSize(400, 300)
-      frame.setLocation(100, 100)
+      frame.bounds = frameBounds
       frame.setContent {
-        CompositionLocalProvider(LocalScreenBounds provides { screenInWindow(frame) }) {
+        CompositionLocalProvider(LocalPopupHost provides WindowPopupHost(frame)) {
           Box(Modifier.fillMaxSize()) {
             Box(Modifier.align(Alignment.BottomStart).size(10.dp)) {
-              val screen = LocalScreenBounds.current
               if (shown.value)
-                Popup(
-                  popupPositionProvider = PopupPlacement(IntOffset(0, 0), 0, screen),
-                  properties = popupProperties(screen, focusable = false),
-                ) {
+                AppPopup(position, focusable = false) {
                   Box(Modifier.size(200.dp).background(Color.Red))
                 }
             }
@@ -66,25 +90,36 @@ class PopupWindowTest {
       SwingUtilities.invokeAndWait { shown.value = true }
       val popup = waitForPopup(frame)
       assertNotNull(popup, "no popup window opened")
-      val popupBottom = popup.y + popup.height
-      val frameBottom = frame.y + frame.height
-      assertTrue(
-        popupBottom > frameBottom + 100,
-        "popup ${popup.bounds} should end well past the window's bottom $frameBottom",
-      )
+      Thread.sleep(300)
+      val bounds = popup.bounds
+      val color = runCatching {
+        Robot().getPixelColor(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+      }
+        .getOrNull()
+      println("POPUP $bounds window ${frame.bounds} centre colour $color")
+      return Shown(bounds, color)
     } finally {
       SwingUtilities.invokeAndWait { frame.dispose() }
     }
   }
 
-  /** The popup's window: a showing window other than [frame] that is at least 150 points tall. */
+  /** The popup's window: a showing window owned by [frame] that is at least 150 points tall. */
   private fun waitForPopup(frame: Window): Window? {
     repeat(50) {
-      val found =
-        Window.getWindows().firstOrNull { it !== frame && it.isShowing && it.height >= 150 }
+      val found = frame.ownedWindows.firstOrNull { it.isShowing && it.height >= 150 }
       if (found != null) return found
       Thread.sleep(100)
     }
     return null
+  }
+
+  /** Right above the anchor's top edge. */
+  private object Above : PopupPositionProvider {
+    override fun calculatePosition(
+      anchorBounds: IntRect,
+      windowSize: IntSize,
+      layoutDirection: LayoutDirection,
+      popupContentSize: IntSize,
+    ) = IntOffset(anchorBounds.left, anchorBounds.top - 300 * 2 - popupContentSize.height)
   }
 }

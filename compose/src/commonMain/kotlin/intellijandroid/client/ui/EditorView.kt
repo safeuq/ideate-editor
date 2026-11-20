@@ -75,7 +75,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import intellijandroid.client.session.EditorFile
 import intellijandroid.client.session.EditorKey
 import intellijandroid.client.session.EditorScheme
@@ -85,9 +84,8 @@ import intellijandroid.client.session.Lookup
 import intellijandroid.client.session.LookupKey
 import intellijandroid.client.session.TextEffect
 import intellijandroid.client.session.UsagesPopup
-import intellijandroid.client.ui.component.LocalScreenBounds
+import intellijandroid.client.ui.component.AppPopup
 import intellijandroid.client.ui.component.PopupPlacement
-import intellijandroid.client.ui.component.popupProperties
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import kotlin.math.ceil
@@ -1007,7 +1005,6 @@ fun EditorView(
         )
       }
     }
-    val screen = LocalScreenBounds.current
     // The completion popup sits under the caret line, its item text lined up with the first letter
     // of the prefix.
     lookup
@@ -1021,10 +1018,9 @@ fun EditorView(
           (metrics.gutterWidth + prefixColumn * metrics.charWidth - scroll.x - textOffset)
             .roundToInt()
             .coerceAtLeast(0)
-        Popup(
-          popupPositionProvider =
-            PopupPlacement(IntOffset(x, caretItem.offset + caretItem.size), caretItem.size, screen),
-          properties = popupProperties(screen, focusable = false),
+        AppPopup(
+          PopupPlacement(IntOffset(x, caretItem.offset + caretItem.size), caretItem.size),
+          focusable = false,
         ) {
           LookupPopup(current, actions.chooseLookupItem)
         }
@@ -1037,11 +1033,10 @@ fun EditorView(
         (metrics.gutterWidth + (caret - lines.starts[caretLine]) * metrics.charWidth - scroll.x)
           .roundToInt()
           .coerceAtLeast(0)
-      Popup(
-        popupPositionProvider =
-          PopupPlacement(IntOffset(x, caretItem.offset + caretItem.size), caretItem.size, screen),
+      AppPopup(
+        PopupPlacement(IntOffset(x, caretItem.offset + caretItem.size), caretItem.size),
         onDismissRequest = actions.closeUsages,
-        properties = popupProperties(screen, focusable = false),
+        focusable = false,
       ) {
         UsagesPopupView(current, actions.chooseUsage)
       }

@@ -25,13 +25,10 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
-import intellijandroid.client.ui.component.LocalScreenBounds
+import intellijandroid.client.ui.component.AppPopup
 import intellijandroid.client.ui.component.Menu
 import intellijandroid.client.ui.component.keep
-import intellijandroid.client.ui.component.limitOf
-import intellijandroid.client.ui.component.popupProperties
 import kotlin.math.roundToInt
 
 /** One line of a context menu: plain data, so items can also come from the backend later. */
@@ -91,8 +88,7 @@ fun ContextMenuArea(
       .pointerInput(Unit) {
         fun show(position: Offset, byTouch: Boolean) {
           onOpen(position)
-          val window = coordinates?.localToWindow(position) ?: position
-          open = OpenMenu(window, byTouch)
+          open = OpenMenu(position, byTouch)
         }
         awaitEachGesture {
           // The Initial pass sees the press before [content] does, so a menu gesture can be kept
@@ -135,18 +131,14 @@ fun ContextMenuArea(
       val phone =
         with(density) { minOf(windowSize.width, windowSize.height).toDp() } < PHONE_SMALLEST_SIDE
       val centered = menu.byTouch || phone
-      val screen = LocalScreenBounds.current
-      Popup(
-        popupPositionProvider = MenuPosition(menu.anchor, centered, screen),
-        onDismissRequest = { open = null },
-        properties = popupProperties(screen),
-      ) {
+      AppPopup(MenuPosition(menu.anchor, centered), onDismissRequest = { open = null }) {
         Menu(entries) { open = null }
       }
     }
   }
 }
 
+/** [anchor]: where the menu was asked for, in the menu area's own coordinates. */
 private data class OpenMenu(val anchor: Offset, val byTouch: Boolean)
 
 private val PHONE_SMALLEST_SIDE = 600.dp
@@ -166,14 +158,11 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.con
 }
 
 /**
- * At the pointer, moved to stay inside the screen (the window on Android); or in the middle of the
- * window.
+ * At the pointer, moved to stay inside the window (the screen on the desktop, where each popup is
+ * its own window); or in the middle of the window.
  */
-private class MenuPosition(
-  private val anchor: Offset,
-  private val centered: Boolean,
-  private val screen: () -> IntRect?,
-) : PopupPositionProvider {
+private class MenuPosition(private val anchor: Offset, private val centered: Boolean) :
+  PopupPositionProvider {
   override fun calculatePosition(
     anchorBounds: IntRect,
     windowSize: IntSize,
@@ -185,13 +174,12 @@ private class MenuPosition(
         (windowSize.width - popupContentSize.width) / 2,
         (windowSize.height - popupContentSize.height) / 2,
       )
-    val limit = limitOf(screen, windowSize)
-    var x = anchor.x.roundToInt()
-    var y = anchor.y.roundToInt()
+    var x = anchorBounds.left + anchor.x.roundToInt()
+    var y = anchorBounds.top + anchor.y.roundToInt()
     // Like a desktop menu: open to the left or upwards when there is no room right or below.
-    if (x + popupContentSize.width > limit.right) x -= popupContentSize.width
-    if (y + popupContentSize.height > limit.bottom) y -= popupContentSize.height
-    return limit.keep(x, y, popupContentSize)
+    if (x + popupContentSize.width > windowSize.width) x -= popupContentSize.width
+    if (y + popupContentSize.height > windowSize.height) y -= popupContentSize.height
+    return windowSize.keep(x, y, popupContentSize)
   }
 }
 

@@ -845,25 +845,42 @@ Only a mouse or trackpad shows a pointer; touch is unchanged.
 ## 24. Popups past the window's edge (2026-11-20)
 
 IntelliJ's popups are their own windows (`JBPopup` on a heavyweight window), so a menu or the usages popup
-opened near the window's bottom goes past it, kept inside the screen. Compose draws popups inside the window by
-default. The desktop app now does what IntelliJ does:
+opened near the window's edge goes past it and stays inside the screen. The desktop app does the same.
 
-| Piece | Value |
-|---|---|
-| Each popup and dialog in its own window | `System.setProperty("compose.layers.type", "WINDOW")` first thing in desktop `main` (Compose's `ComposeFeatureFlags.layerType`) |
-| The limit a popup is kept in | the screen's usable area (no menu bar, no Dock) in the window's px: `LocalScreenBounds`, e.g. window at (200, 100) points on a 1512 × 982 point screen at 2x, 33 point menu bar → `IntRect(-400, -134, 2624, 1764)` |
-| Compose's own clamp to the window | off (`clippingEnabled = false`) when the screen is known (`popupProperties`) |
-| Editor popups (completion, usages) and the search history list | under their line; above it when the screen has no room below (`PopupPlacement`) |
-| Context menu, tool window dropdowns, breadcrumb lists | as before, but kept inside the screen, not the window |
+**First try, replaced the same day (5d3b06e):** Compose's `compose.layers.type=WINDOW` gives each popup its own
+window, but in Compose 1.12.2 that window is only drawn where it overlaps the main window, because the layer's
+drawing area is the main window's size (`WindowComposeSceneLayer`: `sceneBoundsInPx = windowContainer.sizeInPx`).
+The user saw a menu whose part above the window was black, and in a small window the menu was cut and misplaced.
 
-Android and the tests have no screen bounds, so their popups stay inside the window as before.
+**Now:** every app popup goes through `AppPopup` and `LocalPopupHost` (`ui/component/PopupPlacement.kt`).
 
-Limits (Compose 1.12.2):
-- A popup is still measured against the window's size (`containerSize`), so a list taller than the window scrolls.
-- A popup composed in a window's very first frame gets a 1 × 1 window, because the main window has no size
-  yet. `PopupWindowTest` opens its popup after the window shows for this reason.
+| Host | Where | What it does |
+|---|---|---|
+| `WindowLayerPopupHost` (default) | Android, tests | Compose's `Popup`, inside the window, as before |
+| `WindowPopupHost` | desktop (`desktop/WindowPopupHost.kt`) | an undecorated, transparent `ComposeDialog` owned by the main window, type `POPUP` |
 
-Checked: `PopupWindowTest` opens a 400 × 300 window and a 200 dp popup under its bottom edge. The popup's window
-ends past the main window's bottom; with Compose's clamp (`PopupProperties()`), it is pushed back to y 200–400.
-Not covered yet: Search Everywhere and the Processes popup (both inside the window by design), Lux dialogs' combo
-lists, and backend popups (New ▾).
+The desktop host:
+- Measures the content against the screen's usable area (no menu bar, no Dock), not the window.
+- Runs the popup's `PopupPositionProvider` with that area as `windowSize` and the anchor moved into it. So the
+  providers' "keep inside the window" keeps the popup on screen, with no change to them. Example, 2x screen of
+  1512 × 982 points with a 33 point menu bar, window content at (200, 100): a menu asked for at (40, 600) in the
+  window gets anchor `(400 + 80, 134 + 1200)` px and `windowSize` `3024 × 1898` px.
+- Closes the popup when its window loses the focus (a click on the main window or another app) and on Escape.
+- Leaves a non-focusable popup (completion, usages) unfocused, so typing stays in the editor.
+
+Using it: Context menu, tool window dropdowns, breadcrumb lists, the search history list, completion and
+usages. Completion, usages and the history list go above their line when there is no room below
+(`PopupPlacement`). The context menu's anchor is now relative to the menu area, not the window.
+
+Not using it (inside the window, as before): Search Everywhere and the Processes popup (placed against the
+window by design), Lux dialogs' combo lists, backend popups (New ▾), the connect screen's menu.
+
+Checked: `PopupWindowTest` opens real windows and reads the screen with `Robot`:
+
+| Case | Popup window | Centre pixel |
+|---|---|---|
+| 200 dp popup above a 400 × 300 window at y 400 | y 190–390, all above the window | red, as drawn |
+| 200 dp popup under a 160 × 120 window | 200 points tall, not cut to the window | red, as drawn |
+
+A popup composed in a window's very first frame isn't tested; the test opens its popup after the window shows,
+as menus open.

@@ -6,7 +6,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
@@ -25,14 +24,15 @@ import intellijandroid.client.desktop.DesktopOpenSshFiles
 import intellijandroid.client.desktop.DesktopResources
 import intellijandroid.client.desktop.FileSecretStore
 import intellijandroid.client.desktop.Snapshots
+import intellijandroid.client.desktop.WindowPopupHost
 import intellijandroid.client.desktop.rememberMacTitleBar
 import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.LocalTitleBarArea
+import intellijandroid.client.ui.component.LocalPopupHost
 import intellijandroid.client.ui.component.LocalResizePointers
-import intellijandroid.client.ui.component.LocalScreenBounds
 import intellijandroid.client.ui.component.ResizePointers
 import intellijandroid.client.ui.lux.PngDecoder
 import intellijandroid.client.ui.lux.pngDecoder
@@ -42,7 +42,6 @@ import intellijandroid.client.ui.theme.LocalClientFonts
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
-import kotlin.math.roundToInt
 import kotlin.system.exitProcess
 import org.jetbrains.skia.Image
 
@@ -53,9 +52,6 @@ import org.jetbrains.skia.Image
  * extra does. History is kept in `~/.ideate/`.
  */
 fun main(arguments: Array<String>) {
-  // Each popup and dialog in its own window, so menus can go past the window's edge as IntelliJ's
-  // do (Compose's ComposeFeatureFlags.layerType; read when the first window opens).
-  System.setProperty("compose.layers.type", "WINDOW")
   if (arguments.size > 2) {
     System.err.println(
       "Usage: [join link, e.g. tcp://127.0.0.1:5990#jt=…&fp=…] [file path on the backend to open]",
@@ -173,9 +169,10 @@ private fun IdeateWindow(
     // On macOS the app draws in the title bar's place, as in IntelliJ: the main toolbar in the
     // editor window, an empty strip in the connections window.
     val titleBar = rememberMacTitleBar(window, windowState.placement == WindowPlacement.Fullscreen)
-    val screen = remember(window) { { screenInWindow(window) } }
+    // Menus and popups in their own windows, so they can go past this window's edge.
+    val popups = remember(window) { WindowPopupHost(window) }
     CompositionLocalProvider(
-      LocalScreenBounds provides screen,
+      LocalPopupHost provides popups,
       LocalClientFonts provides fonts,
       LocalIcons provides icons,
       LocalTitleBarArea provides titleBar,
@@ -190,27 +187,6 @@ private fun IdeateWindow(
       content = content,
     )
   }
-}
-
-/**
- * The usable part of the window's screen (without the menu bar and the Dock) in the window's
- * content px, e.g. a window at (200, 100) points on a 1512 × 982 point screen at 2x with a 33 point
- * menu bar: `IntRect(-400, -134, 2624, 1764)`. Null while the window isn't on screen.
- */
-internal fun screenInWindow(window: javax.swing.JFrame): IntRect? {
-  if (!window.isShowing) return null
-  val configuration = window.graphicsConfiguration
-  val screen = configuration.bounds
-  val insets = java.awt.Toolkit.getDefaultToolkit().getScreenInsets(configuration)
-  val origin = window.contentPane.locationOnScreen
-  val scale = configuration.defaultTransform.scaleX
-  fun px(points: Int) = (points * scale).roundToInt()
-  return IntRect(
-    px(screen.x + insets.left - origin.x),
-    px(screen.y + insets.top - origin.y),
-    px(screen.x + screen.width - insets.right - origin.x),
-    px(screen.y + screen.height - insets.bottom - origin.y),
-  )
 }
 
 /** One stored string in a file under `~/.ideate`. */
