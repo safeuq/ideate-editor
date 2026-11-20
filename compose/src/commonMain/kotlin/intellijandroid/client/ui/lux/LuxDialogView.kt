@@ -189,6 +189,12 @@ internal fun LuxSurface(
   softKeyboard: Boolean,
   /** A pane, not a window: finger drags scroll, and it doesn't take the focus when it appears. */
   pane: Boolean = false,
+  /**
+   * Called when the surface starts over on an empty bitmap of a new size. The backend then repaints
+   * only what moved, so a pane asks it for a whole frame here, as JetBrains Client's
+   * `LuxFrontendPanelAdapter.forceHostToRepaint` does.
+   */
+  onNewBitmap: (() -> Unit)? = null,
 ) {
   val images = session.luxImages ?: return
   val density = LocalDensity.current
@@ -202,6 +208,7 @@ internal fun LuxSurface(
     )
   val bitmap = remember(dialog.id, pixelSize) { ImageBitmap(pixelSize.width, pixelSize.height) }
   var painted by remember { mutableIntStateOf(0) }
+  LaunchedEffect(bitmap) { onNewBitmap?.invoke() }
   LaunchedEffect(dialog.version, bitmap) {
     val canvas = GraphicsCanvas(bitmap)
     while (true) {
@@ -657,6 +664,14 @@ fun LuxPaneView(panel: LuxDialog, session: ClientSession, modifier: Modifier) {
         }
     },
   ) {
-    LuxSurface(panel, session, 1f, session::projectPanelEvent, softKeyboard = true, pane = true)
+    LuxSurface(
+      panel,
+      session,
+      1f,
+      session::projectPanelEvent,
+      softKeyboard = true,
+      pane = true,
+      onNewBitmap = session::repaintProjectPanel,
+    )
   }
 }

@@ -588,6 +588,9 @@ class ClientSession(
     projectViews.resizePanel(x, y, width, height)
   }
 
+  /** The pane's panel lost what it had painted (a new size): the backend paints it all again. */
+  fun repaintProjectPanel() = onRd { projectViews.repaintPanel() }
+
   fun projectPanelEvent(event: com.jetbrains.rd.ide.model.LxEvent) = onRd {
     projectViews.panelEvent(event)
   }

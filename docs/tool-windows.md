@@ -167,10 +167,17 @@ Checked on the Mac test backend (port 5994, no project) with the desktop client,
   which `ProjectViews.resizePanel` sets) plus the point, kept inside the window. Popups without it (New ▸
   File's name popup: active window, TOP) stay at the top.
 
+- Parts of the panel not drawn after a reconnect (fixed 2026-11-20). When the pane's size changes,
+  `LuxSurface` starts over on a new, empty bitmap (`remember(dialog.id, pixelSize)`), but the backend then
+  sends only the parts that changed, so the buttons and the search field stayed blank while the recent
+  projects (repainted for other reasons) showed. Now the pane asks for a whole frame
+  (`LxPanel.requestRepaint`) as soon as the new bitmap exists, as JetBrains Client's `forceHostToRepaint`
+  does. Asking earlier, on every `size` change, painted into the old bitmap and left the panel fully
+  blank. Checked on the Mac: two reconnects to a running backend, whole panel drawn both times.
+
 Still open:
-- Parts of the panel (the buttons, the search field) are sometimes not drawn: seen after a dialog closed
-  (2026-11-19) and after a client reconnected to a running backend (2026-11-20, 07:00); the recent projects
-  were drawn both times.
+- The panel not drawn after a dialog closed (seen once, 2026-11-19) has not been seen again; not retested
+  with the fix above.
 - The editor area's buttons when nothing is open (New Markdown File, Open File, Open Terminal): JetBrains
   Client draws them (`WelcomeScreenEmptyStateProvider`) and calls `WelcomeScreenFeatureApi.onClick` over
   Fleet RPC; IDEate shows its own hint instead.

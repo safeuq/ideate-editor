@@ -59,6 +59,7 @@ internal class ProjectViewPanes(
   private val publish: (ProjectViews) -> Unit,
 ) {
   private var luxPanel: LxPanel? = null
+  private var panelLifetime: Lifetime? = null
   private var model: ProjectViewModel? = null
   private val panes = mutableListOf<RdProjectViewPaneBase>()
   /** The scope picked in the Scopes pane; the backend doesn't say which one it shows. */
@@ -195,7 +196,11 @@ internal class ProjectViewPanes(
     // The panel may have been painted for an earlier connection (the backend keeps it), and then
     // nothing new arrives: ask for a frame, as LuxFrontendPanelAdapter.forceHostToRepaint does.
     panel.requestRepaint.start(panelLifetime, Unit)
-    panelLifetime.onTermination { luxPanel = null }
+    this.panelLifetime = panelLifetime
+    panelLifetime.onTermination {
+      luxPanel = null
+      this.panelLifetime = null
+    }
     views = views.copy(panel = surface)
     publish(views)
   }
@@ -211,6 +216,13 @@ internal class ProjectViewPanes(
     surface.y = y
     panel.position.set(LxPoint(x.toDouble(), y.toDouble()))
     if (panel.layoutSource == LuxLayoutSource.Frontend) panel.size.set(LxSize(width, height))
+  }
+
+  /** Asks the backend to paint the pane's panel again, whole. */
+  fun repaintPanel() {
+    val panel = luxPanel ?: return
+    val lifetime = panelLifetime ?: return
+    panel.requestRepaint.start(lifetime, Unit)
   }
 
   /** A tap, a scroll or a key for the pane's panel. */
