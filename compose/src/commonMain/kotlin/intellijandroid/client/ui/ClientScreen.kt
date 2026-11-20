@@ -824,6 +824,9 @@ private fun EditorIsland(
   Column(modifier.island(LocalIslandRadius.current)) {
     val selected = state.editors.firstOrNull { it.path == state.selectedEditor }
     EditorTabs(state, session, tabRow)
+    // JBEditorTabsBorder in the new UI: a line under the tab row in
+    // EditorTabs.underTabsBorderColor.
+    EditorLine(IslandsDark.underTabsBorder)
     val scheme = state.scheme
     if (selected != null && scheme != null) {
       val actions =

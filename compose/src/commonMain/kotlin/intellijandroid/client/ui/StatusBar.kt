@@ -1,5 +1,6 @@
 package intellijandroid.client.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -142,13 +144,25 @@ fun StatusBar(
 fun EditorBreadcrumbs(state: SessionState, session: ClientSession, borderColor: Color) {
   if (state.breadcrumbs.isEmpty()) return
   Column(Modifier.fillMaxWidth()) {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(borderColor))
+    EditorLine(borderColor)
     Box(
       Modifier.fillMaxWidth().height(Look.height).padding(horizontal = Look.footerInset),
       contentAlignment = Alignment.CenterStart,
     ) {
       Breadcrumbs(state, session, Modifier)
     }
+  }
+}
+
+/**
+ * A 1 dp line across the editor island, drawn as the gutter's line is (EditorView): a 1 dp stroke
+ * centred half a dp in, so both look the same at any density.
+ */
+@Composable
+internal fun EditorLine(color: Color) {
+  Canvas(Modifier.fillMaxWidth().height(1.dp)) {
+    val y = 0.5.dp.toPx()
+    drawLine(color, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
   }
 }
 

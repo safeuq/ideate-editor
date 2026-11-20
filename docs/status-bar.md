@@ -111,7 +111,11 @@ A phone held upright (decided 2026-11-20) gets one row that scrolls sideways: th
 count (no text), Position, then the other widgets. The breadcrumbs are the editor island's footer there
 (user request, 2026-11-20): the same crumbs in a 28 dp row under the editor, 4 in from its edge, their end in
 view, with a 1 dp line above them as IntelliJ's new UI draws over bottom breadcrumbs (`BreadcrumbsXmlWrapper`:
-`insetsTop(1)` in the scheme's `BREADCRUMBS_BORDER_COLOR`, which falls back to `INDENT_GUIDE`); `EditorBreadcrumbs`. IntelliJ can place its editor breadcrumbs below the editor too (Settings › Editor ›
+`insetsTop(1)` in the scheme's `BREADCRUMBS_BORDER_COLOR`, which falls back to `INDENT_GUIDE`); `EditorBreadcrumbs`.
+The line is drawn as the gutter's line is (`EditorLine`: a 1 dp stroke centred half a dp in), so on the S24+
+(2.625) both are two full pixels and a part one; a 1 dp box was three full pixels (user report, 2026-11-20).
+The editor island has the same line under its tab row on every screen (`JBEditorTabsBorder`, new UI:
+`EditorTabs.underTabsBorderColor` = `editor-border` = `#26282C` in Islands Dark), faint against the editor. IntelliJ can place its editor breadcrumbs below the editor too (Settings › Editor ›
 General › Breadcrumbs › Bottom), but those are another component (`BreadcrumbsPanel`): only the code
 structure, in the editor's colours. IDEate keeps the status bar's crumbs, the path down to the member. It
 shows a notice or failure as info text, not the last log line, which the desktop keeps as a debugging aid.

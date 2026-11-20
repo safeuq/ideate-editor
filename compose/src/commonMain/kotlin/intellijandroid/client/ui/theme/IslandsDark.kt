@@ -75,6 +75,9 @@ object IslandsDark {
   val controlBrandBackground = Color(0xFF3871E1)
   val focusBorder = Color(0xFF3871E1) // Component.focusColor = control-brand-border = blue-80
 
+  // EditorTabs.underTabsBorderColor = editor-border = layer-0-border = gray-30
+  val underTabsBorder = Color(0xFF26282C)
+
   // Popup.background, PopupMenu.background = popup-bg = gray-30
   val popupBackground = Color(0xFF26282C)
   // Popup.borderColor, Separator.separatorColor = popup-border = gray-40
