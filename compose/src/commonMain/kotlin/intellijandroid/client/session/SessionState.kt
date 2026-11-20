@@ -207,6 +207,16 @@ data class SessionState(
   val projectViews: ProjectViews = ProjectViews(),
   /** What the backend's tool windows on screen show, by id, e.g. `Gradle`. */
   val backendViews: Map<String, BackendToolWindowView> = emptyMap(),
+  /**
+   * The backend's status bar widgets in IntelliJ's order, the visible ones (docs/status-bar.md).
+   */
+  val statusWidgets: List<StatusWidget> = emptyList(),
+  /** The status bar's breadcrumbs to the caret, e.g. `smoke › src › demo › Main › main`. */
+  val breadcrumbs: List<Crumb> = emptyList(),
+  /** A breadcrumb's open list: the crumb and its children; null when none is open. */
+  val crumbMenu: CrumbMenu? = null,
+  /** The backend's running tasks, newest last. */
+  val tasks: List<BackgroundTask> = emptyList(),
 )
 
 /** Context menu number [serial]; [entries] null until the backend has answered ("Loading…"). */
@@ -271,3 +281,9 @@ data class LookupItem(
 )
 
 data class ClipboardText(val text: String, val serial: Int)
+
+/**
+ * The list a breadcrumb opens, under crumb [anchorNodeId]: [items] are the children of the crumb or
+ * of the folder chosen in it last, e.g. the files of `src`.
+ */
+data class CrumbMenu(val anchorNodeId: Long, val items: List<Crumb>)

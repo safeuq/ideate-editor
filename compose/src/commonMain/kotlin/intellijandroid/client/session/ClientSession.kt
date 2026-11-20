@@ -9,6 +9,7 @@ import com.jetbrains.codeWithMe.model.RdProjectViewNavigation
 import com.jetbrains.codeWithMe.model.SyntaxHighlighterModel
 import com.jetbrains.codeWithMe.model.VfsModel
 import com.jetbrains.codeWithMe.model.editorTabsModel
+import com.jetbrains.codeWithMe.model.navigationBarModel
 import com.jetbrains.codeWithMe.model.projectViewModel
 import com.jetbrains.codeWithMe.model.vfsModel
 import com.jetbrains.ide.model.highlighterRegistration.ColorsSchemeModel
@@ -76,6 +77,7 @@ import com.jetbrains.rd.ide.model.RdShowUsagesSession
 import com.jetbrains.rd.ide.model.RdSuccessResponse
 import com.jetbrains.rd.ide.model.RdUsageBase
 import com.jetbrains.rd.ide.model.RdUsageNavigationData
+import com.jetbrains.rd.ide.model.RectangleModel
 import com.jetbrains.rd.ide.model.RequestCompositeQuery
 import com.jetbrains.rd.ide.model.RequestResponseModel
 import com.jetbrains.rd.ide.model.RotatedIconModel
@@ -206,6 +208,19 @@ class ClientSession(
       },
       publish = { views -> mutableState.update { it.copy(backendViews = views) } },
     )
+  private val statusWidgets =
+    StatusBarWidgets({ icon -> iconPaths(icon).firstOrNull() }) { widgets ->
+      mutableState.update { it.copy(statusWidgets = widgets) }
+    }
+  private val breadcrumbs =
+    Breadcrumbs(
+      { icon -> iconPaths(icon).firstOrNull() },
+      publish = { crumbs -> mutableState.update { it.copy(breadcrumbs = crumbs) } },
+      log = ::log,
+    )
+  /** Asks for the breadcrumbs again this long after the caret stops moving. */
+  private var breadcrumbRefresh: java.util.concurrent.ScheduledFuture<*>? = null
+  private var backgroundTasks: BackgroundTasks? = null
   private val compositeIds = mutableMapOf<String, RdFileEditorCompositeId>()
   /** Editors the backend opened itself, by `RdFileIdNew.backendId`, until their path is known. */
   private val unnamedComposites = mutableMapOf<Int, RdFileEditorCompositeId>()
@@ -335,6 +350,44 @@ class ClientSession(
    * while they show.
    */
   fun setBackendToolWindowsShown(ids: Set<String>) = onRd { backendViews.setShown(ids) }
+
+  /**
+   * A tap on status bar widget [id], e.g. `Encoding`; [x], [y], [width], [height]: where it is in
+   * the window, in px, for the backend's popup.
+   */
+  fun clickStatusWidget(id: String, x: Int, y: Int, width: Int, height: Int) = onRd {
+    statusWidgets.click(id, RectangleModel(x, y, width, height))
+  }
+
+  /** A tap on a breadcrumb: its children in [SessionState.crumbMenu], as IntelliJ's list. */
+  fun openCrumb(nodeId: Long) = onRd {
+    breadcrumbs.children(nodeId) { items ->
+      mutableState.update { it.copy(crumbMenu = CrumbMenu(nodeId, items)) }
+    }
+  }
+
+  fun closeCrumbMenu() = mutableState.update { it.copy(crumbMenu = null) }
+
+  /**
+   * An item chosen in a breadcrumb's list: a file, class or member opens in the editor; a folder
+   * lists its own children in the same place, as IntelliJ's list goes one level down.
+   */
+  fun chooseCrumbItem(item: Crumb) = onRd {
+    val anchor = mutableState.value.crumbMenu?.anchorNodeId ?: item.nodeId
+    if (item.inFile) {
+      mutableState.update { it.copy(crumbMenu = null) }
+      breadcrumbs.navigate(item.nodeId)
+    } else
+      breadcrumbs.children(item.nodeId) { items ->
+        mutableState.update { it.copy(crumbMenu = CrumbMenu(anchor, items)) }
+      }
+  }
+
+  fun cancelTask(id: Long) = onRd { backgroundTasks?.cancel(id) }
+
+  fun pauseTask(id: Long) = onRd { backgroundTasks?.pause(id) }
+
+  fun resumeTask(id: Long) = onRd { backgroundTasks?.resume(id) }
 
   /** Expands or collapses a row of a backend tool window's tree, e.g. Gradle's. */
   fun backendToggle(windowId: String, nodeId: Int) = onRd { backendViews.toggle(windowId, nodeId) }
@@ -632,6 +685,27 @@ class ClientSession(
   /** A tap or click on a completion popup row. */
   fun chooseLookupItem(itemId: String) = onRd { completion?.choose(itemId) }
 
+  /**
+   * The breadcrumbs for the selected editor's caret, with the project and that editor's action
+   * context, as JetBrains Client builds it from the focused editor.
+   */
+  private fun refreshBreadcrumbs() {
+    val project = projectId ?: return
+    val editor = selectedEditSession()?.actionTimestamps()?.models.orEmpty()
+    breadcrumbs.refresh(ActionTimestampSetModel(listOf(ProjectTimestampModel(project)) + editor))
+  }
+
+  /** [refreshBreadcrumbs] once the caret has rested for [BREADCRUMB_DELAY_MS]. */
+  private fun refreshBreadcrumbsSoon() {
+    breadcrumbRefresh?.cancel(false)
+    breadcrumbRefresh =
+      markupTimer.schedule(
+        { onRd { refreshBreadcrumbs() } },
+        BREADCRUMB_DELAY_MS,
+        TimeUnit.MILLISECONDS,
+      )
+  }
+
   private fun selectedEditSession(): EditSession? {
     val path = mutableState.value.selectedEditor ?: return null
     return editSessions.entries.firstOrNull { pathOf(it.key) == path }?.value
@@ -821,6 +895,9 @@ class ClientSession(
         ::log,
       )
     fleet = rpc
+    backgroundTasks =
+      BackgroundTasks(rpc, { tasks -> mutableState.update { it.copy(tasks = tasks) } }, ::log)
+        .also { it.start() }
 
     vfs = protocol.vfsModel
     bindClipboard(protocol.clipboardModel)
@@ -943,6 +1020,8 @@ class ClientSession(
       projectViews.bind(solutionLifetime, newSolution.projectViewModel)
       toolWindows.bind(solutionLifetime, newSolution)
       backendViews.bind(solutionLifetime, newSolution)
+      statusWidgets.bind(solutionLifetime, newSolution)
+      breadcrumbs.bind(solutionLifetime, newSolution.navigationBarModel, ::refreshBreadcrumbs)
       bindStructure(solutionLifetime, newSolution)
       bindUsages(solutionLifetime, newSolution)
       newSolution.isLoaded.advise(solutionLifetime) { loaded ->
@@ -1310,6 +1389,7 @@ class ClientSession(
    */
   private fun showEditor(path: String) {
     mutableState.update { it.copy(selectedEditor = path) }
+    refreshBreadcrumbsSoon()
     val fileEditors = solution?.fileEditorsModel ?: return
     val compositeId = compositeIds[path] ?: return
     val editorId = EditorIdentity.textEditorId(compositeId)
@@ -1498,6 +1578,10 @@ class ClientSession(
 
   private fun publishDocument(documentId: RdDocumentId) {
     val session = editSessions[documentId]?.takeIf { it.isReady }
+    // The caret may have moved into another class or method.
+    if (session != null && pathOf(documentId) == mutableState.value.selectedEditor) {
+      refreshBreadcrumbsSoon()
+    }
     val text = session?.text ?: documentTexts[documentId] ?: return
     documentTexts[documentId] = text
     val scheme = mutableState.value.scheme
@@ -1651,6 +1735,8 @@ class ClientSession(
     const val MARKUP_DELAY_MS = 32L
     /** How long after an edit or caret move the open editors and carets are saved. */
     const val SAVE_DELAY_MS = 1_000L
+    /** Breadcrumbs follow the caret once it rests this long, so typing doesn't ask each key. */
+    const val BREADCRUMB_DELAY_MS = 300L
     /** How long after a toolbar action its toolbar is asked for again. */
     const val TOOLBAR_REFRESH_MILLIS = 500L
 

@@ -25,8 +25,7 @@ dependencies {
   // Pixel tests of the Lux painter need Skia, which only this module has.
   testImplementation(kotlin("test"))
   // DesktopDriverTest: Compose's in-process UI test layer drives the real screens.
-  @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
-  testImplementation(compose.uiTest)
+  @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class) testImplementation(compose.uiTest)
 }
 
 tasks.test {

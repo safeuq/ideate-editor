@@ -72,7 +72,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -86,7 +85,6 @@ import intellijandroid.client.ui.lux.LuxPaneView
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.label
-import intellijandroid.client.ui.theme.medium
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -517,17 +515,19 @@ fun ClientScreen(
             }
           }
       }
-      val status = notice ?: state.failure ?: state.log.lastOrNull().orEmpty()
-      BasicText(
-        status,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        style =
-          fonts.medium(
-            if (notice == null && state.failure != null) IslandsDark.textError
-            else IslandsDark.textSecondary,
-          ),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 3.dp),
+      // IntelliJ's status bar: breadcrumbs, the info text or the newest task, the backend's
+      // widgets.
+      StatusBar(
+        state,
+        session,
+        // The last log line is a desktop debugging aid; a phone shows only notices and failures,
+        // so Position stays in view.
+        info =
+          notice
+            ?: state.failure
+            ?: if (layout == ScreenLayout.PORTRAIT) "" else state.log.lastOrNull().orEmpty(),
+        infoIsError = notice == null && state.failure != null,
+        narrow = layout == ScreenLayout.PORTRAIT,
       )
     }
     // Over everything: the backend's BeControl popups (New ▸ File's name).

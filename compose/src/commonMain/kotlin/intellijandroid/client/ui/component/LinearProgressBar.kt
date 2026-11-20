@@ -55,7 +55,29 @@ fun IndeterminateHorizontalProgressBar(modifier: Modifier = Modifier) {
   }
 }
 
+/**
+ * IntelliJ's determinate `JProgressBar` (`DarculaProgressBarUI.paintDeterminate`): the 4 dp rounded
+ * track in `ProgressBar.trackColor`, and [fraction] of it (0 to 1) from the left in
+ * `ProgressBar.progressColor`. E.g. a background task at 0.4 fills two fifths.
+ */
+@Composable
+fun DeterminateHorizontalProgressBar(fraction: Float, modifier: Modifier = Modifier) {
+  Canvas(modifier.height(ProgressBarLook.height)) {
+    val radius = CornerRadius(size.height / 2)
+    drawRoundRect(ProgressBarLook.track, cornerRadius = radius)
+    val filled = size.width * fraction.coerceIn(0f, 1f)
+    if (filled > 0f)
+      drawRoundRect(
+        ProgressBarLook.progress,
+        size = androidx.compose.ui.geometry.Size(filled, size.height),
+        cornerRadius = radius,
+      )
+  }
+}
+
 private object ProgressBarLook {
+  val track = Color(0xFF40434A) // ProgressBar.trackColor = control-bg-small = gray-50
+  val progress = Color(0xFF3871E1) // ProgressBar.progressColor = control-brand-bg = blue-80
   val height = 4.dp // DarculaProgressBarUI.DEFAULT_WIDTH
   // ProgressBar.indeterminateStartColor = blue-110 (Islands Dark)
   val indeterminateStart = Color(0xFF92B7FF)
