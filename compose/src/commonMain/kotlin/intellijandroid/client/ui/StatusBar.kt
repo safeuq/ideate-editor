@@ -34,9 +34,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -78,9 +80,8 @@ fun StatusBar(
 ) {
   var processesShown by remember { mutableStateOf(false) }
   val tasks = state.tasks
-  val shown = tasks.lastOrNull { it.inStatusBar }
-  val others = tasks.size - (if (shown != null) 1 else 0)
   if (tasks.isEmpty()) processesShown = false
+  val progress = inlineProgress(tasks, processesShown)
   val bar = Modifier.fillMaxWidth().height(Look.height).padding(horizontal = Look.barInset)
   // The Box makes the bar the Processes popup's anchor, so the popup sits just above it.
   Box(modifier.fillMaxWidth()) {
@@ -90,8 +91,13 @@ fun StatusBar(
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Breadcrumbs(state, session, Modifier.widthIn(max = Look.narrowCrumbsWidth))
-        if (shown != null)
-          Progress(shown, others, compact = true, session, onOpen = { processesShown = true })
+        if (progress != null)
+          InlineProgressPanel(
+            progress,
+            withText = false,
+            session,
+            onClick = { processesShown = !processesShown },
+          )
         else if (info.isNotEmpty())
           Info(info, infoIsError, Modifier.widthIn(max = Look.narrowInfoWidth))
         // Position first, as the one widget a phone needs most; the rest after it.
@@ -103,14 +109,14 @@ fun StatusBar(
         // The breadcrumbs take the free space; the task or the info text sits before the widgets,
         // at its own width (at most Look.infoMaxWidth), as InfoAndProgressPanel does.
         Box(Modifier.weight(1f)) { Breadcrumbs(state, session, Modifier) }
-        if (shown != null)
-          Progress(
-            shown,
-            others,
-            compact = false,
+        if (progress != null)
+          InlineProgressPanel(
+            progress,
+            withText = true,
             session,
-            onOpen = { processesShown = true },
-            modifier = Modifier.padding(horizontal = Look.gap),
+            onClick = { processesShown = !processesShown },
+            // InfoAndProgressPanelImpl's wrapper: JBUI.Borders.empty(0, 40, 0, 4).
+            modifier = Modifier.padding(start = 40.dp, end = 4.dp),
           )
         else if (info.isNotEmpty())
           Info(
@@ -193,43 +199,129 @@ private fun Info(text: String, isError: Boolean, modifier: Modifier) {
 }
 
 /**
- * The newest task in the status bar, as IntelliJ's compact `InlineProgressIndicator`: its title, a
- * 104 dp bar, its small × or pause button, and "+N" for the other tasks. A tap opens the Processes
- * popup. [compact] (a phone held upright) leaves the title out.
+ * What IntelliJ's `InlineProgressPanel` shows, in the counter mode IntelliJ uses by default
+ * (registry `progresses.show.counter.icon.instead.of.show.link` = true).
  */
+internal data class InlineProgress(
+  /** `setInlineProgressByWeight`'s choice. */
+  val indicator: BackgroundTask,
+  /** False while the Processes popup is open, or when the task isn't for the status bar. */
+  val indicatorVisible: Boolean,
+  /** `CounterLabel.getNumberToShow`: sizes the counter even when it shows nothing. */
+  val counterNumber: Int,
+  /** `CounterLabel.refreshPanelText`: "+2" after the indicator, "3" without it, often "". */
+  val counterText: String,
+  /** `multiProcessLink` while the popup is open: "Hide processes (3)". */
+  val hideLink: String?,
+)
+
+/**
+ * IntelliJ's `InfoAndProgressPanel.setInlineProgressByWeight` and
+ * `InlineProgressPanel.updateState`: the tasks for the status bar first, in the order they started,
+ * then the first one not paused. Null without tasks. The backend doesn't send
+ * `statusBarIndicatorWeight`, so the start order decides.
+ */
+internal fun inlineProgress(tasks: List<BackgroundTask>, popupShown: Boolean): InlineProgress? {
+  if (tasks.isEmpty()) return null
+  val sorted = tasks.sortedBy { if (it.inStatusBar) 0 else 1 }
+  val indicator = sorted.firstOrNull { !it.paused } ?: sorted.first()
+  val visible = !popupShown && indicator.inStatusBar
+  val number = if (visible) tasks.size - 1 else tasks.size
+  val text =
+    when {
+      popupShown -> ""
+      number <= 0 -> ""
+      !visible && number == 1 -> ""
+      visible -> "+$number"
+      else -> "$number"
+    }
+  return InlineProgress(
+    indicator,
+    visible,
+    number,
+    text,
+    if (popupShown) "Hide processes (${tasks.size})" else null,
+  )
+}
+
+/**
+ * IntelliJ's `InlineProgressPanel`: the widget insets (`StatusBar.Widget.border()`, 8 at the sides
+ * in the new UI), then from the left the "Hide processes" link while the popup is open, the
+ * indicator, and the counter, which keeps its width with no text. That width and the insets are the
+ * room IntelliJ leaves after the bar's buttons. A tap opens or closes the Processes popup
+ * (`triggerPopupShowing`). [withText] false (a phone held upright) leaves the task's text out.
+ */
+// ponytail: no spinner (`AsyncProcessIcon`) for a task that isn't for the status bar, and no hover
+// fill; add them with IntelliJ's SpinningProgressIcon frames and WidgetEffectRenderer if missed.
 @Composable
-private fun Progress(
-  task: BackgroundTask,
-  others: Int,
-  compact: Boolean,
+private fun InlineProgressPanel(
+  progress: InlineProgress,
+  withText: Boolean,
   session: ClientSession,
-  onOpen: () -> Unit,
+  onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val fonts = LocalClientFonts.current
   Row(
-    modifier.clickable(onClick = onOpen).semantics { contentDescription = "Show all processes" },
+    modifier
+      .clickable(onClick = onClick)
+      .semantics { contentDescription = "Show all processes" }
+      .padding(horizontal = Look.widgetInset),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    if (!compact) {
-      BasicText(
-        task.title,
-        Modifier.widthIn(max = Look.titleMaxWidth),
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        style = fonts.label(Look.text),
-      )
-      Spacer(Modifier.width(Look.gap))
-    }
-    Bar(task, Modifier.width(Look.compactBarWidth))
-    TaskButton(task, small = true, session)
-    if (others > 0)
-      BasicText(
-        "+$others",
-        Modifier.padding(start = 4.dp),
-        style = fonts.label(Look.text),
-      )
+    progress.hideLink?.let { BasicText(it, maxLines = 1, style = fonts.label(Look.text)) }
+    if (progress.indicatorVisible) ProgressIndicator(progress.indicator, withText, session)
+    Counter(progress.counterNumber, progress.counterText)
   }
+}
+
+/**
+ * IntelliJ's compact `ProgressComponent` (`InfoAndProgressPanel.MyProgressComponent`): a
+ * `BorderLayout(2, 0)` with the text and the bar in the centre and the buttons east. The text is
+ * the task's text, or its title without one; the bar is 104 wide in a wrapper with 8 before and 4
+ * after.
+ */
+@Composable
+private fun ProgressIndicator(task: BackgroundTask, withText: Boolean, session: ClientSession) {
+  if (withText)
+    BasicText(
+      task.text?.takeIf { it.isNotEmpty() } ?: task.title,
+      Modifier.widthIn(max = Look.titleMaxWidth),
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+      style = LocalClientFonts.current.label(Look.text),
+    )
+  Box(Modifier.padding(start = 8.dp, end = 4.dp)) {
+    Bar(task, Modifier.width(Look.compactBarWidth))
+  }
+  Spacer(Modifier.width(2.dp))
+  TaskButtons(task, session)
+}
+
+/**
+ * IntelliJ's `CounterLabel`: its text 4 after the indicator (`emptyLeft(4)`), as wide as the widest
+ * of "+0" to "+9" (or "+10" to "+99", …, for as many digits as [number] has), so the indicator
+ * doesn't move as the count changes and keeps that room when there is no count.
+ */
+@Composable
+private fun Counter(number: Int, text: String) {
+  val style = LocalClientFonts.current.label(Look.text)
+  val measurer = rememberTextMeasurer()
+  val density = LocalDensity.current
+  val digits = number.toString().length
+  val width =
+    remember(style, digits, text) {
+      val range =
+        when (digits) {
+          1 -> 0..9
+          2 -> 10..99
+          3 -> 100..999
+          else -> null
+        }
+      val widest = range?.maxOf { measurer.measure("+$it", style).size.width }
+      with(density) { (widest ?: measurer.measure(text, style).size.width).toDp() }
+    }
+  BasicText(text, Modifier.padding(start = 4.dp).width(width), maxLines = 1, style = style)
 }
 
 @Composable
@@ -241,33 +333,31 @@ private fun Bar(task: BackgroundTask, modifier: Modifier) {
 }
 
 /**
- * A task's button, as IntelliJ's: pause or resume when it can pause (`process/progressPause`,
- * `progressResume`), else the round × when it can be cancelled (`process/stop`); the small icons in
- * the status bar. Brighter under the pointer.
+ * A task's buttons, as `MyProgressComponent.createEastButtons`: pause or resume when it can pause,
+ * then × when it can be cancelled, each with 2 after (`createButtonPanel`). The new UI's icons
+ * (PlatformIconMappings.json: `process/progressPauseSmall` → `expui/progress/pause`, …), brighter
+ * under the pointer.
  */
 @Composable
-private fun TaskButton(task: BackgroundTask, small: Boolean, session: ClientSession) {
-  val suffix = if (small) "Small" else ""
-  val (base, description, action) =
-    when {
-      task.suspendable && task.paused ->
-        Triple("process/progressResume$suffix", "Resume", { session.resumeTask(task.id) })
-      task.suspendable ->
-        Triple("process/progressPause$suffix", "Pause", { session.pauseTask(task.id) })
-      task.cancellable -> Triple("process/stop$suffix", "Cancel", { session.cancelTask(task.id) })
-      else -> return
-    }
+private fun TaskButtons(task: BackgroundTask, session: ClientSession) {
+  if (task.suspendable)
+    if (task.paused) TaskButton("expui/progress/resume", "Resume") { session.resumeTask(task.id) }
+    else TaskButton("expui/progress/pause", "Pause") { session.pauseTask(task.id) }
+  if (task.cancellable) TaskButton("expui/progress/stop", "Cancel") { session.cancelTask(task.id) }
+}
+
+@Composable
+private fun TaskButton(icon: String, description: String, action: () -> Unit) {
   val interaction = remember { MutableInteractionSource() }
   val hovered by interaction.collectIsHoveredAsState()
-  val hoverSuffix = if (base.startsWith("process/stop")) "Hovered" else "Hover"
   Box(
-    Modifier.padding(start = 4.dp)
+    Modifier.padding(end = 2.dp)
       .hoverable(interaction)
       .clickable(interaction, indication = null, onClick = action)
       .semantics { contentDescription = description },
     contentAlignment = Alignment.Center,
   ) {
-    Icon(if (hovered) "$base$hoverSuffix.svg" else "$base.svg", null)
+    Icon(if (hovered) "${icon}Hovered.svg" else "$icon.svg", null)
   }
 }
 
@@ -360,7 +450,7 @@ private fun ProcessesPopup(
             Row(verticalAlignment = Alignment.CenterVertically) {
               Bar(task, Modifier.weight(1f))
               Spacer(Modifier.width(8.dp))
-              TaskButton(task, small = false, session)
+              TaskButtons(task, session)
             }
             val lines = listOfNotNull(task.text?.takeIf { it != task.title }, task.details)
             if (lines.isNotEmpty())
@@ -406,8 +496,10 @@ private object Look {
   val height = 28.dp
   /** `IdeStatusBarImpl`: `JBUI.Borders.empty(0, 10)` in the new UI. */
   val barInset = 10.dp
-  /** `InfoAndProgressPanel`'s gap between the title, the bar and the buttons. */
+  /** The info text's gap to its neighbours (`InlineProgressPanel`'s gap). */
   val gap = 10.dp
+  /** `StatusBar.Widget.widgetInsets` at the sides in the new UI. */
+  val widgetInset = 8.dp
   /** `InlineProgressIndicator`'s compact bar: 104 wide. */
   val compactBarWidth = 104.dp
   val titleMaxWidth = 320.dp

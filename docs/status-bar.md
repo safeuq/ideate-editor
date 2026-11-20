@@ -75,9 +75,27 @@ events; `cancelTask`, `pauseTask` and `resumeTask` take `taskId`. Recorded from 
 {"type":"…rpc.TaskInfoEvent.TaskRemoved","taskId":1}
 ```
 
-The bar shows the newest task with `visibleInStatusBar`, as `InlineProgressIndicator` (compact): title, a
-104 dp bar (indeterminate without a fraction), the small pause/resume (`process/progressPauseSmall`,
-`progressResumeSmall`) or × (`process/stopSmall`), and "+N" for the others. A tap opens the Processes popup
+The bar follows IntelliJ's `InfoAndProgressPanel` in its default counter mode (registry
+`progresses.show.counter.icon.instead.of.show.link` = true); `inlineProgress` in StatusBar.kt and
+`InlineProgressTest` (ideate-editor, 2026-11-20):
+
+- Which task (`setInlineProgressByWeight`): the tasks with `visibleInStatusBar` first, in the order they
+  started, then the first one not paused. The backend sends no `statusBarIndicatorWeight`, so the start
+  order decides. A chosen task without `visibleInStatusBar` isn't drawn; only the count shows.
+- The task (`ProgressComponent`, compact): its text, or its title when it has none; the 104 dp bar in a
+  wrapper with 8 before and 4 after; a 2 gap; then pause or resume, and × when it can be cancelled, each with
+  2 after. The icons are the new UI's (`PlatformIconMappings.json`: `process/progressPauseSmall` →
+  `expui/progress/pause.svg`, a thin ‖ in a faint circle; `process/stopSmall` → `expui/progress/stop.svg`).
+  The old `process/progressPauseSmall.svg` is two thick bars.
+- The counter (`CounterLabel`): "+2" after the task, "3" without it, nothing for a single task. It always
+  takes 4 plus the width of the widest "+0" to "+9", so the bar doesn't move as the count changes.
+- Around it: `InlineProgressPanel`'s widget insets, 8 at each side, and `InfoAndProgressPanelImpl`'s wrapper,
+  40 before and 4 after. With one task and no widgets, IntelliJ's bar therefore leaves the counter's empty
+  width plus 12 after the pause button.
+- While the Processes popup is open the task hides and "Hide processes (N)" shows in its place.
+- Not drawn: the spinner (`AsyncProcessIcon`) beside a count without a task, and the hover fill.
+
+A tap opens the Processes popup
 (`ProcessPopup`): 300 to 500 dp wide over the bar at the right, a row per task with title, full-width bar and
 button, and text and details below. A Gradle sync ("Importing 'gradle-smoke' Gradle Project") showed in both.
 
