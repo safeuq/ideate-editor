@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -179,6 +180,8 @@ fun EditorView(
    * "Loading…". Without it the editor shows its own list.
    */
   backendMenu: (() -> List<MenuEntry>?)? = null,
+  /** Told whether sticky lines show at the top, e.g. to drop a line drawn just above them. */
+  onStickyShown: (Boolean) -> Unit = {},
 ) {
   val fonts = LocalClientFonts.current
   val density = LocalDensity.current
@@ -930,7 +933,12 @@ fun EditorView(
           )
         }
       }
-    if (sticky.lines.isNotEmpty()) {
+    val stickyShown = sticky.lines.isNotEmpty()
+    DisposableEffect(stickyShown) {
+      onStickyShown(stickyShown)
+      onDispose { onStickyShown(false) }
+    }
+    if (stickyShown) {
       val stickyBackground = Color(scheme.color("STICKY_LINES_BACKGROUND") ?: scheme.background)
       // StickyLineColors: STICKY_LINES_BORDER_COLOR, else RIGHT_MARGIN_COLOR, else the background.
       val borderColor =
@@ -989,12 +997,8 @@ fun EditorView(
             }
           }
         }
-        Box(
-          Modifier.offset(y = sticky.height.toDp())
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(borderColor),
-        )
+        // StickyLineShadowBorder: LineBorder(1), one IntelliJ pixel as the gutter's line.
+        EditorBorder(borderColor, Modifier.offset(y = sticky.height.toDp()))
         Box(
           Modifier.offset(y = sticky.height.toDp() + 1.dp)
             .fillMaxWidth()

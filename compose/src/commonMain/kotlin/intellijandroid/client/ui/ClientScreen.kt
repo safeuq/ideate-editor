@@ -825,8 +825,10 @@ private fun EditorIsland(
     val selected = state.editors.firstOrNull { it.path == state.selectedEditor }
     EditorTabs(state, session, tabRow)
     // JBEditorTabsBorder in the new UI: a line under the tab row in
-    // EditorTabs.underTabsBorderColor.
-    EditorLine(IslandsDark.underTabsBorder)
+    // EditorTabs.underTabsBorderColor. Not while sticky lines show at the editor's top (user
+    // request): their panel starts right there.
+    var stickyShown by remember { mutableStateOf(false) }
+    if (!stickyShown) EditorBorder(IslandsDark.underTabsBorder)
     val scheme = state.scheme
     if (selected != null && scheme != null) {
       val actions =
@@ -860,6 +862,7 @@ private fun EditorIsland(
         state.usages?.takeIf { it.path == selected.path },
         editorScroll,
         backendMenu = { state.contextMenu?.entries },
+        onStickyShown = { stickyShown = it },
       )
       if (breadcrumbsFooter)
         EditorBreadcrumbs(

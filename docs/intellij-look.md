@@ -452,7 +452,7 @@ Checked 2026-11-17 on the desktop against a Mac backend (snapshots with `CLIENT_
 | Limit | `EditorSettingsExternalizable.STICKY_LINES_LIMIT` 5; the panel stays under half the editor minus two lines | the same |
 | A line | the editor's own painting of that line: gutter (line number, icons) and text with highlighting and indent guides | `EditorLine` for that line, without caret and selection |
 | Background | `STICKY_LINES_BACKGROUND`, else the editor background; hovered: `STICKY_LINES_HOVERED_COLOR`, else `CARET_ROW_COLOR` | background as IntelliJ; no hover color yet |
-| Border | 1 px under the panel in `STICKY_LINES_BORDER_COLOR`, else `RIGHT_MARGIN_COLOR`, else the background | the same |
+| Border | 1 px under the panel in `STICKY_LINES_BORDER_COLOR`, else `RIGHT_MARGIN_COLOR`, else the background (`StickyLineShadowBorder`: `LineBorder(null, 1)`, one IntelliJ pixel, as the gutter's line) | the same colour; drawn as the gutter's line is (`EditorBorder`, a 1 dp stroke). It was a 1 dp box, 3 solid pixels on the S24+ (2.625) against the gutter line's two and a part (user report, 2026-11-20). While the panel shows, the line under the tab row is left out (user request), as the panel starts right under it |
 | Shadow | under the border, `0.25 × line height` in a dark scheme (0.17 light), black alpha 32 (8 light) fading to transparent | the dark values |
 | Click | caret to the scope's start offset, `scrollToCaret(RELATIVE)` | caret there, then the line is scrolled to just under the pinned lines above it; the editor takes focus once the session has the new caret |
 

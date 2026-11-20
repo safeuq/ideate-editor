@@ -144,7 +144,7 @@ fun StatusBar(
 fun EditorBreadcrumbs(state: SessionState, session: ClientSession, borderColor: Color) {
   if (state.breadcrumbs.isEmpty()) return
   Column(Modifier.fillMaxWidth()) {
-    EditorLine(borderColor)
+    EditorBorder(borderColor)
     Box(
       Modifier.fillMaxWidth().height(Look.height).padding(horizontal = Look.footerInset),
       contentAlignment = Alignment.CenterStart,
@@ -159,8 +159,8 @@ fun EditorBreadcrumbs(state: SessionState, session: ClientSession, borderColor: 
  * centred half a dp in, so both look the same at any density.
  */
 @Composable
-internal fun EditorLine(color: Color) {
-  Canvas(Modifier.fillMaxWidth().height(1.dp)) {
+internal fun EditorBorder(color: Color, modifier: Modifier = Modifier) {
+  Canvas(modifier.fillMaxWidth().height(1.dp)) {
     val y = 0.5.dp.toPx()
     drawLine(color, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
   }
