@@ -242,6 +242,8 @@ fun EditorView(
     }
   // The symbol under the pointer while ⌘ (Ctrl) is held, drawn as IntelliJ's CTRL_CLICKABLE.
   var link by remember(file.path, file.text) { mutableStateOf<IntRange?>(null) }
+  // The mouse over the gutter: IntelliJ shows the arrow there and the I-beam over the text.
+  var overGutter by remember { mutableStateOf(false) }
   val linkStyle =
     remember(scheme) {
       scheme.style(listOf(listOf("CTRL_CLICKABLE"))).let {
@@ -805,7 +807,13 @@ fun EditorView(
             }
             event.type == KeyEventType.KeyDown && onKey(event)
           }
-          .pointerHoverIcon(if (link != null) PointerIcon.Hand else PointerIcon.Default)
+          .pointerHoverIcon(
+            when {
+              link != null -> PointerIcon.Hand
+              overGutter -> PointerIcon.Default
+              else -> PointerIcon.Text
+            },
+          )
           .pointerInput(file.path, metrics) {
             // ⌘ (Ctrl) held over a symbol: ask the backend for its range and underline it. Starts
             // on
@@ -815,6 +823,7 @@ fun EditorView(
               while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 val change = event.changes.first()
+                overGutter = change.position.x < metrics.gutterWidth
                 val modifiers = event.keyboardModifiers
                 val held = if (IS_MAC) modifiers.isMetaPressed else modifiers.isCtrlPressed
                 if (

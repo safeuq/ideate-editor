@@ -829,3 +829,15 @@ History: `SearchHistoryList`, per tab, newest first, at most 50, kept while the 
 popup closes (`SeFrontendService`). Before 2026-11-19 a long folder took the row and left the name no room (the name
 had the row's weight, the folder didn't, so the folder was measured first).
 
+
+## 23. Mouse pointer over the editor (2026-11-20)
+
+| Where | IntelliJ | IDEate |
+|---|---|---|
+| Text area | `TEXT_CURSOR`, the I-beam (`EditorImpl`, `getDefaultCursor`) | `PointerIcon.Text` |
+| Gutter (line numbers, icons) | `DEFAULT_CURSOR`, the arrow (`EditorGutterComponentImpl`) | `PointerIcon.Default` left of `gutterWidth` |
+| ⌘ (Ctrl) held over a symbol | `HAND_CURSOR` | `PointerIcon.Hand` |
+| Over the selection, no button down | the arrow, because the selection can be dragged | not done: IDEate has no drag and drop of the selection yet |
+| Over a folded placeholder | `HAND_CURSOR` | not done: IDEate doesn't fold |
+
+Only a mouse or trackpad shows a pointer; touch is unchanged.
