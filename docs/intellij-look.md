@@ -841,3 +841,29 @@ had the row's weight, the folder didn't, so the folder was measured first).
 | Over a folded placeholder | `HAND_CURSOR` | not done: IDEate doesn't fold |
 
 Only a mouse or trackpad shows a pointer; touch is unchanged.
+
+## 24. Popups past the window's edge (2026-11-20)
+
+IntelliJ's popups are their own windows (`JBPopup` on a heavyweight window), so a menu or the usages popup
+opened near the window's bottom goes past it, kept inside the screen. Compose draws popups inside the window by
+default. The desktop app now does what IntelliJ does:
+
+| Piece | Value |
+|---|---|
+| Each popup and dialog in its own window | `System.setProperty("compose.layers.type", "WINDOW")` first thing in desktop `main` (Compose's `ComposeFeatureFlags.layerType`) |
+| The limit a popup is kept in | the screen's usable area (no menu bar, no Dock) in the window's px: `LocalScreenBounds`, e.g. window at (200, 100) points on a 1512 × 982 point screen at 2x, 33 point menu bar → `IntRect(-400, -134, 2624, 1764)` |
+| Compose's own clamp to the window | off (`clippingEnabled = false`) when the screen is known (`popupProperties`) |
+| Editor popups (completion, usages) and the search history list | under their line; above it when the screen has no room below (`PopupPlacement`) |
+| Context menu, tool window dropdowns, breadcrumb lists | as before, but kept inside the screen, not the window |
+
+Android and the tests have no screen bounds, so their popups stay inside the window as before.
+
+Limits (Compose 1.12.2):
+- A popup is still measured against the window's size (`containerSize`), so a list taller than the window scrolls.
+- A popup composed in a window's very first frame gets a 1 × 1 window, because the main window has no size
+  yet. `PopupWindowTest` opens its popup after the window shows for this reason.
+
+Checked: `PopupWindowTest` opens a 400 × 300 window and a 200 dp popup under its bottom edge. The popup's window
+ends past the main window's bottom; with Compose's clamp (`PopupProperties()`), it is pushed back to y 200–400.
+Not covered yet: Search Everywhere and the Processes popup (both inside the window by design), Lux dialogs' combo
+lists, and backend popups (New ▾).

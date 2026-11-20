@@ -27,8 +27,11 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
-import androidx.compose.ui.window.PopupProperties
+import intellijandroid.client.ui.component.LocalScreenBounds
 import intellijandroid.client.ui.component.Menu
+import intellijandroid.client.ui.component.keep
+import intellijandroid.client.ui.component.limitOf
+import intellijandroid.client.ui.component.popupProperties
 import kotlin.math.roundToInt
 
 /** One line of a context menu: plain data, so items can also come from the backend later. */
@@ -132,10 +135,11 @@ fun ContextMenuArea(
       val phone =
         with(density) { minOf(windowSize.width, windowSize.height).toDp() } < PHONE_SMALLEST_SIDE
       val centered = menu.byTouch || phone
+      val screen = LocalScreenBounds.current
       Popup(
-        popupPositionProvider = MenuPosition(menu.anchor, centered),
+        popupPositionProvider = MenuPosition(menu.anchor, centered, screen),
         onDismissRequest = { open = null },
-        properties = PopupProperties(focusable = true),
+        properties = popupProperties(screen),
       ) {
         Menu(entries) { open = null }
       }
@@ -161,9 +165,15 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.con
   }
 }
 
-/** At the pointer, moved to stay inside the window; or in the middle of the window. */
-private class MenuPosition(private val anchor: Offset, private val centered: Boolean) :
-  PopupPositionProvider {
+/**
+ * At the pointer, moved to stay inside the screen (the window on Android); or in the middle of the
+ * window.
+ */
+private class MenuPosition(
+  private val anchor: Offset,
+  private val centered: Boolean,
+  private val screen: () -> IntRect?,
+) : PopupPositionProvider {
   override fun calculatePosition(
     anchorBounds: IntRect,
     windowSize: IntSize,
@@ -175,15 +185,13 @@ private class MenuPosition(private val anchor: Offset, private val centered: Boo
         (windowSize.width - popupContentSize.width) / 2,
         (windowSize.height - popupContentSize.height) / 2,
       )
+    val limit = limitOf(screen, windowSize)
     var x = anchor.x.roundToInt()
     var y = anchor.y.roundToInt()
     // Like a desktop menu: open to the left or upwards when there is no room right or below.
-    if (x + popupContentSize.width > windowSize.width) x -= popupContentSize.width
-    if (y + popupContentSize.height > windowSize.height) y -= popupContentSize.height
-    return IntOffset(
-      x.coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width)),
-      y.coerceIn(0, maxOf(0, windowSize.height - popupContentSize.height)),
-    )
+    if (x + popupContentSize.width > limit.right) x -= popupContentSize.width
+    if (y + popupContentSize.height > limit.bottom) y -= popupContentSize.height
+    return limit.keep(x, y, popupContentSize)
   }
 }
 

@@ -43,10 +43,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
-import androidx.compose.ui.window.PopupProperties
 import intellijandroid.client.session.BackendToolWindow
 import intellijandroid.client.ui.component.IconButton
+import intellijandroid.client.ui.component.LocalScreenBounds
 import intellijandroid.client.ui.component.Menu
+import intellijandroid.client.ui.component.keep
+import intellijandroid.client.ui.component.limitOf
+import intellijandroid.client.ui.component.popupProperties
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.label
@@ -370,28 +373,32 @@ private fun MoreButton(
  */
 @Composable
 internal fun DropDownMenu(entries: List<MenuEntry>, beside: Boolean, onDismiss: () -> Unit) {
+  val screen = LocalScreenBounds.current
   Popup(
-    popupPositionProvider = DropDownPosition(beside),
+    popupPositionProvider = DropDownPosition(beside, screen),
     onDismissRequest = onDismiss,
-    properties = PopupProperties(focusable = true),
+    properties = popupProperties(screen),
   ) {
     Menu({ entries }, close = onDismiss)
   }
 }
 
-private class DropDownPosition(private val beside: Boolean) : PopupPositionProvider {
+private class DropDownPosition(
+  private val beside: Boolean,
+  private val screen: () -> IntRect?,
+) : PopupPositionProvider {
   override fun calculatePosition(
     anchorBounds: IntRect,
     windowSize: IntSize,
     layoutDirection: LayoutDirection,
     popupContentSize: IntSize,
   ): IntOffset {
-    var x = if (beside) anchorBounds.right else anchorBounds.left
+    val limit = limitOf(screen, windowSize)
+    val x = if (beside) anchorBounds.right else anchorBounds.left
     var y = if (beside) anchorBounds.top else anchorBounds.bottom
-    if (y + popupContentSize.height > windowSize.height)
+    if (y + popupContentSize.height > limit.bottom)
       y = (if (beside) anchorBounds.bottom else anchorBounds.top) - popupContentSize.height
-    if (x + popupContentSize.width > windowSize.width) x = windowSize.width - popupContentSize.width
-    return IntOffset(x.coerceAtLeast(0), y.coerceAtLeast(0))
+    return limit.keep(x, y, popupContentSize)
   }
 }
 
