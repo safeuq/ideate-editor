@@ -1,11 +1,7 @@
 package intellijandroid.client
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
@@ -23,22 +19,15 @@ import intellijandroid.client.desktop.ComponentGallery
 import intellijandroid.client.desktop.DesktopOpenSshFiles
 import intellijandroid.client.desktop.DesktopResources
 import intellijandroid.client.desktop.FileSecretStore
+import intellijandroid.client.desktop.IdeateLocals
 import intellijandroid.client.desktop.Snapshots
-import intellijandroid.client.desktop.WindowPopupHost
-import intellijandroid.client.desktop.rememberMacTitleBar
 import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.ClientScreen
-import intellijandroid.client.ui.LocalIcons
-import intellijandroid.client.ui.LocalTitleBarArea
-import intellijandroid.client.ui.component.LocalPopupHost
-import intellijandroid.client.ui.component.LocalResizePointers
-import intellijandroid.client.ui.component.ResizePointers
 import intellijandroid.client.ui.lux.PngDecoder
 import intellijandroid.client.ui.lux.pngDecoder
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
-import intellijandroid.client.ui.theme.LocalClientFonts
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
@@ -164,27 +153,12 @@ private fun IdeateWindow(
   content: @Composable () -> Unit,
 ) {
   Window(onCloseRequest = onClose, title = "IDEate", state = windowState) {
-    val density = LocalDensity.current
-    val icons = remember(density) { DesktopResources.JarIcons(clientLib, density) }
-    // On macOS the app draws in the title bar's place, as in IntelliJ: the main toolbar in the
-    // editor window, an empty strip in the connections window.
-    val titleBar = rememberMacTitleBar(window, windowState.placement == WindowPlacement.Fullscreen)
-    // Menus and popups in their own windows, so they can go past this window's edge.
-    val popups = remember(window) { WindowPopupHost(window) }
-    CompositionLocalProvider(
-      LocalPopupHost provides popups,
-      LocalClientFonts provides fonts,
-      LocalIcons provides icons,
-      LocalTitleBarArea provides titleBar,
-      // IntelliJ's Splitter cursors.
-      LocalResizePointers provides
-        ResizePointers(
-          sideBySide =
-            PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.W_RESIZE_CURSOR)),
-          stacked =
-            PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.N_RESIZE_CURSOR)),
-        ),
-      content = content,
+    IdeateLocals(
+      window,
+      windowState.placement == WindowPlacement.Fullscreen,
+      clientLib,
+      fonts,
+      content,
     )
   }
 }
