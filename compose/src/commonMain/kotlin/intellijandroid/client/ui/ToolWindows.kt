@@ -460,6 +460,10 @@ fun ToolWindowPanel(
   modifier: Modifier = Modifier,
   title: String = window.title,
   views: List<MenuEntry>? = null,
+  /**
+   * Content in the header after the title, taking the room up to the buttons: the Terminal's tabs.
+   */
+  headerContent: (@Composable () -> Unit)? = null,
   /** The header's buttons, left to right, before Hide. */
   actions: List<HeaderAction> = emptyList(),
   /** Hide (IntelliJ's "—" at the header's end); null: no Hide button. */
@@ -501,7 +505,10 @@ fun ToolWindowPanel(
         if (viewsShown && views != null)
           DropDownMenu(views, beside = false, onDismiss = { viewsShown = false })
       }
-      Spacer(Modifier.weight(1f))
+      if (headerContent != null) {
+        Spacer(Modifier.width(12.dp))
+        Box(Modifier.weight(1f)) { headerContent() }
+      } else Spacer(Modifier.weight(1f))
       val buttons =
         actions + listOfNotNull(onHide?.let { HeaderAction("expui/general/hide.svg", "Hide", it) })
       buttons.forEach { action ->

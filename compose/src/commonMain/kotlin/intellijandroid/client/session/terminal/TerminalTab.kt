@@ -123,9 +123,12 @@ internal class TerminalTab(
     )
 
   init {
-    // The size goes first, then the output is connected (spec 3.4): the shell starts at that size.
-    session.size.set(RdTerminalSize(initialSize.columns, initialSize.rows))
-    session.outputConnected.set(true)
+    // A session the client opened has both set already, before it went into the map (spec 3.4,
+    // TerminalSessions.newClientSession). Only a session the backend opened (`origin = Host`) gets
+    // them here.
+    if (session.size.valueOrNull == null)
+      session.size.set(RdTerminalSize(initialSize.columns, initialSize.rows))
+    if (session.outputConnected.valueOrNull != true) session.outputConnected.set(true)
     session.output.adviseOn(sessionLifetime, scheduler) { bytes ->
       connector.onOutput(bytes.toByteArray())
     }

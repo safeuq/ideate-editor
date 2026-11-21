@@ -3,6 +3,7 @@ package intellijandroid.client.session.terminal
 import com.jediterm.core.util.TermSize
 import com.jetbrains.codeWithMe.model.RdTerminalSession
 import com.jetbrains.codeWithMe.model.RdTerminalSessionOrigin
+import com.jetbrains.codeWithMe.model.RdTerminalSize
 import com.jetbrains.codeWithMe.model.terminalModel
 import com.jetbrains.rd.ide.model.Solution
 import com.jetbrains.rd.util.lifetime.Lifetime
@@ -73,8 +74,7 @@ internal class TerminalSessions(
   fun open(): String {
     val terminalModel = checkNotNull(model) { "Terminal sessions aren't bound to a project yet" }
     val id = "SessionId#${++counter}"
-    // null: the backend's login shell, in the project folder (spec 3.4).
-    terminalModel.sessions[id] = RdTerminalSession(RdTerminalSessionOrigin.Client, null)
+    terminalModel.sessions[id] = newClientSession(lastSize)
     return id
   }
 
@@ -90,6 +90,19 @@ internal class TerminalSessions(
   }
 
   fun tab(id: String): TerminalTab? = tabs[id]
+
+  companion object {
+    /**
+     * A session the client starts (spec 3.4): the size and `outputConnected` are set before the
+     * session goes into the map, so the backend starts its shell at that size. `shellCommand` null:
+     * the backend's login shell, in the project folder.
+     */
+    internal fun newClientSession(size: TermSize) =
+      RdTerminalSession(RdTerminalSessionOrigin.Client, null).also { session ->
+        session.size.set(RdTerminalSize(size.columns, size.rows))
+        session.outputConnected.set(true)
+      }
+  }
 
   fun resize(id: String, columns: Int, rows: Int) {
     val tab = tabs[id] ?: return

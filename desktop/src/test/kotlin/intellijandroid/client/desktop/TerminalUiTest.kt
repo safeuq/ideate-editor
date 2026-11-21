@@ -120,6 +120,18 @@ class TerminalUiTest {
         }
         waitForIdle()
         shot("terminal-4-scrolled-up")
+        // Scrolled all the way up: the 6 dp of space above the first history line shows.
+        repeat(40) {
+          onRoot().performTouchInput {
+            swipe(
+              start = androidx.compose.ui.geometry.Offset(width * 0.7f, height * 0.78f),
+              end = androidx.compose.ui.geometry.Offset(width * 0.7f, height * 0.97f),
+              durationMillis = 100,
+            )
+          }
+        }
+        waitForIdle()
+        shot("terminal-7-scrolled-to-top")
         // A mouse drag selects text.
         onRoot().performMouseInput {
           moveTo(androidx.compose.ui.geometry.Offset(width * 0.5f, height * 0.85f))

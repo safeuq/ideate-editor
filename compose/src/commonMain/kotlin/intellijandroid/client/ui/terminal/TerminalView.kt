@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -330,6 +331,7 @@ fun TerminalView(
   ) {
     Canvas(
       Modifier.fillMaxSize()
+        .clipToBounds()
         .scrollable(scrollState, Orientation.Vertical, enabled = !screen.alternate)
         .focusRequester(focusRequester)
         .onFocusChanged {

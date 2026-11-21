@@ -85,7 +85,9 @@ import intellijandroid.client.ui.component.SearchHistory
 import intellijandroid.client.ui.component.SplitPane
 import intellijandroid.client.ui.lux.LuxPaneView
 import intellijandroid.client.ui.terminal.TerminalFocus
+import intellijandroid.client.ui.terminal.TerminalHeaderTabs
 import intellijandroid.client.ui.terminal.TerminalKeyBar
+import intellijandroid.client.ui.terminal.TerminalTabsState
 import intellijandroid.client.ui.terminal.TerminalToolWindow
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -268,6 +270,7 @@ fun ClientScreen(
 
     // Which terminal has the keyboard, for the keyboard bar under the tool window bar.
     val terminalFocus = remember { TerminalFocus() }
+    val terminalTabs = remember { TerminalTabsState() }
 
     // Structure's folded rows, here for its header's Expand All and Collapse All.
     var structureCollapsed by remember { mutableStateOf(emptySet<String>()) }
@@ -318,6 +321,10 @@ fun ClientScreen(
               onClick = { session.chooseProjectView(option) },
             )
           },
+        headerContent =
+          if (window == ToolWindow.TERMINAL) {
+            { TerminalHeaderTabs(state, session, terminalTabs) { barClick(window) } }
+          } else null,
         actions = headerActions(window),
         // The window is on screen, so its stripe button's tap hides it (and on a phone held
         // upright, the last one of a side page goes back to the editor).
@@ -334,7 +341,7 @@ fun ClientScreen(
             structureCollapsed = structureCollapsed,
             onStructureCollapsedChange = { structureCollapsed = it },
             terminalFocus = terminalFocus,
-            onHide = { barClick(window) },
+            terminalTabs = terminalTabs,
           )
         }
       }
@@ -596,7 +603,7 @@ private fun ToolWindowContent(
   structureCollapsed: Set<String>,
   onStructureCollapsedChange: (Set<String>) -> Unit,
   terminalFocus: TerminalFocus,
-  onHide: () -> Unit,
+  terminalTabs: TerminalTabsState,
 ) =
   when {
     // A pane the backend paints, e.g. the welcome project's "Projects and Files".
@@ -647,7 +654,7 @@ private fun ToolWindowContent(
         structureCollapsed,
         onStructureCollapsedChange,
       )
-    window == ToolWindow.TERMINAL -> TerminalToolWindow(state, session, terminalFocus, onHide)
+    window == ToolWindow.TERMINAL -> TerminalToolWindow(state, session, terminalFocus, terminalTabs)
     else -> BackendToolWindowContent(window, state, session, scroll)
   }
 
