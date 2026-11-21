@@ -135,8 +135,17 @@ closed        true when either side closes the tab
 
 ### IDEate design
 
-Transport: the classic split path. IJent would need IDEate to deploy and run a native agent, speak gRPC
-with mutual TLS and forward a port, and its UI result would be the same. **Deviation, stated:** IDEate's
+Transport: the classic split path. `ReworkedTerminalModel` is not the reworked terminal's wire: its only
+field is `portForwardingSessions`. The reworked engine's wire is IJent, and for IDEate it would cost:
+
+| Part | What IDEate would need |
+|---|---|
+| Agent | upload `lib/ijent/ijent-<arch>-…-release` (12.5–15.6 MB per architecture) through `IjentDeployRemoteApi.deployIjent` |
+| Trust | a TLS server bootstrap (`IjentTlsServerBootstrap(pem)`) and client certificate for mutual TLS |
+| Wire | gRPC (netty shaded) on Android, to a forwarded port |
+| API | `intellij.platform.ijent.impl.jar`: 1,372 generated protobuf classes in `…/ijent/impl/proto`; no `.proto` files in IC, so the client jar is the only spec |
+
+The output is still raw PTY bytes that the client emulates, so the UI result is the same. **Deviation, stated:** IDEate's
 terminal uses `TerminalModel` bytes; everything above the byte stream matches the reworked engine.
 
 Emulator: JediTerm core (`intellij.libraries.jediterm.core.jar`, Java 11 bytecode). Its only AWT use is the
@@ -175,8 +184,10 @@ sends text; IntelliJ has no row of Esc/Ctrl/Tab/arrow keys, so one would be an a
   [Seen code], but the reworked engine might leave the host listener unregistered. Probe step 2 settles it.
 - **[Open]** Does the backend need `size` before it starts the shell, and does it apply later sizes to the
   PTY? Probe step 2.
-- **[Open]** Shell integration (command blocks, working directory) is IJent-side in the reworked engine;
-  over the classic path it is absent. Plan: none, as in JetBrains Client's classic engine.
+- **[Open]** Shell integration (command blocks, working directory). It comes from scripts injected when the
+  shell starts, which then print OSC escape sequences. Whether the backend's classic start injects them is
+  not checked; probe step 2 shows it (look for `\e]1341;` sequences in the first output bytes). If they
+  come, IDEate's emulator can read them; if not, there is no shell integration, as in the classic engine.
 
 ---
 
