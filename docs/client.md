@@ -84,6 +84,8 @@ Code is formatted with Spotless: ktfmt in Google style (2-space indent, 100 colu
 
 The Compose Hot Reload MCP (`hotMcpServer`) clicks semantic nodes only. IDEate's backend-painted parts (the Run toolbar, Git windows, backend dialogs and their popups) are one drawn image with no nodes, so an agent needs input at points and hover. `AgentMcpServer.kt` (in `desktop`) is a small MCP server that does that on the running app, using `ComposeWindowInput`: it never moves the user's cursor and never takes keyboard focus.
 
+Setting it up together with the Compose Hot Reload MCP, step by step: [`mcp/setup.md`](mcp/setup.md).
+
 It is off by default. It starts only when the system property `ideate.agent.mcp.port` is set, and it listens on `127.0.0.1` only.
 
 ```sh
