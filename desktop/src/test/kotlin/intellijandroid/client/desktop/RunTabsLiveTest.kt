@@ -23,6 +23,7 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.Density
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.session.ClientSession
+import intellijandroid.client.session.PanelConsole
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.lux.PngDecoder
@@ -279,5 +280,109 @@ class RunTabsLiveTest {
       waitUntil(timeoutMillis = 40_000) { session.state.value.backendViews["Build"]?.panel != null }
       println("[build tabs] ${session.state.value.backendViews["Build"]?.tabs}")
       shot("build-1")
+    }
+
+  /**
+   * The Build tree (plan phase 3) in the Run window of a Gradle task, on `gradle-smoke`: the rows
+   * with their icons and durations, and a tap on a step changes the console. The toolbar's eye
+   * button is at (513, 576) and its "Show Successful Steps" at (592, 634) in the 1200 x 800 window.
+   */
+  @Test
+  fun buildTree() =
+    drive("build-tree") { session, shot ->
+      fun tree() = session.state.value.buildTrees.values.firstOrNull()
+      fun rows() =
+        tree()?.visibleRows()?.map { (node, depth) ->
+          "$depth ${node.fragments.joinToString("") { it.text }} | ${node.iconPaths} | ${node.trailing}"
+        }
+      // The console on screen: the backend shows another console (another editor id) per step.
+      fun consoleHas(text: String) =
+        session.state.value.backendViews["Run"]?.panel?.locals.orEmpty().any { local ->
+          local is PanelConsole &&
+            session.state.value.consoles[local.kernelEditorId]?.text?.contains(text) == true
+        }
+      // The conditions read the session's state, not the semantics tree. After a click the test
+      // waits with plain sleeps: polling with waitUntil while the backend's updates arrive made
+      // Compose fail now and then ("pending composition has not been applied"), probably the
+      // test clock composing while the protocol thread writes the panel's controls. The first
+      // waits use waitUntil: the Run window is only shown while Compose runs.
+      fun poll(timeoutMillis: Long, condition: () -> Boolean) =
+        waitUntil(timeoutMillis = timeoutMillis) { condition() }
+      fun settle(timeoutMillis: Long, condition: () -> Boolean) {
+        val end = System.currentTimeMillis() + timeoutMillis
+        while (!condition()) {
+          assertTrue(System.currentTimeMillis() < end, "Timed out; rows ${rows()}")
+          Thread.sleep(200)
+        }
+        Thread.sleep(500)
+      }
+      poll(60_000) { session.state.value.projectName != null }
+      session.runConfiguration("Gradle.hello")
+      poll(60_000) { session.state.value.backendViews["Run"]?.panel != null }
+      poll(60_000) { rows()?.any { it.contains("hello: successful") } == true }
+      println("[rows] ${rows()}")
+      val root = tree()!!.visibleRows().first { it.first.fragments.first().text == "hello: " }.first
+      assertEquals(listOf("expui/run/testPassed.svg"), root.iconPaths)
+      assertTrue(
+        root.trailing!!.contains("ms") || root.trailing!!.contains("sec"),
+        "${root.trailing}",
+      )
+      // The whole run's output is shown while the root is selected.
+      poll(30_000) { consoleHas("Executing ':app:hello'") }
+      shot("build-tree-1")
+
+      // A step's own output.
+      onNodeWithText("New Minor Gradle Version Available", substring = true).performClick()
+      settle(30_000) { consoleHas("is not the latest minor version") }
+      assertEquals(2, tree()!!.selected)
+      settle(10_000) { !consoleHas("Executing ':app:hello'") }
+      shot("build-tree-2-warning")
+
+      // Successful steps are hidden; the eye button's "Show Successful Steps" shows them.
+      assertTrue(rows()!!.none { it.contains(":app:hello") }, "${rows()}")
+      onRoot().performMouseInput { click(Offset(513f, 576f)) }
+      Thread.sleep(2_000)
+      onRoot().performMouseInput { click(Offset(592f, 634f)) }
+      settle(20_000) { rows()?.any { it.contains(":app:hello") } == true }
+      println("[rows with successful steps] ${rows()}")
+      onNodeWithText(":app:hello", substring = true).performClick()
+      settle(15_000) { tree()?.selected == 3 && consoleHas("> Task :app:hello") }
+      Thread.sleep(1_000)
+      println("[after task click] selected=${tree()?.selected}")
+      assertEquals(3, tree()!!.selected)
+      // Its own output is the task header and `hello`: the run's first line is gone.
+      assertTrue(consoleHas("> Task :app:hello"))
+      assertTrue(!consoleHas("Executing ':app:hello'") && !consoleHas("Possible solutions"))
+      shot("build-tree-3-task")
+
+      // Back to the whole run.
+      onNodeWithText("hello: successful", substring = true).performClick()
+      settle(15_000) { consoleHas("Executing ':app:hello'") }
+    }
+
+  /** The Build tree in the Build window, after Build Project on `gradle-smoke`. */
+  @Test
+  fun buildWindowTree() =
+    drive("build-window-tree") { session, shot ->
+      fun rows() =
+        session.state.value.buildTrees.values.firstOrNull()?.visibleRows()?.map { (node, depth) ->
+          "$depth ${node.fragments.joinToString("") { it.text }} | ${node.iconPaths} | ${node.trailing}"
+        }
+      waitUntil(timeoutMillis = 60_000) { session.state.value.projectName != null }
+      waitUntil(timeoutMillis = 40_000) {
+        session.state.value.toolWindows.any { it.id == "Gradle" && it.available }
+      }
+      session.runProjectAction("CompileDirty")
+      val shownByBackend = runCatching {
+        waitUntil(timeoutMillis = 40_000) {
+          session.state.value.backendViews["Build"]?.panel != null
+        }
+      }
+        .isSuccess
+      if (!shownByBackend) openStripe("Build")
+      waitUntil(timeoutMillis = 40_000) { !rows().isNullOrEmpty() }
+      Thread.sleep(3_000)
+      println("[rows] ${rows()}")
+      shot("build-window-1")
     }
 }

@@ -27,8 +27,11 @@ sealed interface PanelLocal {
 /** A console, e.g. the Run window's output; [kernelEditorId] keys `SessionState.consoles`. */
 data class PanelConsole(val kernelEditorId: String, override val bounds: LxRect) : PanelLocal
 
-/** The Build tree (`BeSplitComponentControl` "BuildTree"); phase 3 draws it. */
-data class PanelBuildTree(override val bounds: LxRect) : PanelLocal
+/**
+ * The Build tree (`BeSplitComponentControl` "BuildTree"); [modelUid] names the build to
+ * `BuildTreeApi` (`BuildViewId.uid`, e.g. 5).
+ */
+data class PanelBuildTree(val modelUid: Int, override val bounds: LxRect) : PanelLocal
 
 /**
  * One shown Lux panel, as JetBrains Client's `BeneluxViewControl` shows it (spec 7.1): it is drawn
@@ -45,6 +48,11 @@ internal class LuxPanelHost(
 ) {
   val surface = LuxDialog(luxId, false, true, true, "", 0, 0)
   private val locals = linkedMapOf<LxLocalComponentId, List<PanelLocal>>()
+  private val hidden = mutableSetOf<LxLocalComponentId>()
+
+  private fun publishLocals() {
+    surface.locals = locals.filterKeys { it !in hidden }.values.flatten()
+  }
 
   init {
     if (panel.layoutSource != LuxLayoutSource.Frontend)
@@ -64,11 +72,19 @@ internal class LuxPanelHost(
       local.bounds.advise(entryLifetime) { bounds ->
         log("Lux panel ${surface.id}: local ${id.id} has bounds $bounds")
         locals[id] = kinds.map { it(bounds) }
-        surface.locals = locals.values.flatten()
+        publishLocals()
+      }
+      // The backend keeps a Run window's consoles and shows one at a time (a step of the Build tree
+      // picks its own console): the others are invisible, not removed.
+      local.visible.advise(entryLifetime) { visible ->
+        log("Lux panel ${surface.id}: local ${id.id} visible $visible")
+        if (visible) hidden -= id else hidden += id
+        publishLocals()
       }
       entryLifetime.onTermination {
         locals.remove(id)
-        surface.locals = locals.values.flatten()
+        hidden -= id
+        publishLocals()
       }
     }
     if (panel.graphicsConfiguration.valueOrNull == null)
@@ -100,7 +116,8 @@ internal class LuxPanelHost(
       // ponytail: empty unless a port is forwarded; lift with port forwarding.
       is BePortForwardingPanel -> emptyList()
       is BeSplitComponentControl ->
-        if (control.placeId == "BuildTree") listOf { bounds -> PanelBuildTree(bounds) }
+        if (control.placeId == "BuildTree")
+          listOf { bounds -> PanelBuildTree(control.modelUid, bounds) }
         else logged(control)
       else -> logged(control)
     }

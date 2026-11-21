@@ -514,6 +514,12 @@ toolbar the first frame was one of a component IDEate does not draw (the backend
 toolbar), so the toolbar's icons were "unknown cached images" and stayed blank. IDEate now keeps the pixels of
 every component's frames (`LuxDialogs.bind`), and the toolbars draw.
 
+**Addendum 2026-11-21 (phase 3, `visible`) [Seen run]:** `LxLocalComponent.visible` (`IOptProperty<Boolean>`)
+is set by the backend. A Run window with a Build tree keeps one console per tree step and shows one: when a
+step is selected the shown console gets `visible = true` (and a new `bounds` of width 0, then its size) and
+the earlier one `visible = false`. IDEate (`LuxPanelHost`) draws only the locals that are not `visible =
+false`; without that the old console stayed on top of the new one.
+
 ---
 
 ## 8. Run and Debug tool windows
@@ -686,6 +692,47 @@ Events seen [Seen run], argument `{"uid": 5, "modelIsOnClient": false}`:
   `expui/status/info.svg`, `expui/run/testPassed.svg`. The short value `Te772qZN9kcAAAAAAAAAAAAAAAA=` is the
   running (animated) icon. **[Open]** the exact layout of the serialized form.
 
+**Addendum 2026-11-21 (phase 3, answers the [Open] item above and 12 row 5) [Seen run]:** the layout of
+`icon.serializedValue` (base64, little endian):
+
+```
+bytes 0-7    kind id   082e30f8db6c3911  an icon named by its path
+                       4deefbdaa64df647  the spinner (AnimatedIcon.Default): 12 more bytes, all 0 (20 bytes in all)
+bytes 8-19   three ints: 97, 104, 0 for info.svg; 103, 481, 0 for testPassed.svg (not needed; probably cache ids)
+bytes 20-23  int n = the path length in characters
+bytes 24..   the path, UTF-16LE, n characters, e.g. "expui/status/info.svg"
+then         byte 1, int 12 + "com.intellij" in UTF-16LE (the icon's class loader), 0, int 16, int 16, zeros
+```
+
+Examples: `expui/status/info.svg` (a warning or info node), `expui/run/testPassed.svg` (a finished step or
+build). IDEate reads only the kind and the path (`BuildTreeClient.decodeIcon`); an unknown kind gives no icon,
+so one odd icon doesn't break the tree. The running icon has no path: IDEate draws the eight frames of
+`process/step_1.svg` to `process/step_8.svg` (the icons of `AnimatedIcon.Default`), 100 ms each; there is no
+`expui/status/running.svg` in the icons jar.
+
+More about the events, seen on `gradle-smoke` (task `hello`) [Seen run]:
+
+- The first event is `BuildTreeFilteringState(showSuccessful = false, showWarnings = true)`. A finished step
+  that was `visibleAlways` while it ran changes to `visibleAlways = false, visibleAsSuccessful = true`, so with
+  `showSuccessful = false` **`:app:hello` is hidden once it has finished**. What stays: the root (`hello:
+  successful At 21/11/26, 1:07 PM`, `visibleAlways`) and a warning node (`New Minor Gradle Version
+  Available`, `visibleAsWarning`). So IntelliJ's own Build tree shows `:app:hello` only while it runs, unless
+  the panel toolbar's eye button ▸ "Show Successful Steps" is on. That choice comes as a new
+  `BuildTreeFilteringState(showSuccessful = true)` and the row shows (with its console).
+- Rule IDEate uses: a node shows when `visibleAlways`, or `showSuccessful && visibleAsSuccessful`, or
+  `showWarnings && visibleAsWarning`, or something below it shows.
+- A node's JSON can carry `"duration": null`; `title` and `hint` are `null` or text; `navigatables` is
+  `[{"serializedValue": {"id": 1, "canNavigate": true, "canNavigateToSource": true}}]` for a warning with a
+  link. IDEate ignores them (no source navigation yet).
+- Durations read as ICU short lists, like `NlsMessages.formatDuration`: `11 ms`, `1 sec, 251 ms`,
+  `1 min, 5 sec` (the keys `nls.duration.ms.short`, `sec.short`, `min.short`, `hr.short` in
+  `intellij.platform.ide.core.jar`).
+- A step's console is its own console: selecting the warning node made the backend show a different console
+  (another `kernelEditorId`, text `Gradle 9.6.0 is not the latest minor version. …`), selecting `:app:hello`
+  another (`> Task :app:hello`, `hello`), selecting the root the whole run again. The old consoles stay in the
+  Lux panel as `localComponents` with `visible = false` (see the 7.2 addendum).
+- `onSelectionChange(buildViewId, selectedNodeId)` answered `Unit` and needed no other change.
+
 ---
 
 ## 10. Services tool window
@@ -729,6 +776,6 @@ How the [Seen run] facts were recorded, so they can be checked again:
 | 2 | ~~Which markup carries console content types, and its key names (6.2)~~ answered 2026-11-21: document-level markup, `DefaultHighlighterModel` with `CONSOLE_*_OUTPUT` keys (6.2 addendum) | plan phase 1 |
 | 3 | ~~Whether `LxLocalComponent.bounds` is set after layout (7.2)~~ answered 2026-11-21: yes, `x`/`y` offset by the toolbars, size 0 first (7.2 addendum) | plan phase 2 |
 | 4 | ~~Whether `closed = true` ends the terminal's shell (3.4)~~ Answered 2026-11-21: yes, the shell is gone within 5 s | plan phase 4 |
-| 5 | The serialized `IconId` layout (9.3) | plan phase 3 |
+| 5 | ~~The serialized `IconId` layout (9.3)~~ answered 2026-11-21: kind id, path length, UTF-16 path (9.3 addendum) | plan phase 3 |
 | 6 | Debug tool window: not probed | plan phase 6 |
 | 7 | Services content: needs a project with a dashboard service, e.g. Spring Boot | plan phase 5 |

@@ -113,6 +113,7 @@ import intellijandroid.client.connection.Connection
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.connection.SplitWire
 import intellijandroid.client.kernel.SearchKernel
+import intellijandroid.client.session.build.BuildTrees
 import intellijandroid.client.session.console.ConsoleDocuments
 import intellijandroid.client.session.terminal.TerminalSessions
 import intellijandroid.client.ui.IconJar
@@ -287,6 +288,22 @@ class ClientSession(
   @Volatile
   var searchEverywhere: SearchEverywhere? = null
     private set
+
+  /** The Build trees, once the kernel connection is made (needs the project's kernel id). */
+  private var buildTrees: BuildTrees? = null
+
+  /** Starts following the Build tree of the build [uid] (a `BuildTree` split control shows). */
+  fun openBuildTree(uid: Int) = buildTrees?.open(uid)
+
+  /** Stops following it. */
+  fun closeBuildTree(uid: Int) {
+    buildTrees?.close(uid)
+    mutableState.update { it.copy(buildTrees = it.buildTrees - uid) }
+  }
+
+  fun selectBuildStep(uid: Int, nodeId: Int) = buildTrees?.select(uid, nodeId)
+
+  fun toggleBuildStep(uid: Int, nodeId: Int) = buildTrees?.toggle(uid, nodeId)
 
   private var requestResponse: RequestResponseModel? = null
   private var actionMenus: ActionMenus? = null
@@ -1046,6 +1063,14 @@ class ClientSession(
             dataContextBlob(protocol, newSolution.projectId),
             ::log,
           )
+        buildTrees =
+          BuildTrees(
+            kernel,
+            publish = { uid, tree ->
+              mutableState.update { it.copy(buildTrees = it.buildTrees + (uid to tree)) }
+            },
+          )
+        solutionLifetime.onTermination { buildTrees = null }
         searchEverywhere =
           SearchEverywhere(kernel) { change ->
             mutableState.update { it.copy(search = change(it.search)) }

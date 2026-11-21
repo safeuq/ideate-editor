@@ -12,6 +12,8 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -62,6 +64,7 @@ import intellijandroid.client.session.TreeNode
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.label
+import intellijandroid.client.ui.theme.small
 import kotlin.math.roundToInt
 
 /** The Project tool window: header plus the tree, laid out with IntelliJ's New UI tree metrics. */
@@ -295,69 +298,87 @@ private fun TreeRow(
       )
     }
     // Everything but the selection band scrolls sideways.
-    Box(
-      Modifier.matchParentSize().clipToBounds().offset {
-        IntOffset(-scroll.x.roundToInt(), 0)
-      },
-    ) {
-      if (node.hasChildren) {
-        val chevron =
-          icons.painter(
-            if (expanded) "expui/general/chevronDown.svg" else "expui/general/chevronRight.svg",
-          )
-        if (chevron != null) {
+    // A Row, so a right-aligned duration takes its width first and the name is cut before it.
+    Row(Modifier.matchParentSize()) {
+      Box(
+        Modifier.weight(1f).fillMaxHeight().clipToBounds().offset {
+          IntOffset(-scroll.x.roundToInt(), 0)
+        },
+      ) {
+        if (node.hasChildren) {
+          val chevron =
+            icons.painter(
+              if (expanded) "expui/general/chevronDown.svg" else "expui/general/chevronRight.svg",
+            )
+          if (chevron != null) {
+            Image(
+              chevron,
+              contentDescription = if (expanded) "Collapse" else "Expand",
+              modifier =
+                Modifier.offset(x = chevronX).size(16.dp).align(Alignment.CenterStart).pointerInput(
+                  node.id,
+                ) {
+                  detectTapGestures(
+                    onPress = { if (!scrolling() && tryAwaitRelease()) onChevron() },
+                  )
+                },
+            )
+          }
+        }
+        node.iconPaths.firstOrNull()?.let(icons::painter)?.let { icon ->
           Image(
-            chevron,
-            contentDescription = if (expanded) "Collapse" else "Expand",
-            modifier =
-              Modifier.offset(x = chevronX).size(16.dp).align(Alignment.CenterStart).pointerInput(
-                node.id,
-              ) {
-                detectTapGestures(onPress = { if (!scrolling() && tryAwaitRelease()) onChevron() })
-              },
+            icon,
+            contentDescription = null,
+            modifier = Modifier.offset(x = iconX).size(16.dp).align(Alignment.CenterStart),
           )
         }
-      }
-      node.iconPaths.firstOrNull()?.let(icons::painter)?.let { icon ->
-        Image(
-          icon,
-          contentDescription = null,
-          modifier = Modifier.offset(x = iconX).size(16.dp).align(Alignment.CenterStart),
-        )
-      }
-      val label =
-        remember(node.fragments, nameColor) {
-          buildAnnotatedString {
-            for (fragment in node.fragments) {
-              withStyle(
-                SpanStyle(
-                  color =
-                    fragment.foreground?.let { androidx.compose.ui.graphics.Color(it) }
-                      ?: nameColor,
-                  // Inter has no Bold file; IntelliJ draws "bold" UI text with Inter SemiBold.
-                  fontWeight =
-                    if (fragment.style and 1 != 0) FontWeight.SemiBold else FontWeight.Normal,
-                  fontStyle = if (fragment.style and 2 != 0) FontStyle.Italic else FontStyle.Normal,
-                ),
-              ) {
-                append(fragment.text)
+        val label =
+          remember(node.fragments, nameColor) {
+            buildAnnotatedString {
+              for (fragment in node.fragments) {
+                withStyle(
+                  SpanStyle(
+                    color =
+                      fragment.foreground?.let { androidx.compose.ui.graphics.Color(it) }
+                        ?: nameColor,
+                    // Inter has no Bold file; IntelliJ draws "bold" UI text with Inter SemiBold.
+                    fontWeight =
+                      if (fragment.style and 1 != 0) FontWeight.SemiBold else FontWeight.Normal,
+                    fontStyle =
+                      if (fragment.style and 2 != 0) FontStyle.Italic else FontStyle.Normal,
+                  ),
+                ) {
+                  append(fragment.text)
+                }
               }
             }
           }
-        }
-      BasicText(
-        label,
-        style = fonts.label(),
-        maxLines = 1,
-        softWrap = false,
-        modifier =
-          Modifier.offset(x = textX)
-            .align(Alignment.CenterStart)
-            .wrapContentWidth(Alignment.Start, unbounded = true)
-            .onSizeChanged {
-              onRight(it.width + with(density) { (textX + IslandsDark.treeSideInset).toPx() })
-            },
-      )
+        BasicText(
+          label,
+          style = fonts.label(),
+          maxLines = 1,
+          softWrap = false,
+          modifier =
+            Modifier.offset(x = textX)
+              .align(Alignment.CenterStart)
+              .wrapContentWidth(Alignment.Start, unbounded = true)
+              .onSizeChanged {
+                onRight(it.width + with(density) { (textX + IslandsDark.treeSideInset).toPx() })
+              },
+        )
+      }
+      // A Build step's duration, small and gray at the right edge; it doesn't scroll with the name.
+      node.trailing?.let { trailing ->
+        BasicText(
+          trailing,
+          style = fonts.small(if (selected) IslandsDark.text else IslandsDark.textSecondary),
+          maxLines = 1,
+          softWrap = false,
+          modifier =
+            Modifier.align(Alignment.CenterVertically)
+              .padding(start = 24.dp, end = IslandsDark.treeSideInset + 4.dp),
+        )
+      }
     }
   }
 }

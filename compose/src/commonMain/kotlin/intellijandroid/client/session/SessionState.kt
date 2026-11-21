@@ -34,6 +34,8 @@ data class TreeNode(
   val fileStatus: String? = null,
   /** ARGB row background from the node's scope (Settings | Appearance | File Colors), or null. */
   val background: Long? = null,
+  /** Gray text at the row's right edge, e.g. a Build step's `1 sec, 251 ms`; null: none. */
+  val trailing: String? = null,
 )
 
 data class ProjectTree(
@@ -196,6 +198,8 @@ data class SessionState(
    * `g9ojv29tmj8vgr2tv7gf`.
    */
   val consoles: Map<String, ConsoleText> = emptyMap(),
+  /** The Build trees shown, by the backend's model id (`BeSplitComponentControl.modelUid`). */
+  val buildTrees: Map<Int, ProjectTree> = emptyMap(),
   /**
    * Text the backend put on the clipboard (`ClipboardModel.content` set by the backend, e.g. its
    * Copy Reference); the UI copies it to the system clipboard. [ClipboardText.serial] tells two

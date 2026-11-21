@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -78,6 +79,7 @@ import intellijandroid.client.session.PanelConsole
 import intellijandroid.client.session.SessionState
 import intellijandroid.client.ui.EditorTextTarget
 import intellijandroid.client.ui.LocalEditorTextInput
+import intellijandroid.client.ui.ProjectTreeView
 import intellijandroid.client.ui.console.ConsoleEditor
 import intellijandroid.client.ui.dialog.DialogLook
 import intellijandroid.client.ui.dialog.dialogFrame
@@ -699,9 +701,34 @@ fun LuxPaneView(
               placed.semantics { text = AnnotatedString(console.text) },
             )
         }
-        // ponytail: the Build tree comes in phase 3.
-        is PanelBuildTree -> Box(placed)
+        is PanelBuildTree -> BuildTreeView(local.modelUid, state, session, placed)
       }
     }
   }
+}
+
+/**
+ * The Build tree of the build [uid] (`BuildTreeView`): the steps with status icons, bold titles,
+ * hints and durations, drawn with the Project tree's rows. A tap on a step makes the backend show
+ * that step's output in the console beside it.
+ */
+@Composable
+private fun BuildTreeView(
+  uid: Int,
+  state: SessionState,
+  session: ClientSession,
+  modifier: Modifier,
+) {
+  DisposableEffect(uid) {
+    session.openBuildTree(uid)
+    onDispose { session.closeBuildTree(uid) }
+  }
+  val tree = state.buildTrees[uid] ?: return
+  ProjectTreeView(
+    tree,
+    onToggle = { session.toggleBuildStep(uid, it.id) },
+    onSelect = { session.selectBuildStep(uid, it.id) },
+    onOpen = {},
+    modifier = modifier,
+  )
 }

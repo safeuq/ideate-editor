@@ -81,8 +81,14 @@ private constructor(
 ) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-  /** The database's coroutine context (without its job) and the search service, once connected. */
-  private val ready = CompletableDeferred<Pair<CoroutineContext, SearchApi>>()
+  /** The database's coroutine context (without its job) and the services, once connected. */
+  private val ready = CompletableDeferred<Connected>()
+
+  private class Connected(
+    val context: CoroutineContext,
+    val search: SearchApi,
+    val buildTree: BuildTreeApi,
+  )
 
   /** The popup's session, created with its first search and deleted when the popup closes. */
   @Volatile private var session: DurableRef<SearchSessionEntity>? = null
@@ -143,13 +149,36 @@ private constructor(
     }
   }
 
-  private fun inKernel(block: suspend (SearchApi) -> Unit): Job = scope.launch {
-    val (context, search) = ready.await()
+  /**
+   * Streams the events of the Build tree of the build with model id [uid] (`BuildTreeEvent` JSON,
+   * spec 9.3) until the job is cancelled.
+   */
+  fun buildTreeEvents(uid: Int, onEvent: (JsonObject) -> Unit): Job =
+    inKernel("Build tree") { connected ->
+      connected.buildTree.getTreeEventsFlow(buildViewId(uid)).collect {
+        onEvent(it.jsonObject)
+      }
+    }
+
+  /** The client's selection in the Build tree; the backend shows that step's output. */
+  fun selectBuildNode(uid: Int, nodeId: Int?): Job =
+    inKernel("Build tree") { it.buildTree.onSelectionChange(buildViewId(uid), nodeId) }
+
+  private fun buildViewId(uid: Int) = buildJsonObject {
+    put("uid", uid)
+    put("modelIsOnClient", false)
+  }
+
+  private fun inKernel(block: suspend (SearchApi) -> Unit): Job =
+    inKernel("Search Everywhere") { block(it.search) }
+
+  private fun inKernel(name: String, block: suspend (Connected) -> Unit): Job = scope.launch {
+    val connected = ready.await()
     try {
-      withContext(context) { block(search) }
+      withContext(connected.context) { block(connected) }
     } catch (failure: Exception) {
       if (failure is kotlinx.coroutines.CancellationException) throw failure
-      log("Search Everywhere: $failure")
+      log("$name: $failure")
     }
   }
 
@@ -209,8 +238,15 @@ private constructor(
                 change { register(SearchSessionEntity) }
                 log("Search Everywhere: database connected")
                 ready.complete(
-                  currentCoroutineContext().minusKey(Job) to
+                  Connected(
+                    currentCoroutineContext().minusKey(Job),
                     proxy.proxy(SearchApiDescriptor, BACKEND_ROUTE, InstanceId(SEARCH_API)),
+                    proxy.proxy(
+                      BuildTreeApiDescriptor,
+                      BACKEND_ROUTE,
+                      InstanceId(BuildTreeApiDescriptor.getApiFqn()),
+                    ),
+                  ),
                 )
                 awaitCancellation()
               }
@@ -337,6 +373,52 @@ private object SearchApiDescriptor : RemoteApiDescriptor<SearchApi> {
 
   override suspend fun call(impl: SearchApi, methodName: String, args: Array<Any?>): Any? =
     error("SearchApi is a client only")
+}
+
+/**
+ * IntelliJ's `BuildTreeApi`
+ * (platform/buildView/src/com/intellij/platform/buildView/BuildTreeApi.kt), the two calls IDEate
+ * makes, as JSON like [SearchApi]. `buildViewId` is `{"uid": 5, "modelIsOnClient": false}`.
+ */
+class BuildTreeApi(private val proxy: suspend (String, Array<Any?>) -> Any?) : RemoteApi<Unit> {
+  @Suppress("UNCHECKED_CAST")
+  suspend fun getTreeEventsFlow(buildViewId: JsonElement): Flow<JsonElement> =
+    proxy("getTreeEventsFlow", arrayOf(buildViewId)) as Flow<JsonElement>
+
+  suspend fun onSelectionChange(buildViewId: JsonElement, selectedNodeId: Int?) {
+    proxy("onSelectionChange", arrayOf(buildViewId, selectedNodeId))
+  }
+}
+
+private object BuildTreeApiDescriptor : RemoteApiDescriptor<BuildTreeApi> {
+  private val json = RemoteKind.Data(JsonElement.serializer())
+
+  override fun getSignature(methodName: String): RpcSignature =
+    when (methodName) {
+      "getTreeEventsFlow" ->
+        RpcSignature(
+          methodName,
+          arrayOf(ParameterDescriptor("buildViewId", json)),
+          RemoteKind.Flow(json, nullable = false),
+        )
+      "onSelectionChange" ->
+        RpcSignature(
+          methodName,
+          arrayOf(
+            ParameterDescriptor("buildViewId", json),
+            ParameterDescriptor("selectedNodeId", RemoteKind.Data(Int.serializer().nullable)),
+          ),
+          RemoteKind.Data(Unit.serializer()),
+        )
+      else -> error("BuildTreeApi has no $methodName")
+    }
+
+  override fun clientStub(proxy: suspend (String, Array<Any?>) -> Any?) = BuildTreeApi(proxy)
+
+  override fun getApiFqn() = "com.intellij.platform.buildView.BuildTreeApi"
+
+  override suspend fun call(impl: BuildTreeApi, methodName: String, args: Array<Any?>): Any? =
+    error("BuildTreeApi is a client only")
 }
 
 /**
