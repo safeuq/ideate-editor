@@ -3,6 +3,8 @@ package intellijandroid.client.desktop
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.session.ClientSession
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
@@ -24,35 +26,57 @@ class WindowDriverTest {
       }
       session.runConfiguration("Application.Main")
       driver.waitUntil(60.seconds, "Main's console") { session.state.value.consoles.isNotEmpty() }
+      // The panel's buttons change when the run ends, and the backend hides a tooltip then: wait
+      // until the Run panel has not changed for 2 s.
+      var panel = session.state.value.backendViews["Run"]?.panel
+      var changedAt = System.nanoTime()
+      driver.waitUntil(30.seconds, "the Run panel to settle") {
+        val now = session.state.value.backendViews["Run"]?.panel
+        if (now != panel) {
+          panel = now
+          changedAt = System.nanoTime()
+        }
+        System.nanoTime() - changedAt > 2.seconds.inWholeNanoseconds
+      }
       driver.screenshot("before-hover")
 
       val rerunX = System.getenv("DRIVER_RERUN_X")?.toInt() ?: 431
       val rerunY = System.getenv("DRIVER_RERUN_Y")?.toInt() ?: 577
       driver.move(rerunX - 30, rerunY)
       driver.move(rerunX, rerunY)
-      // The Rerun tooltip is a Lux popup drawn inside the window (not an owned window). It blinks
-      // (a known bug), so remember that it was seen instead of checking once.
-      var sawLux = false
-      driver.waitUntil(10.seconds, "a Lux popup") {
-        sawLux = sawLux || session.state.value.luxDialogs.isNotEmpty()
-        sawLux
+      // The Rerun tooltip is a popup window. It must stay: one Lux dialog with the same id for
+      // 3 s (before the fix it was replaced about every 0.75 s).
+      driver.waitUntil(10.seconds, "the tooltip's Lux dialog and window") {
+        session.state.value.luxDialogs.isNotEmpty() && driver.popupWindows().isNotEmpty()
       }
+      val tooltipIds = session.state.value.luxDialogs.map { it.id }
+      assertEquals(1, tooltipIds.size, "one tooltip dialog, got $tooltipIds")
       driver.screenshot("hover")
-
-      // A menu goes through WindowPopupHost: its own window. The Project tool window's title.
-      driver.move(75, 47)
-      driver.waitUntil(10.seconds, "the tooltip to go") { session.state.value.luxDialogs.isEmpty() }
-      // The Rerun tooltip's blinking can swallow the first click, so click again if nothing opens.
-      repeat(3) {
-        if (driver.popupWindows().isEmpty()) {
-          driver.click(75, 47)
-          runCatching { driver.waitUntil(2.seconds) { driver.popupWindows().isNotEmpty() } }
-        }
+      val start = System.nanoTime()
+      val stable = start + 3.seconds.inWholeNanoseconds
+      val timeline = mutableListOf<String>()
+      var last = tooltipIds
+      while (System.nanoTime() < stable) {
+        val now = session.state.value.luxDialogs.map { it.id }
+        if (now != last)
+          timeline +=
+            "${(System.nanoTime() - start) / 1_000_000}ms $now windows=${driver.popupWindows().size}"
+        last = now
+        Thread.sleep(20)
       }
-      driver.waitUntil(1.seconds, "a popup window") { driver.popupWindows().isNotEmpty() }
+      assertTrue(timeline.isEmpty(), "the tooltip changed from $tooltipIds: $timeline")
+      assertTrue(driver.popupWindows().isNotEmpty(), "the tooltip's window closed")
+
+      // A menu goes through WindowPopupHost too. The Project tool window's title.
+      driver.move(75, 47)
+      driver.waitUntil(10.seconds, "the tooltip to go") {
+        session.state.value.luxDialogs.isEmpty() && driver.popupWindows().isEmpty()
+      }
+      driver.click(75, 47)
+      driver.waitUntil(10.seconds, "the menu window") { driver.popupWindows().isNotEmpty() }
       driver.screenshot("menu")
       driver.dismissPopups()
-      driver.waitUntil(10.seconds, "the popup window to close") { driver.popupWindows().isEmpty() }
+      driver.waitUntil(10.seconds, "the menu window to close") { driver.popupWindows().isEmpty() }
 
       // Keys while the window is not focused: open a file, click into it, type.
       val projectFolder =

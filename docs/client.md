@@ -104,14 +104,14 @@ window, but the in-process test is more reliable.
 
 ### Driving the real window (`WindowDriver`)
 
-`desktop/src/test/.../WindowDriver.kt` opens the real window, set up as `Main.kt` does (`IdeateLocals`: a `ComposeWindow`, each popup in its own small OS window, fonts, icons), and drives it with synthetic AWT events. Unlike `runDesktopComposeUiTest`, popups are real windows, so tests can check where they open. It never moves the user's cursor (no `java.awt.Robot`), never takes keyboard focus (the window is not focusable) and needs no macOS permission, so you can keep working while it runs.
+`desktop/src/test/.../WindowDriver.kt` opens the real window, set up as `Main.kt` does (`IdeateLocals`: a `ComposeWindow`, each popup in its own small OS window, fonts, icons), and drives it with synthetic AWT events. The input and screenshot code is `ComposeWindowInput` in the app's own sources (it takes any `java.awt.Window`, nothing IDEate specific); `WindowDriver` adds the IDEate window, `ClientSession` waits and the file output. Unlike `runDesktopComposeUiTest`, popups are real windows, so tests can check where they open. It never moves the user's cursor (no `java.awt.Robot`), never takes keyboard focus (the window is not focusable) and needs no macOS permission, so you can keep working while it runs.
 
 | Variable | Meaning |
 |---|---|
 | `DRIVER_LINK` | join link of a backend, e.g. `tcp://127.0.0.1:5991#jt=…` (one use only: restart the backend before each run; without it the test is skipped) |
 | `DRIVER_OUT` | folder for the screenshots (default `desktop/build/driver`) |
 
-Use a backend port of your own (the self-test used 5991). Coordinates are in the window's content dp; the window is 1200 × 800 at (40, 40). `popupWindows()` lists the open popup windows; pass one as `inside =` to aim a click or key at it. Screenshots come from each window's Skia layer (`screenshot(name)` writes `name-0.png` for the window and `name-1.png`, ... for popups) and work with the default Metal renderer, so `SKIKO_RENDER_API` is not needed.
+Use a backend port of your own (the self-test used 5991). Coordinates are in the window's content dp; the window is 1200 × 800 at (40, 40). `popupWindows()` lists the open popup windows; pass one as `inside =` to aim a click or key at it. Screenshots come from each window's Skia layer (`screenshot(name)` waits for every window's first frame, then writes `name-0.png` for the window and `name-1.png`, ... for popups) and work with the default Metal renderer, so `SKIKO_RENDER_API` is not needed.
 
 ```kotlin
 val session = ClientSession(JoinLink.parse(link), initialFile = null)
@@ -130,11 +130,11 @@ try {
 }
 ```
 
-`WindowDriverTest` is the full example (run, hover the Rerun button, open a menu, click a tool window button, type into an editor):
+`WindowDriverTest` is the full example (run, hover the Rerun button and check its tooltip window stays and does not blink, open a menu, click a tool window button, type into an editor):
 
 ```
 DRIVER_LINK="$(cat link.txt)" DRIVER_OUT=/tmp/driver \
   ./gradlew :desktop:test --rerun --tests '*WindowDriverTest*'
 ```
 
-Known limits: keys reach an editor only after a click gave it Compose focus (the window never has real focus). Escape and a click outside don't close a popup window, because a popup closes when its window loses real focus; `dismissPopups()` sends that event. The Rerun tooltip is drawn inside the main window (a Lux popup), not as a popup window. A right click on a Project tree row opened no menu in the self-test.
+Known limits: keys reach an editor only after a click gave it Compose focus (the window never has real focus). Escape and a click outside don't close a popup window, because a popup closes when its window loses real focus; `dismissPopups()` sends that event. A right click on a Project tree row opened no menu in the self-test.
