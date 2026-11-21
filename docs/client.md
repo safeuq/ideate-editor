@@ -47,6 +47,16 @@ export JAVA_HOME="$HOME/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Hom
 ./gradlew :desktop:run --args="'tcp://127.0.0.1:5990#jt=…&fp=…' [/absolute/path/on/the/backend/src/demo/Main.java]"
 ```
 
+Hot reload ([Compose Hot Reload](https://github.com/JetBrains/compose-hot-reload) 1.3.0) changes the running desktop app without a restart or a new connection:
+
+```sh
+./gradlew :desktop:hotRunAsync -PjoinLink='tcp://127.0.0.1:5990#jt=…&fp=…'   # hotRun does the same and waits
+# edit a file in :compose or :desktop, then
+./gradlew :desktop:hotReloadMain                                              # or the IDE's reload button
+```
+
+`hotRun` has no `--args`, so the link goes in the `joinLink` property. It runs on the JetBrains Runtime of `JAVA_HOME` (the build stops if that is not a JBR 25 or newer), not on the JetBrains Client runtime that `:desktop:run` uses. Composables and calls made after the reload use the new code. Code that runs once when the connection opens, such as most of `ClientSession`'s protocol binding, keeps the old behaviour until you reconnect. The app's output goes to `desktop/build/run/main/hotRun.stdout.txt`. `:desktop:hotMcpServer` starts an MCP server for agents that can screenshot the window, read its semantics tree, click by node and trigger a reload.
+
 Without arguments the window opens on the same connect screen as the Android app, with two pages:
 
 | Page | Desktop | Android |

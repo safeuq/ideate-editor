@@ -4,6 +4,7 @@ plugins {
   kotlin("jvm")
   kotlin("plugin.compose")
   id("org.jetbrains.compose")
+  alias(libs.plugins.compose.hot.reload)
 }
 
 val jetbrainsClientLib: String by rootProject.extra
@@ -56,5 +57,22 @@ compose.desktop {
       ?.let { javaHome = it.path }
     // Fonts and icons are read from the same JetBrains Client install as the protocol jars.
     jvmArgs("-Djetbrains.client.lib=$jetbrainsClientLib")
+  }
+}
+
+// `:desktop:hotRun` and `hotRunAsync` (docs/client.md): the same app, reloaded when `:compose` or
+// `:desktop` change. The plugin has no setting for which runtime to use, only the Gradle property
+// compose.reload.jbr.binary, so the runtime is JAVA_HOME's, and the check below fails fast if it is
+// not a JBR 25 or newer.
+tasks.withType<org.jetbrains.compose.reload.gradle.ComposeHotRun>().configureEach {
+  mainClass.set("intellijandroid.client.MainKt")
+  jvmArgs("-Djetbrains.client.lib=$jetbrainsClientLib")
+  // hotRun has no --args: -PjoinLink='tcp://…' connects at once, as the app's first argument does.
+  providers.gradleProperty("joinLink").orNull?.let { args(it) }
+  doFirst {
+    val runtime = javaLauncher.get().metadata
+    check(runtime.vendor.contains("JetBrains") && runtime.languageVersion.asInt() >= 25) {
+      "Hot reload runs on ${runtime.vendor} ${runtime.languageVersion}; set JAVA_HOME to a JetBrains Runtime 25 or newer (IntelliJ's: Contents/jbr/Contents/Home)"
+    }
   }
 }
