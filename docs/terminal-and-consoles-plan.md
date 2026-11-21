@@ -19,21 +19,22 @@ Sources:
 | JediTerm | client jars `lib/intellij.libraries.jediterm.core.jar` (the emulator), `intellij.libraries.jediterm.ui.jar` (Swing, not used) |
 
 Tags: **[Seen code]** = read in the named source or class. **[Inferred]** = follows from the code but not
-read or run. **[Open]** = not known yet; the step that settles it is named.
+read or run. **[Seen run]** = recorded against the test backend. **[Open]** = not known yet; the step that
+settles it is named.
 
 ## Summary
 
 | # | Place | What draws the output in IntelliJ | Transport IDEate would use | New protocol work | Size |
 |---|---|---|---|---|---|
-| 0 | Protocol probe | — | the test backend, logged | none, it only records | small |
+| 0 | Protocol probe | — | the test backend, logged | none, it only records | done (section 0) |
 | 1 | Terminal tool window | `TerminalView`: a console-kind editor fed by a terminal emulator | rd `TerminalModel` (classic split path), JediTerm core in IDEate | bind `TerminalModel.sessions` | large |
-| 2 | Console view (shared by 3, 4, 5) | `ConsoleViewImpl`: a console-kind editor over a document | the backend's console is a text control over the edit protocol IDEate already speaks | console content types; text control registration | medium |
-| 3 | Run and Debug tool windows | `RunContentManager` tabs, each a `RunnerLayoutUi` (`RunTab`) with a console | rd `BackendRunContentModel` / `BackendRunProcessModel` / `RunnerLayoutUiModel` | **[Open]** where the run model arrives | large |
-| 4 | Build tool window | `MultipleBuildsView` → `BuildView`: tree left, console right | Fleet RPC `BuildViewApi` + `BuildTreeApi`; console as Lux | Fleet flows; a Lux id from `ComponentDirectTransferId` | large |
-| 5 | Services tool window | `ServiceView`: tree left, the selected service's content right | Fleet RPC `RunDashboardServiceRpc` + `ServiceViewRpc`; content as Lux | Fleet flows | large |
+| 2 | Console view (shared by 3, 4, 5) | `ConsoleViewImpl`: a console-kind editor over a document | `BeConsoleViewImpl(editorId)` inside a Lux panel; the text control (`kind = Console`) over the edit protocol | Lux local BeControls; console text controls | medium |
+| 3 | Run and Debug tool windows | `RunContentManager` tabs, each a `RunnerLayoutUi` (`RunTab`) with a console | a backend tool window ("Run"): `BeTab` → `BeneluxView` → Lux panel with the console as a local BeControl | none beyond 2 | medium |
+| 4 | Build tool window | `MultipleBuildsView` → `BuildView`: tree left, console right | a backend tool window ("Build"), same Lux panel; the tree is `BeSplitComponentControl("BuildTree")` → Fleet RPC `BuildTreeApi` | one Fleet flow | medium |
+| 5 | Services tool window | `ServiceView`: tree left, the selected service's content right | Fleet RPC `RunDashboardServiceRpc` (the backend tool window "Services" stays empty) | Fleet flows | large |
 
-Suggested order: 0, 2, 1, 3, 4, 5. 2 first because 3, 4 and 5 all end in a console, and its editor surface
-is the one the terminal reuses. 1 is the most asked for and has no unknown transport. 3 waits on the probe.
+Suggested order after the probe: 2, 1, 3, 4, 5. 2 first: Run and Build are nothing but a Lux panel around a
+console, so once 2 works they mostly come free. 1 is independent of the others.
 
 ---
 
@@ -50,8 +51,86 @@ One run against the test backend (port 5991, the small Gradle project), with log
 | Build ▸ Build Project (through the action protocol) | `BuildViewApi.getBuildViewEventsFlow(projectId)` events, if the Fleet client can open the flow |
 | Show Services (`BeToolWindow.state = Active` for "Services") | `RunDashboardServiceRpc.getServices(projectId)` and the content events |
 
-Output: a new section in `split-protocol.md` (or this doc's addendum) with the recorded values, the same way
-the Lux recording spike was written (`lux-protocol.md` section 6).
+### Results (2026-11-21)
+
+Run against the test backend (IntelliJ IDEA 2026.3, 263.7307.200) with a headless IDEate session and a
+temporary `ConsolesProbe` that only logs (not committed). Projects: `gradle-smoke` (Gradle 9.6.0, task
+`:app:hello`, run configuration "hello") and `smoke` (plain Java module, Application configuration "Main").
+User and host names below are replaced by `user@host`. [Seen run] for everything in this section.
+
+**Terminal: the classic path works.** Putting a session into `solution.terminalModel.sessions` starts a
+shell on the backend machine within 0.4 s:
+
+| Step | What came back |
+|---|---|
+| IDEate puts `"SessionId#probe1" → RdTerminalSession(origin = Client, shellCommand = null)` with `size = (100, 30)`, `outputConnected = true` | `title = RdTerminalTitle(null, null, defaultTitle = "Remote")`, `initialState = BeTerminalScreenState(cursorX = 1, cursorY = 1, [], [])` |
+| — | `output`: the login shell's own startup (the user's zsh prompt, `\e]133;A\a`, `\e[?2004h`), 1 KB chunks |
+| `input` fires `echo hi\r` (`[101, 99, 104, 111, 32, 104, 105, 13]`) | the shell echoes each key, then `hi\r\n` and a new prompt |
+| the shell prints `\e]2;echo hi\a` | the backend parses it itself: `title.applicationTitle = "echo hi"`, then `"echo"`, then the prompt's `"user@host:~/gradle-smoke"` |
+| `printf '\033]0;probe-title\007'` | `applicationTitle = "probe-title"` |
+| `size = (60, 20)`, then `stty size` | `20 60`: the backend resizes the PTY |
+| `closed = true` | the backend keeps the map entry; the client removes it [Inferred: JetBrains Client does] |
+
+No `\e]1341;` codes: the backend's classic start adds no IntelliJ shell integration. The OSC 133 (command
+marks) and 1337 (current folder) codes seen came from the user's own zsh setup, so IDEate gets them only on
+shells that print them. `defaultTitle` is "Remote", not "Local".
+
+**Run: not `BackendRunProcessModel`.** Neither `backendRunContentModel.showRunDebugToolwindow` nor any
+`BackendRunProcessModel` came, for a Gradle run or for an Application run. Instead the backend registers
+"Run" (and "Build", "Services") in `toolWindowModel.availableToolWindows` on the first run, like Gradle's
+window, and the run is a tab there:
+
+```
+Run  BeToolWindow.content = BeTabbedControl
+  BeTab(tabName "Main", isCloseable, hasOccurenceNavigator = true)
+    BeGrid → BeneluxView(luxId = 1)            // a Lux panel the backend paints: toolbar, layout
+      LxPanel.localComponents:                 // after the client shows it (graphics configuration, size, visible)
+        0: LxLocalBeControl(BeGrid[
+             BePortForwardingPanel(consoleId = 0),            // Fit
+             BeConsoleViewImpl(editorId = KernelAwareTextControlId(kind = Console, tabIndex = 1, …))  // Fill
+           ])
+```
+
+A Gradle run ("hello") is the same panel with one more local control before the console:
+`BeSplitComponentControl(placeId = "BuildTree", modelUid = 5)`. The Lux panels drew 97–135 operations at
+900 × 300. Start it from IDEate with `codeWithMeRunConfigurationsModel.runConfigurations["Application.Main"]
+.execute(CwmRunConfigurationExecuteArgs("Run"))` (answers `Unit`; `executingConfigurations` counts it).
+
+**Build: the same structure.** `build.toolwindow.split` is false by default
+(IC `platform/ide-core-impl/resources/intellij.platform.ide.core.impl.xml`), so `BuildViewApi` sends nothing
+and "Build" is a backend tool window: tab "Build Output" → `BeneluxView` → Lux panel with
+`BeContextActionBehavior(BeSplitComponentControl("BuildTree", modelUid))` and
+`BeContextActionBehavior(BeGrid[BePortForwardingPanel, BeConsoleViewImpl])`.
+
+**The Build tree comes over Fleet RPC.** `BuildTreeApi.getTreeEventsFlow(BuildViewId)` with
+`{"uid": <modelUid>, "modelIsOnClient": false}` (`UID` is an `Int`) streams the tree, e.g.:
+
+```
+{"type": "com.intellij.build.BuildTreeFilteringState", "showSuccessful": false, "showWarnings": true}
+{"type": "com.intellij.build.BuildNodesUpdate", "nodes": [{"id": 1, "parentId": 0, "title": "hello",
+  "name": "running…", "duration": {"type": "…BuildDuration.InProgress", "startTimestamp": 1795233640684},
+  "icon": {"serializedValue": "…"}, "autoExpand": true, …}]}
+{"type": "com.intellij.build.BuildTreeExposeRequest", "nodeId": 2, "alsoSelect": false}
+… {"id": 1, "name": "successful", "hint": "At 21/11/26, 9:30 AM", "duration": {"type": "…Fixed", "durationMs": 1251}}
+```
+
+The icon ids decode to paths such as `expui/status/info.svg` and `expui/run/testPassed.svg`.
+
+**Console text arrives as document patches.** Each `BeConsoleViewImpl` text control comes in
+`documentsOperationModel.documents` with extensions `ConsoleTextControlExtension`, `MarkupTextControlExtension`,
+`PermanentHeaderComponentTextControlExtension`, `CustomContextMenuExtension`. The Build console got its whole
+text (`9:30 AM: Executing ':app:classes :app:testClasses'…`). The Application console got
+`RdResetDocumentChange("")`, then one `RdDocumentChange` with the java command line, and nothing more within
+60 s. **[Open]** Probably the backend waits for the client to confirm the document version before it sends
+more, and the probe's edit session didn't; phase 2 step 2 settles it.
+
+**Gradle events also go to `cWMExternalSystemModel`** (`onStatusChangeBuild`, `onTaskOutput`, `onSuccess`,
+`onEnd`), which JetBrains Client's `ThinClientExternalSystemHost` reads. IDEate doesn't need them: the Lux
+panel and the Build tree carry the same.
+
+**Services:** "Services" is registered but its `BeTabbedControl` has no tabs ("Nothing to show");
+`RunDashboardServiceRpc.getServices` answered `[]` (no Spring Boot, Docker or similar configurations).
+Section 5 stays as planned; it needs a project with a service to probe.
 
 ---
 
@@ -180,14 +259,9 @@ sends text; IntelliJ has no row of Esc/Ctrl/Tab/arrow keys, so one would be an a
 
 ### Unknowns
 
-- **[Open]** Does the 263 backend still honor an `origin = Client` session? `BackendTerminalHost` binds it
-  [Seen code], but the reworked engine might leave the host listener unregistered. Probe step 2 settles it.
-- **[Open]** Does the backend need `size` before it starts the shell, and does it apply later sizes to the
-  PTY? Probe step 2.
-- **[Open]** Shell integration (command blocks, working directory). It comes from scripts injected when the
-  shell starts, which then print OSC escape sequences. Whether the backend's classic start injects them is
-  not checked; probe step 2 shows it (look for `\e]1341;` sequences in the first output bytes). If they
-  come, IDEate's emulator can read them; if not, there is no shell integration, as in the classic engine.
+- Settled by the probe (section 0): an `origin = Client` session starts a shell; size set before adding is
+  used and later sizes resize the PTY; the backend parses titles; no IntelliJ shell integration.
+- **[Open]** Whether `closed = true` ends the shell, or only removing the map entry does.
 
 ---
 
@@ -235,8 +309,10 @@ So a console's text, styles and hyperlinks come over the same edit protocol that
 
 ### Unknowns
 
-- **[Open]** The `TextControlId` kind for a console and whether IDEate's editor host accepts it as is. Probe.
-- **[Open]** The highlighter extension names that carry content types. Probe.
+- Settled: the id is `KernelAwareTextControlId(kind = Console, tabIndex = 1)`, it arrives like an editor's,
+  and the console sits in a Lux panel as `BeConsoleViewImpl` (section 0).
+- **[Open]** Why only the first change came for a running program (section 0).
+- **[Open]** The highlighter extension names that carry content types; log the console's markup in step 2.
 
 ---
 
@@ -251,7 +327,9 @@ So a console's text, styles and hyperlinks come over the same edit protocol that
 
 ### How JetBrains Client gets it
 
-By default (`run.toolwindow.split.enabled` is false) the run comes as rd models: `BackendRunProcessModel`
+**Probe (section 0): the run is a backend tool window tab with a Lux panel; the models below never came.**
+The rest of this subsection is what the jars contain. By default (`run.toolwindow.split.enabled` is false)
+the run comes as rd models: `BackendRunProcessModel`
 (executionId, displayName, configuration type and name, executorId, runnerId, `ExecutionConsoleKind
 {TerminalExecutionConsole, BeControlledConsole, ConsoleViewImpl}`, `runnerLayoutUiModel`, processId,
 `contentToolWindowId`, `consoleTextControlId`, exitCode, `terminateFromFrontend`) and `RunnerLayoutUiModel
@@ -261,17 +339,19 @@ shows them. [Seen code] Fleet RPC `RunSessionsApi` / `ProcessHandlerApi` is only
 
 ### IDEate design
 
-| IDEate | IntelliJ counterpart |
+After the probe: the Run tool window is drawn by IDEate's backend tool window code (`BackendToolWindowViews`,
+as for Gradle) with two additions:
+
+| IDEate | IntelliJ / JetBrains Client counterpart |
 |---|---|
-| `session/run/RunContentManager` | `RunContentManager` / `ThinClientRunContentHost` |
-| `ui/run/RunTab` | `RunnerLayoutUi` (inner tabs from `RunnerContentModel`, toolbar from `actions`) |
-| console tab | `ConsoleView` from section 2; a `TerminalExecutionConsole` uses the terminal's view from section 1 |
+| a `BeneluxView` case in `BackendToolWindowViews` | `BeneluxViewControl`: show the panel at the tab's size, paint it, send input (as `BackendPopups` does for a popup's panel) |
+| Lux local BeControls laid out at `LxLocalComponent.bounds` | `LuxBackendLocalBeControlBinder` on the client side |
+| `BeConsoleViewImpl` → the `ConsoleView` from section 2 | `FrontendConsoleViewImpl` |
 
 ### Unknowns
 
-- **[Open]** Where `BackendRunProcessModel` lives (no holder found in the protocol jar). Probe step 3.
-- **[Open]** Whether `RunnerContentModel.component` for the console is a `BeControl` wrapping the text
-  control or a Lux window. Probe step 3.
+- **[Open]** Debug: not probed. It likely uses the same panel plus the split debugger (`DebuggerModel`).
+- **[Open]** How the local controls' `bounds` arrive (they were not initialized at 900 × 300 in the probe).
 
 ---
 
@@ -301,10 +381,13 @@ Fleet RPC. [Seen code]
 `session/build/BuildViewManager` (the flows) and `ui/build/BuildView` (tree + console split, the tree rows
 like the Project tree's). The console is a Lux window, which IDEate already paints.
 
+After the probe: the same Lux panel as Run; the tree is `BuildTreeApi.getTreeEventsFlow` (section 0) drawn
+with the Project tree's rows, selection sent back with `onSelectionChange(buildViewId, nodeId)`.
+
 ### Unknowns
 
-- **[Open]** Whether IDEate's `FleetRpc` can open these flows as it does `FindInFilesApi`. Probe step 4.
-- **[Open]** How a `ComponentDirectTransferId` turns into a Lux window id. Probe step 4.
+- Settled: `BuildViewApi` stays silent while `build.toolwindow.split` is false (the default); the tree flow
+  works through IDEate's Fleet client.
 
 ---
 
@@ -329,7 +412,7 @@ Split by default (`services.view.split.enabled` = true, `services.view.split.run
 
 ### Unknowns
 
-- **[Open]** Same Fleet and Lux id questions as section 4. Probe step 5.
+- **[Open]** The services' content: needs a project with a service (e.g. a Spring Boot configuration).
 
 ---
 
@@ -345,4 +428,4 @@ Split by default (`services.view.split.enabled` = true, `services.view.split.run
 1. Phone and tablet soft keyboards have no Esc, Ctrl, Tab or arrows. IntelliJ has no extra key row, so
    adding one breaks "no additions". Add a row above the keyboard (only while a terminal has focus), or leave
    it out?
-2. Order: 0, 2, 1, 3, 4, 5 as above, or the terminal (1) straight after the probe?
+2. Order: 2, 1, 3, 4, 5 as above, or the terminal (1) first?
