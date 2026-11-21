@@ -80,6 +80,34 @@ The join link is the one the backend prints, with `0.0.0.0` replaced by its addr
 
 Code is formatted with Spotless: ktfmt in Google style (2-space indent, 100 columns) for `src/**/*.kt` and the Gradle scripts, trailing whitespace for `*.md`. `./gradlew spotlessApply` formats, `./gradlew spotlessCheck` fails on unformatted code. Plugin versions are in `gradle/libs.versions.toml`.
 
+## Agent MCP server (2026-11-21)
+
+The Compose Hot Reload MCP (`hotMcpServer`) clicks semantic nodes only. IDEate's backend-painted parts (the Run toolbar, Git windows, backend dialogs and their popups) are one drawn image with no nodes, so an agent needs input at points and hover. `AgentMcpServer.kt` (in `desktop`) is a small MCP server that does that on the running app, using `ComposeWindowInput`: it never moves the user's cursor and never takes keyboard focus.
+
+It is off by default. It starts only when the system property `ideate.agent.mcp.port` is set, and it listens on `127.0.0.1` only.
+
+```sh
+./gradlew :desktop:hotRunAsync -PjoinLink='tcp://127.0.0.1:5990#jt=…' -PagentMcpPort=5979   # :desktop:run takes -PagentMcpPort too
+claude mcp add --transport http ideate-window http://127.0.0.1:5979/mcp
+```
+
+It speaks MCP over Streamable HTTP: `POST /mcp` with JSON-RPC 2.0, answered as `application/json`. A notification gets 202, `GET` gets 405, there are no sessions and no SSE. It drives the app's current editor window, or the connect window when no session is open.
+
+Points are in the target window's content dp. `window` is optional: 0 is the main window (default), 1 and up are the popup windows in `popupWindows()` order (see `list_windows`). A popup has its own keyboard target: `press ESCAPE` with `window: 1` closes it, with the default it goes to the main window.
+
+| Tool | Arguments |
+|---|---|
+| `list_windows` | none: index, kind (main or popup), title, bounds |
+| `screenshot` | `window?`: PNG image content; no `window` gives one image per window |
+| `move` | `x`, `y`, `window?` |
+| `click` | `x`, `y`, `button` (left, right, middle), `count`, `window?` |
+| `drag` | `fromX`, `fromY`, `toX`, `toY`, `window?` |
+| `scroll` | `x`, `y`, `notches` (positive scrolls down), `window?` |
+| `type` | `text`, `window?`: goes to what has Compose focus, so click it first |
+| `press` | `key` (an AWT `VK_` name without the prefix: `ENTER`, `ESCAPE`, `F`), `modifiers` (shift, ctrl, alt, meta), `window?` |
+
+A failure (no window, bad index, unknown key) is a tool result with `isError: true` and a plain message, not a protocol error. `AgentMcpServerTest` checks the JSON-RPC handling.
+
 ## Driving the desktop UI in tests (2026-11-20)
 
 `desktop/src/test/.../DesktopDriverTest.kt` runs the real IDE screen (`ClientScreen` on a live `ClientSession`)

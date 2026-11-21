@@ -27,7 +27,7 @@ data class PopupWindow(val window: Window, val bounds: Rectangle)
  * `MOUSE_ENTERED` itself when the pointer changes component, as AWT would. Compose keeps keys only
  * for what has Compose focus: click it first.
  */
-class ComposeWindowInput(private val window: Window) {
+class ComposeWindowInput(val window: Window) {
   private var hovered: Component? = null
   private var pressedButton = MouseEvent.NOBUTTON
 

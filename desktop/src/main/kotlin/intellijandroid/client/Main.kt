@@ -1,6 +1,7 @@
 package intellijandroid.client
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -15,6 +16,7 @@ import intellijandroid.client.connect.ConnectionHistory
 import intellijandroid.client.connect.EditorApp
 import intellijandroid.client.connect.SshSetup
 import intellijandroid.client.connect.StoredText
+import intellijandroid.client.desktop.AgentMcp
 import intellijandroid.client.desktop.ComponentGallery
 import intellijandroid.client.desktop.DesktopOpenSshFiles
 import intellijandroid.client.desktop.DesktopResources
@@ -153,6 +155,10 @@ private fun IdeateWindow(
   content: @Composable () -> Unit,
 ) {
   Window(onCloseRequest = onClose, title = "IDEate", state = windowState) {
+    DisposableEffect(window) {
+      AgentMcp.register(window)
+      onDispose { AgentMcp.unregister(window) }
+    }
     IdeateLocals(
       window,
       windowState.placement == WindowPlacement.Fullscreen,

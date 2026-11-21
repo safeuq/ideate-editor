@@ -23,6 +23,8 @@ dependencies {
   // sets coroutines-core: 1.11, which JetBrains' Fleet jars are built against (1.9 lacks
   // SendChannel.close's default-argument bridge they call).
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0")
+  // JsonElement for AgentMcpServer; the version :compose already uses.
+  implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
   // Pixel tests of the Lux painter need Skia, which only this module has.
   testImplementation(kotlin("test"))
   // DesktopDriverTest: Compose's in-process UI test layer drives the real screens.
@@ -57,6 +59,7 @@ compose.desktop {
       ?.let { javaHome = it.path }
     // Fonts and icons are read from the same JetBrains Client install as the protocol jars.
     jvmArgs("-Djetbrains.client.lib=$jetbrainsClientLib")
+    providers.gradleProperty("agentMcpPort").orNull?.let { jvmArgs("-Dideate.agent.mcp.port=$it") }
   }
 }
 
@@ -69,6 +72,8 @@ tasks.withType<org.jetbrains.compose.reload.gradle.ComposeHotRun>().configureEac
   jvmArgs("-Djetbrains.client.lib=$jetbrainsClientLib")
   // hotRun has no --args: -PjoinLink='tcp://…' connects at once, as the app's first argument does.
   providers.gradleProperty("joinLink").orNull?.let { args(it) }
+  // -PagentMcpPort=5979 turns on the agent MCP server (docs/client.md); off without it.
+  providers.gradleProperty("agentMcpPort").orNull?.let { jvmArgs("-Dideate.agent.mcp.port=$it") }
   doFirst {
     val runtime = javaLauncher.get().metadata
     check(runtime.vendor.contains("JetBrains") && runtime.languageVersion.asInt() >= 25) {
