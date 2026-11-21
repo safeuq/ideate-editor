@@ -35,8 +35,9 @@ Appendix A: probe code. Appendix B: test projects.
 - The **coordinator** plans and reviews. The **implementer** (one subagent per phase) writes the code, the
   tests and the doc updates for one phase, in one worktree, and reports back.
 - **Ask, don't guess.** When something in the phase is unclear, contradicts the code, or an [Open] item
-  blocks you, send the coordinator a message (SendMessage to the session that started you) with the
-  question, what you found, and your proposed answer, and wait. Don't widen the scope of a phase on your own.
+  blocks you, stop and end your turn with a report that starts with `QUESTIONS:`: each question, what you
+  found, and your proposed answer. Leave the worktree as it is; the coordinator answers and you continue in
+  the same worktree. Don't widen the scope of a phase on your own.
 - Phases run one at a time unless the table in section 2 marks them independent.
 - Report at the end: the commit hashes, the tests added and their results, the checklist of the phase's
   "Done when" items with each one ticked or explained, and the paths of any screenshots.
@@ -428,8 +429,25 @@ spec 3.1 says why IJent is out).
   session `size`.
 - **Keys**: hardware keys → AWT key codes → `TerminalStarter.getCode(keyCode, modifiers)` → `sendBytes`;
   typed text (`EditorTextTarget` / soft keyboard) → `sendString`; paste wrapped when bracketed paste is on
-  (spec 2.6). The soft-keyboard key row (Esc, Ctrl, Tab, arrows) is **not** part of this phase: it waits for
-  the user's decision.
+  (spec 2.6).
+- **Keyboard bar (user's decision, 2026-11-21):** soft keyboards have no Esc, Ctrl, Tab or arrows. They go
+  in the **keyboard bar** decided on 2026-11-18 (intellij-android `docs/pending.md` row 30,
+  `docs/feature-parity-plan.md` section 1): an extra bar below the tool window bar, shown while the soft
+  keyboard is open. This phase builds the bar itself (not its Undo/Redo buttons, which come later) and shows
+  the terminal keys in it while a terminal has focus. **Each key is an icon**, no text labels:
+
+  | Key | Icon | Sends |
+  |---|---|---|
+  | Esc | glyph `⎋` (U+238B, IntelliJ's `MacKeymapUtil.ESCAPE`) | `\e` |
+  | Ctrl | glyph `⌃` (U+2303, `MacKeymapUtil.CONTROL`) | sticky: on until the next key, which is sent as Ctrl+key (`a`–`z` → 0x01–0x1a); shown selected while on |
+  | Tab | glyph `⇥` (U+21E5, `MacKeymapUtil.TAB`) | `\t` |
+  | ← ↑ → ↓ | `expui/general/chevronLeft.svg`, `chevronUp.svg`, `chevronRight.svg`, `chevronDown.svg` | through `TerminalKeyEncoder` (application mode respected) |
+
+  IntelliJ has no icons for Esc, Ctrl and Tab; the glyphs are the ones IntelliJ itself shows for those keys
+  in macOS shortcuts (IC `platform/platform-api/src/com/intellij/openapi/keymap/MacKeymapUtil.java`), drawn as
+  icons the same size as the SVG ones (16 dp in a 24 dp button, as the toolbar's icon buttons). Before
+  building the bar, read how the soft keyboard is detected and where the tool window bar is drawn
+  (`ui/ClientScreen.kt`, `ui/EditorTextTarget.kt`); ask the coordinator if the bar's place is unclear.
 - **`ui/terminal/TerminalToolWindow.kt`**: IDEate registers the window itself, as JetBrains Client does
   (spec 1): add `ToolWindow.TERMINAL = ToolWindow("Terminal", "Terminal",
   "icons/expui/toolwindow/terminal.svg", Place.BOTTOM_LEFT)` to `ui/ToolWindows.kt` and include it in
@@ -454,6 +472,8 @@ spec 3.1 says why IJent is out).
 - [ ] All live checks above pass; the shell keeps working after a resize.
 - [ ] Colors, cursor and spacing match spec 2.3–2.5 (Before/After PNGs).
 - [ ] New Tab, close, titles; the window has its bar button at bottom left.
+- [ ] The keyboard bar shows with the soft keyboard while a terminal has focus; each key works (unit test
+      for the bytes: Ctrl then `c` → `0x03`; ↑ → `\e[A`, or `\eOA` in application mode).
 - [ ] `:android:assembleDebug` builds; the coordinator runs it on a device with the user's go.
 - [ ] Spec 3.4 / 12 row 4 updated (what `closed` does).
 
@@ -483,9 +503,9 @@ results into spec 8, then plan.
 | 1 Console text controls | planned | | |
 | 2 Run and Build tabs | planned | | |
 | 3 Build tree | planned | | |
-| 4 Terminal | planned | | soft-keyboard key row: waiting for the user |
-| 5 Services | needs a probe | | |
-| 6 Debug | needs a probe | | |
+| 4 Terminal | planned | | terminal keys in the keyboard bar, as icons (user, 2026-11-21) |
+| 5 Services | needs a probe; later (user, 2026-11-21) | | |
+| 6 Debug | needs a probe; later (user, 2026-11-21) | | |
 
 ---
 
