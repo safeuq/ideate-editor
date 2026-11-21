@@ -248,3 +248,35 @@ selected and 0.5 s after one of its actions ran. The tree code is shared with Pa
 Not done: the 4 gear actions (`additionalGearActions`); a toggle's pressed look (Toggle Offline Mode comes
 with flags `0x88b`, the others `0x883`; which bit means "selected" isn't checked); the output of a task a
 double tap runs goes to the Run tool window, which IDEate doesn't draw yet.
+
+## 9. Run and Build: tabs and the backend-painted panel (2026-11-21)
+
+Checked on the Mac test backend (port 5991) on `smoke` (a plain Java module with `Main`, `Slow` and `Forever`
+run configurations) and `gradle-smoke`. The wire facts are in `terminal-and-consoles-spec.md` 7.2 and 8.2
+(with their 2026-11-21 phase 2 addenda); this is what IDEate does with them.
+
+- **Window and button.** Run, Debug and Build have bottom stripe buttons after Services (`DEFAULT_LAYOUT` in
+  `ui/ToolWindows.kt`), shown while the backend lists the window as available. When a run starts the backend
+  registers Run already `ActiveAndFocused`; `BackendToolWindowViews` turns that (and any later non-Hidden
+  state IDEate did not set) into `SessionState.showRequest`, and `ClientScreen` presses the window's button.
+  Build sends no state, so it opens with its button.
+- **Tabs.** `BackendToolWindowView` has `tabs` (each `BeTab.tabName`), `selectedTab`, `closeable` and `panel`.
+  They are chips in the header after the title, like Terminal's (`HeaderTab` in `ui/HeaderTabs.kt`, shared by
+  both), for the windows in `RUN_WINDOWS`. A tap sets `BeTabbedControl.selectedIndex`; the backend then
+  builds (or rebuilds) that tab's content. The × shows on the selected tab and under the pointer when
+  `isCloseable`, and removes the tab from `BeTabbedControl.tabs`; see the spec for the Cancel limit.
+- **The panel.** The selected tab's `BeneluxView` becomes a `LuxPanelHost` (`session/LuxPanelHost.kt`, the code
+  that was in `ProjectViewPanes`, one per shown panel) and `LuxPaneView` draws it filling the content area
+  below the header. `LuxPaneView` takes `onResize`, `onRepaint` and `send` instead of the session's functions,
+  so the Project view's "Projects and Files" pane and the tool windows use the same view.
+- **Client-drawn controls.** `LuxPanelHost` follows `panel.localComponents`: a console
+  (`BeConsoleViewImpl`, looked through `BeContextActionBehavior` and `BeGrid`) becomes a `PanelConsole` that
+  `LuxPaneView` draws with `ConsoleEditor` at the entry's `bounds` (backend pixels = dp, from the panel's top
+  left); the Build tree (`BeSplitComponentControl "BuildTree"`) is an empty `PanelBuildTree` until phase 3;
+  the port bar draws nothing; anything else is logged once.
+- **Icons.** `LuxDialogs.bind` stores the pixels of every Lux component's frames, so a toolbar's icons that
+  were first sent in a frame IDEate doesn't draw (the backend's main window) are not "unknown cached images".
+
+Tests: `compose/src/jvmTest/.../session/BackendTabsTest.kt` (the tab name mapping) and
+`desktop/src/test/.../RunTabsLiveTest.kt` (live, skipped without `DRIVER_LINK`): `runTabs`, `closeRunningTab`,
+`terminateRunningTab` on `smoke`, `buildTab` on `gradle-smoke`.

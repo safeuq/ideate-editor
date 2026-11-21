@@ -260,6 +260,19 @@ fun ClientScreen(
         }
         .toSet()
     LaunchedEffect(backendShown) { session.setBackendToolWindowsShown(backendShown) }
+    // The backend asks for a window to show, e.g. Run when a run starts (IntelliJ's "Activate tool
+    // window"). The window's own button does the opening.
+    // The request can come before the window has its button, so it waits for the button.
+    var handledRequest by remember { mutableStateOf(0) }
+    LaunchedEffect(state.showRequest, buttons) {
+      val request = state.showRequest ?: return@LaunchedEffect
+      if (request.serial == handledRequest) return@LaunchedEffect
+      val window =
+        buttons.byPlace.values.flatten().firstOrNull { it.id == request.windowId }
+          ?: return@LaunchedEffect
+      handledRequest = request.serial
+      if (window !in shown) barClick(window)
+    }
 
     // Opening a file from a tool window shows the editor on a phone held upright.
     fun onNavigated() {
@@ -324,7 +337,18 @@ fun ClientScreen(
         headerContent =
           if (window == ToolWindow.TERMINAL) {
             { TerminalHeaderTabs(state, session, terminalTabs) { barClick(window) } }
-          } else null,
+          } else
+            state.backendViews[window.id]
+              ?.takeIf { it.panel != null }
+              ?.let { view ->
+                {
+                  BackendHeaderTabs(
+                    view,
+                    onSelect = { session.selectBackendTab(window.id, it) },
+                    onClose = { session.closeBackendTab(window.id, it) },
+                  )
+                }
+              },
         actions = headerActions(window),
         // The window is on screen, so its stripe button's tap hides it (and on a phone held
         // upright, the last one of a side page goes back to the editor).
@@ -608,7 +632,15 @@ private fun ToolWindowContent(
   when {
     // A pane the backend paints, e.g. the welcome project's "Projects and Files".
     window == ToolWindow.PROJECT && state.projectViews.panel != null ->
-      LuxPaneView(state.projectViews.panel, session, Modifier.fillMaxSize())
+      LuxPaneView(
+        state.projectViews.panel,
+        state,
+        onResize = session::resizeProjectPanel,
+        onRepaint = session::repaintProjectPanel,
+        send = session::projectPanelEvent,
+        session = session,
+        modifier = Modifier.fillMaxSize(),
+      )
     // Packages, Scopes: rows the backend draws (a BeTreeGrid); it opens what is double-tapped.
     window == ToolWindow.PROJECT &&
       state.projectViews.current.let { it != null && it.paneId != PROJECT_PANE } ->
@@ -671,6 +703,21 @@ private fun BackendToolWindowContent(
   scroll: SidewaysScroll,
 ) {
   val view = state.backendViews[window.id]
+  // Run, Build: the backend paints the panel; its console is drawn by the client inside it.
+  if (view?.panel != null) {
+    LuxPaneView(
+      view.panel,
+      state,
+      onResize = { x, y, width, height ->
+        session.resizeBackendPanel(window.id, x, y, width, height)
+      },
+      onRepaint = { session.repaintBackendPanel(window.id) },
+      send = { event -> session.backendPanelEvent(window.id, event) },
+      session = session,
+      modifier = Modifier.fillMaxSize(),
+    )
+    return
+  }
   if (view == null || (view.tree.nodes.isEmpty() && view.toolbar.isEmpty())) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
       BasicText(
@@ -1104,5 +1151,11 @@ internal fun TabCloseButton(fileName: String, onClose: () -> Unit) {
     Image(icon, contentDescription = "Close $fileName", modifier = Modifier.size(16.dp))
   }
 }
+
+/**
+ * Backend windows whose backend-painted panels come in tabs, one per run or build; they get the tab
+ * chips in the header. ponytail: a fixed list; the backend has no flag for it.
+ */
+private val RUN_WINDOWS = setOf("Run", "Debug", "Build")
 
 private const val STRUCTURE_HIDE_DELAY_MS = 30_000L

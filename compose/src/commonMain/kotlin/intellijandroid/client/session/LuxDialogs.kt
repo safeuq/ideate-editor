@@ -10,7 +10,9 @@ import com.jetbrains.codeWithMe.model.codeWithMeUnattendedHostControlModel
 import com.jetbrains.rd.framework.IProtocol
 import com.jetbrains.rd.ide.model.LxAbstractComponent
 import com.jetbrains.rd.ide.model.LxAffineTransform
+import com.jetbrains.rd.ide.model.LxCacheableImage
 import com.jetbrains.rd.ide.model.LxDialog
+import com.jetbrains.rd.ide.model.LxDrawImageCommand
 import com.jetbrains.rd.ide.model.LxDrawOperation
 import com.jetbrains.rd.ide.model.LxEvent
 import com.jetbrains.rd.ide.model.LxFrame
@@ -66,6 +68,11 @@ class LuxDialog(
    * (`LxPanel.inputLocation`, e.g. `LxRect(12, 40, 1, 18)`), and null when the focus leaves text.
    */
   var acceptsText by mutableStateOf(false)
+  /**
+   * Controls the client draws itself inside the panel (`LxPanel.localComponents`), e.g. the Run
+   * window's console at `LxRect(0, 28, 900, 272)`; see [LuxPanelHost].
+   */
+  var locals by mutableStateOf(emptyList<PanelLocal>())
   /** Bumped when [batches] gets more; the UI drains the queue then. */
   var version by mutableIntStateOf(0)
   internal val batches = ConcurrentLinkedQueue<List<LxDrawOperation>>()
@@ -103,6 +110,17 @@ internal class LuxDialogs(
     val lux = protocol.luxModel
     lux.cleanImagesFromCache.advise(lifetime) { ids -> images.remove(ids) }
     lux.components.view(lifetime) { componentLifetime, id, component ->
+      // The backend sends an icon's pixels once, in the first frame that draws it, then refers to
+      // it by id. That frame may belong to a component IDEate doesn't draw (the backend's main
+      // window with its toolbar), so keep the pixels of every component's frames, or a later
+      // panel's icons (the Run toolbar) are "unknown cached images".
+      // ponytail: the pixels of a frame that IDEate draws too are decoded twice.
+      component.graphics.drawOperations.advise(componentLifetime) { operations ->
+        for (operation in operations) {
+          val image = (operation.command as? LxDrawImageCommand)?.image as? LxCacheableImage
+          if (image != null) images.store(image.id, image.content)
+        }
+      }
       // Dialogs, and popups (an LxWindow that isn't a frame); not the backend's frames.
       if (component !is LxWindow || (component is LxFrame && component !is LxDialog)) return@view
       components[id] = component

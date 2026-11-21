@@ -111,6 +111,9 @@ data class IndentGuide(val indentLevel: Int, val startLine: Int, val endLine: In
  */
 data class GutterIcon(val offset: Int, val iconPaths: List<String>)
 
+/** [windowId] is a backend tool window id, e.g. `Run`. */
+data class ShowRequest(val windowId: String, val serial: Int)
+
 /** A console's text and its colors, e.g. the Run window's `Main` output. */
 data class ConsoleText(val text: String, val highlights: List<Highlight>)
 
@@ -220,6 +223,11 @@ data class SessionState(
   val toolWindows: List<BackendToolWindow> = emptyList(),
   /** The Project tool window's views (Project, Packages, scopes) and the current one. */
   val projectViews: ProjectViews = ProjectViews(),
+  /**
+   * The backend asked for a tool window to show (`BeToolWindow.state` went Active, e.g. Run when a
+   * run starts); `serial` is new each time so the same window can be asked again.
+   */
+  val showRequest: ShowRequest? = null,
   /** What the backend's tool windows on screen show, by id, e.g. `Gradle`. */
   val backendViews: Map<String, BackendToolWindowView> = emptyMap(),
   /**

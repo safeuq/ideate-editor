@@ -131,6 +131,12 @@ private val DEFAULT_LAYOUT =
     "Problems View",
     "Terminal",
     "Services",
+    // Run, Debug and Build: IntelliJ shows them once used; here whenever the backend lists them
+    // (it does after the first run or build), as the other windows. ponytail: the order after
+    // Services is a guess; check against IntelliJ's stripe.
+    "Run",
+    "Debug",
+    "Build",
     // Right
     "Notifications",
     "AIAssistant",

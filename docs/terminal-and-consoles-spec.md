@@ -499,6 +499,21 @@ Seen in Run and Build panels [Seen run]:
 `bounds` printed `<not initialized>` at the moment the entry was added. **[Open]** whether it is set later,
 after layout.
 
+**Addendum 2026-11-21 (phase 2, answers the [Open] item above) [Seen run]:** `bounds` is set after layout,
+and it gets two values: first `LxRect(x=39, y=35, width=0, height=127)` when the entry is added, then
+`LxRect(x=39, y=35, width=314, height=177)` about 0.1 s later. `x` and `y` are in backend pixels (dp) from
+the panel's top left; the Run window's toolbars take the strip above and left of that rectangle, so the
+console is not at the panel's origin. IDEate advises `bounds` and moves the console when it changes
+(`LuxPanelHost`). The panel's own size is its `preferredSize` (the layout source is not the frontend), and the
+backend paints everything else of the panel itself (the toolbars, the Performance side panel). Both
+`BeGrid` items (port bar, console) get the grid's bounds; the empty port bar draws nothing.
+
+**Addendum 2026-11-21 (phase 2, images) [Seen run]:** the backend sends an icon's pixels once
+(`LxCacheableImage`) in the first frame that draws it, then refers to it as `LxCachedImage(id)`. For the Run
+toolbar the first frame was one of a component IDEate does not draw (the backend's main window, with its
+toolbar), so the toolbar's icons were "unknown cached images" and stayed blank. IDEate now keeps the pixels of
+every component's frames (`LuxDialogs.bind`), and the toolbars draw.
+
 ---
 
 ## 8. Run and Debug tool windows
@@ -542,6 +557,37 @@ Gradle tasks also report to `solution.cWMExternalSystemModel` (read by JetBrains
 `ThinClientExternalSystemHost`): `onStatusChangeBuild` (`StartBuildEventModel`, `ProgressBuildEventModel`,
 `StartEventModel`, `OutputBuildEventModel`, `MessageEventModel`, `FinishEventModel`, `FinishBuildEventModel`),
 `onTaskOutput(text, stdOut)`, `onSuccess`, `onEnd`. The Lux panel and the Build tree carry the same. [Seen run]
+
+**Addendum 2026-11-21 (phase 2, what IDEate does with the Run window) [Seen run]:**
+
+- *Stripe button.* Run and Build were in `availableToolWindows` (available) but `isVisibleOnLargeStripe` stays
+  null, so they sat under the ⋯ button. IDEate puts Run, Debug and Build on the bottom stripe after Services
+  (`DEFAULT_LAYOUT`); a button shows only while the backend lists the window as available, as for the other
+  backend windows. The order after Services is a guess.
+- *The backend asks for the window.* When a run starts, the backend registers the Run window with
+  `BeToolWindow.state = ActiveAndFocused` (log line `Tool window Run state ActiveAndFocused`), as IntelliJ's
+  "Activate tool window" does. IDEate follows it: a state other than Hidden that IDEate did not set itself shows
+  the window (`SessionState.showRequest`). A Gradle build sent no state for Build, so Build only opens with its
+  button.
+- *A new run can take a finished run's tab.* Running `Slow` after `Main` finished made no second tab: the
+  backend replaced the tab's content (a new `BeneluxView`) and renamed the tab (`tabName.text` Main to Slow).
+  IDEate follows the selected tab's name. A second tab came when the first process was still running
+  (`Forever`, then `Slow`: tabs `[Forever, Slow]`). The backend builds a tab's content when it is selected,
+  and rebuilds it on each selection (a new Lux panel each time).
+- *Closing a tab, which paths work.* `BeTab` has no close signal.
+  1. `BeTabbedControl.tabs.remove(tab)` on the client: works. The log shows `Closing tab 1 (Slow) of Run` and
+     the backend closes the content. For a running process the backend opens its own dialog, `Process 'Forever'
+     Is Running`, with Cancel, Disconnect and Terminate; it arrives through the existing backend dialog path.
+     Terminate ends the process and the tab stays gone. After the backend removes a tab it keeps the old
+     selected index, so IDEate selects the neighbour itself (without it the remaining tab was never built).
+     Limit: after Cancel the process keeps running but the backend does not give the tab back, and hiding and
+     showing the window (`BeToolWindow.state`) does not either; the client shows no tab until the next run.
+  2. The action `CloseContent` through `ActionMenus.runAction`: tried with place `ToolwindowPopup` and
+     timestamps `ProjectTimestampModel` + `BeToolWindowIdTimestampModel("Run")`, then also with a
+     `BeContextIdTimestampModel` from the tab (`BeTab.dataId`, `uniqueId` and `controlId` are all unset). Both
+     times the backend's answer was "CloseContent is disabled here". Not used.
+- Rerun, from the panel's own toolbar (a click at the first icon of the Run toolbar) works: a new console
+  appears for the run.
 
 ### 8.3 Starting a run
 
@@ -681,7 +727,7 @@ How the [Seen run] facts were recorded, so they can be checked again:
 |---|---|---|
 | 1 | ~~Why a running program's console got only its first change (6.2)~~ answered 2026-11-21: the client dropped the changes; the backend sends them all (6.2 addendum) | plan phase 1 |
 | 2 | ~~Which markup carries console content types, and its key names (6.2)~~ answered 2026-11-21: document-level markup, `DefaultHighlighterModel` with `CONSOLE_*_OUTPUT` keys (6.2 addendum) | plan phase 1 |
-| 3 | Whether `LxLocalComponent.bounds` is set after layout (7.2) | plan phase 2 |
+| 3 | ~~Whether `LxLocalComponent.bounds` is set after layout (7.2)~~ answered 2026-11-21: yes, `x`/`y` offset by the toolbars, size 0 first (7.2 addendum) | plan phase 2 |
 | 4 | ~~Whether `closed = true` ends the terminal's shell (3.4)~~ Answered 2026-11-21: yes, the shell is gone within 5 s | plan phase 4 |
 | 5 | The serialized `IconId` layout (9.3) | plan phase 3 |
 | 6 | Debug tool window: not probed | plan phase 6 |

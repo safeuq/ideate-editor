@@ -1,22 +1,11 @@
 package intellijandroid.client.ui.terminal
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,18 +15,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.unit.dp
 import intellijandroid.client.session.ClientSession
 import intellijandroid.client.session.SessionState
 import intellijandroid.client.session.terminal.TerminalKeyInput
 import intellijandroid.client.session.terminal.TerminalTabState
-import intellijandroid.client.ui.TabCloseButton
+import intellijandroid.client.ui.HeaderTab
 import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
-import intellijandroid.client.ui.theme.label
 
 /**
  * Which terminal tab shows. It lives above the window so the tabs in the header and the terminal in
@@ -74,34 +61,15 @@ fun TerminalHeaderTabs(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       for (tab in tabs) {
-        val isSelected = tab.id == selected?.id
-        val pill = RoundedCornerShape(IslandsDark.tabRadius)
-        val interaction = remember { MutableInteractionSource() }
-        val hovered by interaction.collectIsHoveredAsState()
-        Box(
-          Modifier.height(IslandsDark.tabHeight)
-            .clip(pill)
-            .then(
-              if (isSelected)
-                Modifier.background(IslandsDark.tabSelectedBackground)
-                  .border(1.dp, IslandsDark.tabSelectedBorder, pill)
-              else Modifier,
-            )
-            .hoverable(interaction)
-            .clickable(interaction, indication = null) { tabsState.selectedId = tab.id }
-            .padding(start = 8.dp, end = 4.dp),
-        ) {
-          Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
-            BasicText(tab.title, style = fonts.label(), maxLines = 1, softWrap = false)
-            Spacer(Modifier.width(2.dp))
-            if (isSelected || hovered)
-              TabCloseButton(tab.title) {
-                session.closeTerminal(tab.id)
-                if (tabs.size == 1) onHide()
-              }
-            else Spacer(Modifier.width(20.dp))
-          }
-        }
+        HeaderTab(
+          tab.title,
+          isSelected = tab.id == selected?.id,
+          onSelect = { tabsState.selectedId = tab.id },
+          onClose = {
+            session.closeTerminal(tab.id)
+            if (tabs.size == 1) onHide()
+          },
+        )
       }
     }
     IconButton(

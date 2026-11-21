@@ -284,8 +284,9 @@ Spec: 7, 8.2, 9.2.
 
 ### 4.1 What the code does today
 
-- `session/BackendToolWindows.kt` lists `availableToolWindows`; Run, Build and Services already appear there
-  after the first run (spec 8.2), so their buttons already show.
+- `session/BackendToolWindows.kt` lists `availableToolWindows`; Run, Build and Services are in that list after
+  the first run (spec 8.2). ~~so their buttons already show~~ (wrong, found in phase 2: Run and Build were only
+  under ⋯ because they weren't in `DEFAULT_LAYOUT`; phase 2 added them to the stripe, spec 8.2 addendum).
 - `session/BackendToolWindowViews.kt` sets `BeToolWindow.state` when a window shows, takes the selected
   `BeTab` (`showTab`) and walks its control tree (`find`) for a `BeIdeToolbar`, a `BeTreeGrid` or a
   `BeLabel`. It ignores `BeneluxView`, so Run and Build show "Tool window not implemented"
@@ -501,7 +502,7 @@ results into spec 8, then plan.
 |---|---|---|---|
 | Probe | done 2026-11-21 | bd564bc | spec 11 |
 | 1 Console text controls | done 2026-11-21 | the commit "Consoles: read-only console editor…" | Output never stopped: the client dropped the changes (spec 6.2 addendum). `ConsoleEditor` has local selection and copy, follows output at the end, no caret. Live test also runs `Slow` (appendix B) |
-| 2 Run and Build tabs | planned | | |
+| 2 Run and Build tabs | done 2026-11-21 | the commit "Run and Build tabs: …" | Differs from the plan: tabs are chips in the tool window header (like Terminal), `HeaderTab` is shared; `LuxPanelHost` is in `session/` and `LuxPaneView` takes callbacks; Run, Debug and Build get stripe buttons; IDEate follows the backend's `ActiveAndFocused` for Run; icons of the backend's main window frames are kept (else the toolbar is blank); closing a tab removes it from `tabs` (CloseContent was disabled), with the Cancel limit in spec 8.2. No IntelliJ reference PNG |
 | 3 Build tree | planned | | |
 | 4 Terminal | done 2026-11-21 (desktop checked live; device run left to the coordinator) | 515c149 | terminal keys in the keyboard bar, as icons (user, 2026-11-21). Differs from the plan: own canvas renderer (not `EditorView`'s `CONSOLE` mode); the bar sits between the tool window bar and the status bar in every layout; the soft keyboard is detected with `WindowInsets.ime`; tests also in `desktop/src/test` (`TerminalLiveTest`, `TerminalUiTest`); no IntelliJ reference PNG (this environment can't capture a window). Spec 3.4 and 4 have addenda |
 | 5 Services | needs a probe; later (user, 2026-11-21) | | |

@@ -214,6 +214,13 @@ class ClientSession(
         actionMenus?.show(serial, groupId, place, timestamps)
       },
       publish = { views -> mutableState.update { it.copy(backendViews = views) } },
+      showRequested = { windowId ->
+        mutableState.update {
+          it.copy(showRequest = ShowRequest(windowId, (it.showRequest?.serial ?: 0) + 1))
+        }
+      },
+      luxComponent = { id -> luxProtocol?.luxModel?.components?.get(id) },
+      log = ::log,
     )
   private val statusWidgets =
     StatusBarWidgets({ icon -> iconPaths(icon).firstOrNull() }) { widgets ->
@@ -581,6 +588,21 @@ class ClientSession(
   }
 
   /**
+   * Runs [actionId] for the project as a main menu entry would, e.g. `CompileDirty` (Build
+   * Project).
+   */
+  fun runProjectAction(actionId: String) = onRd {
+    val project = requireNotNull(solution) { "No project is open; cannot run $actionId" }.projectId
+    actionMenus?.runAction(
+      actionId,
+      "MainMenu",
+      ActionTimestampSetModel(listOf(ProjectTimestampModel(project))),
+    ) {
+      log("$actionId is disabled")
+    }
+  }
+
+  /**
    * A shortcut in the editor, e.g. ⌘B: runs [actionId] on the backend at the selected editor's
    * caret. Where it navigates arrives as a caret move (same file) or as a backend editor selection
    * ([followBackendSelection]).
@@ -636,6 +658,25 @@ class ClientSession(
 
   fun projectPanelEvent(event: com.jetbrains.rd.ide.model.LxEvent) = onRd {
     projectViews.panelEvent(event)
+  }
+
+  /** Run, Build: tab [index] of backend window [windowId] was picked. */
+  fun selectBackendTab(windowId: String, index: Int) = onRd {
+    backendViews.selectTab(windowId, index)
+  }
+
+  fun closeBackendTab(windowId: String, index: Int) = onRd {
+    backendViews.closeTab(windowId, index)
+  }
+
+  fun resizeBackendPanel(windowId: String, x: Int, y: Int, width: Int, height: Int) = onRd {
+    backendViews.resizePanel(windowId, x, y, width, height)
+  }
+
+  fun repaintBackendPanel(windowId: String) = onRd { backendViews.repaintPanel(windowId) }
+
+  fun backendPanelEvent(windowId: String, event: com.jetbrains.rd.ide.model.LxEvent) = onRd {
+    backendViews.panelEvent(windowId, event)
   }
 
   fun luxEvent(dialogId: Int, event: com.jetbrains.rd.ide.model.LxEvent) = onRd {

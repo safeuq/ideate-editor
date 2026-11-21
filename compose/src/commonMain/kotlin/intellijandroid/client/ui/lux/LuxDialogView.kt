@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,6 +49,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -69,8 +73,12 @@ import com.jetbrains.rd.ide.model.LxWindowEvent
 import com.jetbrains.rd.ide.model.LxWindowEventType
 import intellijandroid.client.session.ClientSession
 import intellijandroid.client.session.LuxDialog
+import intellijandroid.client.session.PanelBuildTree
+import intellijandroid.client.session.PanelConsole
+import intellijandroid.client.session.SessionState
 import intellijandroid.client.ui.EditorTextTarget
 import intellijandroid.client.ui.LocalEditorTextInput
+import intellijandroid.client.ui.console.ConsoleEditor
 import intellijandroid.client.ui.dialog.DialogLook
 import intellijandroid.client.ui.dialog.dialogFrame
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -642,12 +650,19 @@ private val PASTE_MODIFIER = if (intellijandroid.client.ui.IS_MAC) META else CTR
  * (New ▾) next to their buttons.
  */
 @Composable
-fun LuxPaneView(panel: LuxDialog, session: ClientSession, modifier: Modifier) {
+fun LuxPaneView(
+  panel: LuxDialog,
+  state: SessionState,
+  onResize: (x: Int, y: Int, width: Int, height: Int) -> Unit,
+  onRepaint: () -> Unit,
+  send: (LxEvent) -> Unit,
+  session: ClientSession,
+  modifier: Modifier,
+) {
   val density = LocalDensity.current
   var area by remember { mutableStateOf(IntRect.Zero) }
   LaunchedEffect(area) {
-    if (area.width > 0 && area.height > 0)
-      session.resizeProjectPanel(area.left, area.top, area.width, area.height)
+    if (area.width > 0 && area.height > 0) onResize(area.left, area.top, area.width, area.height)
   }
   Box(
     modifier.onGloballyPositioned { coordinates ->
@@ -664,14 +679,29 @@ fun LuxPaneView(panel: LuxDialog, session: ClientSession, modifier: Modifier) {
         }
     },
   ) {
-    LuxSurface(
-      panel,
-      session,
-      1f,
-      session::projectPanelEvent,
-      softKeyboard = true,
-      pane = true,
-      onNewBitmap = session::repaintProjectPanel,
-    )
+    LuxSurface(panel, session, 1f, send, softKeyboard = true, pane = true, onNewBitmap = onRepaint)
+    // The controls the client draws itself (spec 7.2), at the bounds the backend laid out.
+    val scheme = state.scheme
+    for (local in panel.locals) {
+      val placed =
+        Modifier.offset(local.bounds.x.dp, local.bounds.y.dp)
+          .size(local.bounds.width.dp, local.bounds.height.dp)
+      when (local) {
+        is PanelConsole -> {
+          val console = state.consoles[local.kernelEditorId]
+          // ponytail: a console shows once its text control and scheme are here, else blank.
+          if (console != null && scheme != null)
+            // The text is in the semantics so tests (and screen readers) can read it.
+            ConsoleEditor(
+              local.kernelEditorId,
+              console,
+              scheme,
+              placed.semantics { text = AnnotatedString(console.text) },
+            )
+        }
+        // ponytail: the Build tree comes in phase 3.
+        is PanelBuildTree -> Box(placed)
+      }
+    }
   }
 }

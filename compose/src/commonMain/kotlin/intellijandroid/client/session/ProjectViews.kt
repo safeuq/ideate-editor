@@ -9,11 +9,8 @@ import com.jetbrains.ide.model.uiautomation.BeDynamicControlContainer
 import com.jetbrains.ide.model.uiautomation.BeTreeGrid
 import com.jetbrains.ide.model.uiautomation.BeneluxView
 import com.jetbrains.rd.ide.model.IconModel
-import com.jetbrains.rd.ide.model.LuxLayoutSource
 import com.jetbrains.rd.ide.model.LxEvent
 import com.jetbrains.rd.ide.model.LxPanel
-import com.jetbrains.rd.ide.model.LxPoint
-import com.jetbrains.rd.ide.model.LxSize
 import com.jetbrains.rd.util.lifetime.Lifetime
 import com.jetbrains.rd.util.lifetime.SequentialLifetimes
 
@@ -58,8 +55,7 @@ internal class ProjectViewPanes(
   private val log: (String) -> Unit,
   private val publish: (ProjectViews) -> Unit,
 ) {
-  private var luxPanel: LxPanel? = null
-  private var panelLifetime: Lifetime? = null
+  private var host: LuxPanelHost? = null
   private var model: ProjectViewModel? = null
   private val panes = mutableListOf<RdProjectViewPaneBase>()
   /** The scope picked in the Scopes pane; the backend doesn't say which one it shows. */
@@ -148,7 +144,7 @@ internal class ProjectViewPanes(
   private fun showTree(pane: RdProjectViewBePane?) {
     val treeLifetime = treeLifetimes.next()
     rows.clear()
-    luxPanel = null
+    host = null
     views = views.copy(tree = ProjectTree(), panel = null)
     pane ?: return
     // control → BeDynamicControlContainer → BeContextActionBehavior → BeBehaviorControl →
@@ -176,59 +172,22 @@ internal class ProjectViewPanes(
       log("Project view pane: no Lux panel ${view.luxId}")
       return
     }
-    val surface = LuxDialog(view.luxId, false, true, true, "", 0, 0)
-    luxPanel = panel
-    if (panel.layoutSource != LuxLayoutSource.Frontend)
-      panel.preferredSize.advise(panelLifetime) { preferred -> panel.size.set(preferred) }
-    panel.size.advise(panelLifetime) { size ->
-      surface.width = size.width
-      surface.height = size.height
-    }
-    panel.inputLocation.advise(panelLifetime) { location -> surface.acceptsText = location != null }
-    panel.graphics.drawOperations.advise(panelLifetime) { operations ->
-      surface.batches += operations
-      surface.version++
-    }
-    if (panel.graphicsConfiguration.valueOrNull == null)
-      panel.graphicsConfiguration.set(LuxDialogs.CONFIGURATION)
-    if (panel.position.valueOrNull == null) panel.position.set(LxPoint(0.0, 0.0))
-    panel.visible.set(true)
-    // The panel may have been painted for an earlier connection (the backend keeps it), and then
-    // nothing new arrives: ask for a frame, as LuxFrontendPanelAdapter.forceHostToRepaint does.
-    panel.requestRepaint.start(panelLifetime, Unit)
-    this.panelLifetime = panelLifetime
-    panelLifetime.onTermination {
-      luxPanel = null
-      this.panelLifetime = null
-    }
+    val panelHost = LuxPanelHost(panel, panelLifetime, view.luxId, log)
+    host = panelHost
+    panelLifetime.onTermination { if (host === panelHost) host = null }
+    val surface = panelHost.surface
     views = views.copy(panel = surface)
     publish(views)
   }
 
-  /**
-   * The tool window's content area, in backend pixels (dp), and where it is on IDEate's screen, so
-   * the backend places the panel's popups (New ▾) next to it.
-   */
-  fun resizePanel(x: Int, y: Int, width: Int, height: Int) {
-    val panel = luxPanel ?: return
-    val surface = views.panel ?: return
-    surface.x = x
-    surface.y = y
-    panel.position.set(LxPoint(x.toDouble(), y.toDouble()))
-    if (panel.layoutSource == LuxLayoutSource.Frontend) panel.size.set(LxSize(width, height))
-  }
+  /** The tool window's content area; see [LuxPanelHost.resize]. */
+  fun resizePanel(x: Int, y: Int, width: Int, height: Int) = host?.resize(x, y, width, height)
 
   /** Asks the backend to paint the pane's panel again, whole. */
-  fun repaintPanel() {
-    val panel = luxPanel ?: return
-    val lifetime = panelLifetime ?: return
-    panel.requestRepaint.start(lifetime, Unit)
-  }
+  fun repaintPanel() = host?.repaint()
 
   /** A tap, a scroll or a key for the pane's panel. */
-  fun panelEvent(event: LxEvent) {
-    luxPanel?.events?.fire(event)
-  }
+  fun panelEvent(event: LxEvent) = host?.event(event)
 }
 
 /** `RdProjectViewAsyncPane` "ProjectPane": the Project view, which [ClientSession] draws itself. */
