@@ -65,10 +65,6 @@ internal class BackendToolWindowViews(
   private val publish: (Map<String, BackendToolWindowView>) -> Unit,
   /** The backend set a hidden window Active, e.g. Run when a run starts: show it. */
   private val showRequested: (windowId: String) -> Unit = {},
-  /** Runs a backend action for a project context, e.g. `CloseContent`. */
-  private val runAction: (actionId: String, place: String, ActionTimestampSetModel) -> Unit =
-    { _, _, _ ->
-    },
   /** The Lux component with this id, e.g. a `BeneluxView`'s panel; null when it isn't there. */
   private val luxComponent: (Int) -> Any? = { null },
   private val log: (String) -> Unit = {},
