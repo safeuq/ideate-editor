@@ -392,7 +392,11 @@ fun EditorView(
       snapshotFlow { listState.isScrollInProgress }
         .collect { scrolling -> if (!scrolling) atEnd = !listState.canScrollForward }
     }
-    LaunchedEffect(lines.count) { if (atEnd) listState.scrollToItem(lines.count - 1) }
+    // requestScrollToItem, not scrollToItem: that one measures the list at once, inside the effect,
+    // which can run while Compose applies changes ("pending composition has not been applied", seen
+    // in the live Build tree test when a step's console appears). This one scrolls at the next
+    // layout.
+    LaunchedEffect(lines.count) { if (atEnd) listState.requestScrollToItem(lines.count - 1) }
   }
 
   LaunchedEffect(longestLine, viewport.width, metrics) {

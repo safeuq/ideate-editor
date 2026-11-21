@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
@@ -17,7 +18,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.Density
@@ -130,6 +133,15 @@ class RunTabsLiveTest {
     onAllNodesWithContentDescription(name)[stripeIndex(name)].performClick()
   }
 
+  /**
+   * Answers the backend's "Process 'x' Is Running" dialog with Terminate, its default button
+   * (Enter): the dialog is painted by the backend, so there is no button to find by text, and a
+   * click at fixed pixels broke whenever the dialog's size changed.
+   */
+  private fun androidx.compose.ui.test.ComposeUiTest.pressTerminate() {
+    onAllNodes(isRoot())[1].performKeyInput { pressKey(Key.Enter) }
+  }
+
   private fun ClientSession.consoleText(marker: String) =
     state.value.consoles.values.firstOrNull { it.text.contains(marker) }?.text
 
@@ -193,11 +205,13 @@ class RunTabsLiveTest {
       waitUntil(timeoutMillis = 15_000) { tabs() == tabsBefore - "Slow" }
       shot("run-7-closed")
       println("[tabs after close] ${tabs()}")
-      // Forever still runs: close it and press Terminate so nothing is left behind.
+      // Forever still runs: close it and press Terminate so nothing is left behind. (The backend
+      // only asks while its setting processCloseConfirmation is the default; the "Do not ask
+      // again" choice, TERMINATE in options/ide.general.xml, closes the tab without a dialog.)
       onNodeWithContentDescription("Close Forever").performClick()
       waitUntil(timeoutMillis = 15_000) { session.state.value.luxDialogs.isNotEmpty() }
       Thread.sleep(1_500)
-      onAllNodes(isRoot())[1].performMouseInput { click(Offset(739f, 451f)) }
+      pressTerminate()
       waitUntil(timeoutMillis = 15_000) { session.state.value.luxDialogs.isEmpty() }
     }
 
@@ -250,8 +264,8 @@ class RunTabsLiveTest {
       onNodeWithContentDescription("Close Forever").performClick()
       waitUntil(timeoutMillis = 15_000) { session.state.value.luxDialogs.isNotEmpty() }
       Thread.sleep(1_500)
-      // Terminate, painted by the backend, at (739, 451) in the dialog's root.
-      onAllNodes(isRoot())[1].performMouseInput { click(Offset(739f, 451f)) }
+      // Terminate is the dialog's default button: Enter.
+      pressTerminate()
       waitUntil(timeoutMillis = 15_000) { session.state.value.luxDialogs.isEmpty() }
       Thread.sleep(3_000)
       println("[tabs after Terminate] ${tabs()}")
@@ -301,21 +315,9 @@ class RunTabsLiveTest {
           local is PanelConsole &&
             session.state.value.consoles[local.kernelEditorId]?.text?.contains(text) == true
         }
-      // The conditions read the session's state, not the semantics tree. After a click the test
-      // waits with plain sleeps: polling with waitUntil while the backend's updates arrive made
-      // Compose fail now and then ("pending composition has not been applied"), probably the
-      // test clock composing while the protocol thread writes the panel's controls. The first
-      // waits use waitUntil: the Run window is only shown while Compose runs.
+      // The conditions read the session's state, not the semantics tree.
       fun poll(timeoutMillis: Long, condition: () -> Boolean) =
         waitUntil(timeoutMillis = timeoutMillis) { condition() }
-      fun settle(timeoutMillis: Long, condition: () -> Boolean) {
-        val end = System.currentTimeMillis() + timeoutMillis
-        while (!condition()) {
-          assertTrue(System.currentTimeMillis() < end, "Timed out; rows ${rows()}")
-          Thread.sleep(200)
-        }
-        Thread.sleep(500)
-      }
       poll(60_000) { session.state.value.projectName != null }
       session.runConfiguration("Gradle.hello")
       poll(60_000) { session.state.value.backendViews["Run"]?.panel != null }
@@ -333,9 +335,9 @@ class RunTabsLiveTest {
 
       // A step's own output.
       onNodeWithText("New Minor Gradle Version Available", substring = true).performClick()
-      settle(30_000) { consoleHas("is not the latest minor version") }
+      poll(30_000) { consoleHas("is not the latest minor version") }
       assertEquals(2, tree()!!.selected)
-      settle(10_000) { !consoleHas("Executing ':app:hello'") }
+      poll(10_000) { !consoleHas("Executing ':app:hello'") }
       shot("build-tree-2-warning")
 
       // Successful steps are hidden; the eye button's "Show Successful Steps" shows them.
@@ -343,10 +345,10 @@ class RunTabsLiveTest {
       onRoot().performMouseInput { click(Offset(513f, 576f)) }
       Thread.sleep(2_000)
       onRoot().performMouseInput { click(Offset(592f, 634f)) }
-      settle(20_000) { rows()?.any { it.contains(":app:hello") } == true }
+      poll(20_000) { rows()?.any { it.contains(":app:hello") } == true }
       println("[rows with successful steps] ${rows()}")
       onNodeWithText(":app:hello", substring = true).performClick()
-      settle(15_000) { tree()?.selected == 3 && consoleHas("> Task :app:hello") }
+      poll(15_000) { tree()?.selected == 3 && consoleHas("> Task :app:hello") }
       Thread.sleep(1_000)
       println("[after task click] selected=${tree()?.selected}")
       assertEquals(3, tree()!!.selected)
@@ -357,7 +359,7 @@ class RunTabsLiveTest {
 
       // Back to the whole run.
       onNodeWithText("hello: successful", substring = true).performClick()
-      settle(15_000) { consoleHas("Executing ':app:hello'") }
+      poll(15_000) { consoleHas("Executing ':app:hello'") }
     }
 
   /** The Build tree in the Build window, after Build Project on `gradle-smoke`. */
