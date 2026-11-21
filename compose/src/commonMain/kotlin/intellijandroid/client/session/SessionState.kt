@@ -111,6 +111,15 @@ data class IndentGuide(val indentLevel: Int, val startLine: Int, val endLine: In
  */
 data class GutterIcon(val offset: Int, val iconPaths: List<String>)
 
+/** A console's text and its colors, e.g. the Run window's `Main` output. */
+data class ConsoleText(val text: String, val highlights: List<Highlight>)
+
+/** What an editor shows, as IntelliJ's `EditorKind`: a file's text, or a console's output. */
+enum class EditorKind {
+  MAIN_EDITOR,
+  CONSOLE,
+}
+
 data class EditorFile(
   val path: String,
   val text: String,
@@ -179,6 +188,11 @@ data class SessionState(
   /** Each open file's tab icon from the backend, e.g. `/…/Main.java` to `nodes/class.svg`. */
   val tabIcons: Map<String, String> = emptyMap(),
   val selectedEditor: String? = null,
+  /**
+   * The backend's consoles by `KernelAwareTextControlId.kernelEditorId`, e.g.
+   * `g9ojv29tmj8vgr2tv7gf`.
+   */
+  val consoles: Map<String, ConsoleText> = emptyMap(),
   /**
    * Text the backend put on the clipboard (`ClipboardModel.content` set by the backend, e.g. its
    * Copy Reference); the UI copies it to the system clipboard. [ClipboardText.serial] tells two

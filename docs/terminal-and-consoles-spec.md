@@ -332,6 +332,13 @@ the project is bound has to wait: the `terminalModel` extension exists only on t
 | Highlighter | `NullEditorHighlighter` (colors come only from the printed content types) |
 | Scroll bar | background = the editor background |
 
+**Addendum 2026-11-21 (IDEate's `ConsoleEditor`, `EditorView(kind = CONSOLE)`):** no line numbers, gutter icons,
+folding, indent guides, sticky lines, caret or caret row; background `CONSOLE_BACKGROUND_KEY` (editor background
+when the scheme has none); typing does nothing. Text can be selected and copied (selection kept in the composable,
+not in an edit session). The view follows the output while it is scrolled to the end and stays put when the user
+scrolled up (the second part is not tested). Not done: the console font (editor font used), the toolbar of 5.3, input to the process, links.
+The gap before the text is one gutter gap (4 dp); not compared against IntelliJ pixel by pixel.
+
 ### 5.2 Content types
 
 Each printed piece has a `ConsoleViewContentType` (IC `platform/ide-core/src/com/intellij/execution/ui/ConsoleViewContentType.java`):
@@ -404,6 +411,44 @@ the console (it had no handling for `RdAbstractDocumentId`) and so never confirm
 
 **[Open]** How content types travel: as markup highlighters on the document's `MarkupDocumentExtension` (the
 likely way, since `ConsoleContentTypeHandler` maps highlighters), with which attribute key names.
+
+**Addendum 2026-11-21 (phase 1, answers both [Open] items above):**
+
+- **Output does not stop.** The backend sends every piece the program prints as its own `RdDocumentChange`,
+  without waiting for the client. Run on `Slow` (prints `tick 1` … `tick 6` 0.7 s apart, then a stderr line):
+
+  ```
+  RdResetDocumentChange(text = "", newVersion = (0, 127))
+  RdDocumentChange(offset = 0,   len = 407, v0 -> v1)   the command line and "tick 1\n"
+  RdDocumentChange(offset = 407, len = 7,   v1 -> v2)   "tick 2\n"       0.6 s later
+  …
+  RdDocumentChange(offset = 442, len = 24,  v6 -> v7)   "done with an error line\n"
+  RdDocumentChange(offset = 466, len = 35,  v7 -> v8)   "\nProcess finished with exit code 0"
+  ```
+
+  The 2026-11-21 probe saw "nothing more in 60 s" because the client had no handling for it: for a document
+  without an edit session `ClientSession` kept the patches in `earlyPatches` and applied only
+  `RdResetDocumentChange`. The [Inferred] reason (the backend waiting for the client to confirm a version) was
+  wrong: with `ConsoleDocuments` applying the changes, nothing is sent back and the whole output arrives, also
+  when the Run tool window is not shown, no Lux panel is visible, and the client does not report the text
+  control as visible (checked each way on 2026-11-21). A short program such as `Main` finishes in about
+  100 ms, so its first change already holds the command line and the whole output.
+- **A console is a text control with `kind == Console`** whose document has an `RdAbstractDocumentId`; the
+  client keeps its text from the patches alone (no edit session, nothing is sent back). The control's
+  `MarkupTextControlExtension` and the document's `MarkupDocumentExtension` are set up as for an editor.
+- **Content types are markup highlighters on the document-level markup model** (the one the client adds with
+  `RdMarkupKey(projectId)`; the editor-level one stayed empty). Each is a `DefaultHighlighterModel` with
+  `layer = 1001` and one `textAttributesKey`, covering exactly the printed piece:
+
+  ```
+  document:20  CONSOLE_SYSTEM_OUTPUT  0-400     '/Users/…/bin/java -javaagent:… demo.Slow'
+  document:19  CONSOLE_NORMAL_OUTPUT  400-407   'tick 1\n'
+  document:46  CONSOLE_ERROR_OUTPUT   442-466   'done with an error line\n'
+  document:50  CONSOLE_SYSTEM_OUTPUT  466-501   '\nProcess finished with exit code 0'
+  ```
+
+  `EditorScheme.style` resolves them in Islands Dark (stderr `0xFFF75464`, stdout `0xFFBCBEC4`). A highlighter arrives a moment after its text (the "Process finished" one after the
+  patch), so a console is published again when its markup changes.
 
 ---
 
@@ -631,8 +676,8 @@ How the [Seen run] facts were recorded, so they can be checked again:
 
 | # | Question | Where it matters |
 |---|---|---|
-| 1 | Why a running program's console got only its first change (6.2) | plan phase 1 |
-| 2 | Which markup carries console content types, and its key names (6.2) | plan phase 1 |
+| 1 | ~~Why a running program's console got only its first change (6.2)~~ answered 2026-11-21: the client dropped the changes; the backend sends them all (6.2 addendum) | plan phase 1 |
+| 2 | ~~Which markup carries console content types, and its key names (6.2)~~ answered 2026-11-21: document-level markup, `DefaultHighlighterModel` with `CONSOLE_*_OUTPUT` keys (6.2 addendum) | plan phase 1 |
 | 3 | Whether `LxLocalComponent.bounds` is set after layout (7.2) | plan phase 2 |
 | 4 | ~~Whether `closed = true` ends the terminal's shell (3.4)~~ Answered 2026-11-21: yes, the shell is gone within 5 s | plan phase 4 |
 | 5 | The serialized `IconId` layout (9.3) | plan phase 3 |

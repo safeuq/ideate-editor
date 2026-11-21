@@ -500,7 +500,7 @@ results into spec 8, then plan.
 | Phase | State | Commit | Notes |
 |---|---|---|---|
 | Probe | done 2026-11-21 | bd564bc | spec 11 |
-| 1 Console text controls | planned | | |
+| 1 Console text controls | done 2026-11-21 | the commit "Consoles: read-only console editor…" | Output never stopped: the client dropped the changes (spec 6.2 addendum). `ConsoleEditor` has local selection and copy, follows output at the end, no caret. Live test also runs `Slow` (appendix B) |
 | 2 Run and Build tabs | planned | | |
 | 3 Build tree | planned | | |
 | 4 Terminal | done 2026-11-21 (desktop checked live; device run left to the coordinator) | 515c149 | terminal keys in the keyboard bar, as icons (user, 2026-11-21). Differs from the plan: own canvas renderer (not `EditorView`'s `CONSOLE` mode); the bar sits between the tool window bar and the status bar in every layout; the soft keyboard is detected with `WindowInsets.ime`; tests also in `desktop/src/test` (`TerminalLiveTest`, `TerminalUiTest`); no IntelliJ reference PNG (this environment can't capture a window). Spec 3.4 and 4 have addenda |
@@ -650,6 +650,11 @@ app/build.gradle.kts          plugins { java }
     </configuration>
   </component>
 ```
+
+`smoke` also gets `src/demo/Slow.java` (prints `tick 1` … `tick 6` 0.7 s apart with `Thread.sleep(700)`, then
+`System.err.println("done with an error line")`) and a second shared configuration `Slow` next to `Main`
+(`ConsoleRunTest` runs both). Both configurations are `.idea/runConfigurations/<name>.xml`, type `Application`,
+`MAIN_CLASS_NAME` `demo.Main` / `demo.Slow`, module `smoke`.
 
 `smoke` (plain Java; the backend needs a JDK named in `.idea/misc.xml`, e.g. `project-jdk-name="temurin-25"`,
 registered in the test backend's `config/options/jdk.table.xml`):

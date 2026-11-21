@@ -1,6 +1,7 @@
 package intellijandroid.client.session
 
 import com.intellij.platform.split.protocol.DefaultSplitMarshallersProvider
+import com.jetbrains.codeWithMe.model.CwmRunConfigurationExecuteArgs
 import com.jetbrains.codeWithMe.model.RdFileIconParams
 import com.jetbrains.codeWithMe.model.RdFindFileParams
 import com.jetbrains.codeWithMe.model.RdProjectViewAsyncPane
@@ -8,6 +9,7 @@ import com.jetbrains.codeWithMe.model.RdProjectViewItem
 import com.jetbrains.codeWithMe.model.RdProjectViewNavigation
 import com.jetbrains.codeWithMe.model.SyntaxHighlighterModel
 import com.jetbrains.codeWithMe.model.VfsModel
+import com.jetbrains.codeWithMe.model.codeWithMeRunConfigurationsModel
 import com.jetbrains.codeWithMe.model.editorTabsModel
 import com.jetbrains.codeWithMe.model.navigationBarModel
 import com.jetbrains.codeWithMe.model.projectViewModel
@@ -47,6 +49,7 @@ import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.IconWithOverlayModel
 import com.jetbrains.rd.ide.model.ImageIconModel
 import com.jetbrains.rd.ide.model.IndicatorIconModel
+import com.jetbrains.rd.ide.model.KernelAwareTextControlId
 import com.jetbrains.rd.ide.model.MarkupDocumentExtension
 import com.jetbrains.rd.ide.model.MarkupTextControlExtension
 import com.jetbrains.rd.ide.model.OffsetIconModel
@@ -85,6 +88,7 @@ import com.jetbrains.rd.ide.model.RowIconModel
 import com.jetbrains.rd.ide.model.Solution
 import com.jetbrains.rd.ide.model.SuccessfulRequestComposite
 import com.jetbrains.rd.ide.model.TextControlId
+import com.jetbrains.rd.ide.model.TextControlLocation
 import com.jetbrains.rd.ide.model.VisibleRange
 import com.jetbrains.rd.ide.model.asyncActionsModel
 import com.jetbrains.rd.ide.model.clipboardModel
@@ -109,6 +113,7 @@ import intellijandroid.client.connection.Connection
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.connection.SplitWire
 import intellijandroid.client.kernel.SearchKernel
+import intellijandroid.client.session.console.ConsoleDocuments
 import intellijandroid.client.session.terminal.TerminalSessions
 import intellijandroid.client.ui.IconJar
 import intellijandroid.client.ui.MenuEntry
@@ -239,6 +244,8 @@ class ClientSession(
   private val caretsRestored = mutableMapOf<String, Int>()
   private var saveScheduled = false
   private val editSessions = mutableMapOf<RdDocumentId, EditSession>()
+  /** Console documents (Run, Build Output): text from patches only, no edit session. */
+  private val consoles = ConsoleDocuments { reason -> log("Console out of step: $reason") }
   /**
    * Backend patches for a document that arrived before its editor existed (normally the editor
    * comes first).
@@ -365,6 +372,22 @@ class ClientSession(
 
   /** Opens a Packages or Scopes row's file; the backend opens the editor. */
   fun paneOpen(nodeId: Int) = onRd { projectViews.open(nodeId) }
+
+  /**
+   * Runs a run configuration like the run widget's play button, e.g.
+   * `runConfiguration("Application.Main")` (the key in
+   * `codeWithMeRunConfigurationsModel.runConfigurations`); [executorId] is `Run` or `Debug`.
+   */
+  fun runConfiguration(id: String, executorId: String = "Run") = onRd {
+    val model =
+      requireNotNull(solution) { "No project is open; cannot run $id" }
+        .codeWithMeRunConfigurationsModel
+    // The backend lists its run configurations a few seconds after the project opens.
+    model.runConfigurations.view(lifetime) { _, key, configuration ->
+      if (key == id)
+        configuration.execute.start(lifetime, CwmRunConfigurationExecuteArgs(executorId))
+    }
+  }
 
   /**
    * The backend tool windows on screen, e.g. `{"Gradle"}`: the backend builds their content only
@@ -800,10 +823,12 @@ class ClientSession(
     requestResponse = requestResponseModel
     requestResponseModel.backendPatches.advise(lifetime) { patchWithMetadata ->
       val patch = patchWithMetadata.patch
+      consoles.apply(patch).forEach(::publishDocument)
       val handled = editSessions.values.filter { it.concerns(patch) }
       handled.forEach { it.backendPatch(patch) }
       for (change in patch.changes) {
         val documentId = (change as? RdDocumentChangeBase)?.documentId ?: continue
+        if (documentId in consoles) continue
         if (editSessions[documentId] == null) {
           earlyPatches.getOrPut(documentId) { mutableListOf() } += patch
           if (change is RdResetDocumentChange) {
@@ -877,7 +902,9 @@ class ClientSession(
         }
       }
       document.textControls.view(documentLifetime) { controlLifetime, controlId, control ->
-        createEditSession(controlLifetime, documentId, controlId)
+        if (controlId.kind == TextControlLocation.Console) {
+          registerConsole(documentId, controlId)
+        } else createEditSession(controlLifetime, documentId, controlId)
         val markupExtension =
           control.extensions.filterIsInstance<MarkupTextControlExtension>().firstOrNull()
             ?: return@view log("Editor has no markup extension; no highlighting")
@@ -899,6 +926,10 @@ class ClientSession(
         editSessions.remove(documentId)
         earlyPatches.remove(documentId)
         documentTexts.remove(documentId)
+        consoles.kernelEditorId(documentId)?.let { id ->
+          consoles.remove(documentId)
+          mutableState.update { it.copy(consoles = it.consoles - id) }
+        }
         documentHighlights.remove(documentId)
         val path = pathOf(documentId)
         mutableState.update { state ->
@@ -1514,6 +1545,21 @@ class ClientSession(
     }
   }
 
+  /**
+   * A console text control (`kind == Console`) has no file, so [EditorIdentity.of] has nothing to
+   * work with; its text only comes from the backend's patches ([ConsoleDocuments]).
+   */
+  private fun registerConsole(documentId: RdDocumentId, controlId: TextControlId) {
+    val kernelEditorId =
+      requireNotNull((controlId as? KernelAwareTextControlId)?.kernelEditorId) {
+        "Console text control without a kernel editor id: $controlId"
+      }
+    consoles.register(documentId, kernelEditorId)
+    earlyPatches.remove(documentId)?.forEach { consoles.apply(it) }
+    documentTexts.remove(documentId)
+    publishDocument(documentId)
+  }
+
   private var recovering = false
 
   /**
@@ -1616,6 +1662,7 @@ class ClientSession(
   }
 
   private fun publishDocument(documentId: RdDocumentId) {
+    if (documentId in consoles) return publishConsole(documentId)
     val session = editSessions[documentId]?.takeIf { it.isReady }
     // The caret may have moved into another class or method.
     if (session != null && pathOf(documentId) == mutableState.value.selectedEditor) {
@@ -1702,6 +1749,22 @@ class ClientSession(
     }
     // A backend selection that came before this file's tab.
     pendingBackendSelection?.let(::followBackendSelection)
+  }
+
+  private fun publishConsole(documentId: RdDocumentId) {
+    val text = consoles.text(documentId) ?: return
+    val id = requireNotNull(consoles.kernelEditorId(documentId))
+    val scheme = mutableState.value.scheme
+    val highlights =
+      if (scheme == null) emptyList()
+      else
+        documentHighlights[documentId]
+          ?.values
+          .orEmpty()
+          .filter { it.start in 0..it.end && it.end <= text.length }
+          .map { Highlight(it.id, it.start, it.end, it.layer, scheme.style(it.keyChains)) }
+          .sortedWith(compareBy({ it.layer }, { it.start }))
+    mutableState.update { it.copy(consoles = it.consoles + (id to ConsoleText(text, highlights))) }
   }
 
   /** Where [path]'s tab goes; a file opened some other way goes last. */

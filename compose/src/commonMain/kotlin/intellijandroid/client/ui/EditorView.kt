@@ -78,6 +78,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import intellijandroid.client.session.EditorFile
 import intellijandroid.client.session.EditorKey
+import intellijandroid.client.session.EditorKind
 import intellijandroid.client.session.EditorScheme
 import intellijandroid.client.session.Highlight
 import intellijandroid.client.session.IndentGuide
@@ -182,7 +183,13 @@ fun EditorView(
   backendMenu: (() -> List<MenuEntry>?)? = null,
   /** Told whether sticky lines show at the top, e.g. to drop a line drawn just above them. */
   onStickyShown: (Boolean) -> Unit = {},
+  /**
+   * `CONSOLE` is IntelliJ's console editor (`ConsoleViewUtil.setupConsoleEditor`): no gutter, no
+   * caret, no caret row, no typing. Text can still be selected and copied.
+   */
+  kind: EditorKind = EditorKind.MAIN_EDITOR,
 ) {
+  val isConsole = kind == EditorKind.CONSOLE
   val fonts = LocalClientFonts.current
   val density = LocalDensity.current
   val measurer = rememberTextMeasurer(cacheSize = 512)
@@ -201,7 +208,7 @@ fun EditorView(
     }
 
   val metrics =
-    remember(textStyle, lines.count, density) {
+    remember(textStyle, lines.count, density, isConsole) {
       with(density) {
         // IntelliJ: lineHeight = ceil(fontMetricsHeight × lineSpacing); the extra space is split
         // above and below.
@@ -230,7 +237,10 @@ fun EditorView(
         val lineNumbersRight = numbersLeft + lineNumberWidth
         val iconAreaLeft = lineNumbersRight + IslandsDark.gutterGap.toPx()
         val gutterWidth =
-          iconAreaLeft + 17.dp.toPx() + IslandsDark.gutterGap.toPx() + 11.dp.toPx() + 6.dp.toPx()
+          // A console has no line numbers, icons or folding: only the gap before the text.
+          if (isConsole) IslandsDark.gutterGap.toPx()
+          else
+            iconAreaLeft + 17.dp.toPx() + IslandsDark.gutterGap.toPx() + 11.dp.toPx() + 6.dp.toPx()
         EditorMetrics(
           lineHeight = lineHeight,
           baseline = sample.firstBaseline + extra,
@@ -353,7 +363,7 @@ fun EditorView(
   var viewport by remember { mutableStateOf(IntSize.Zero) }
   val viewportHeight = viewport.height
   LaunchedEffect(caretLine, viewportHeight, focused) {
-    if (!focused || viewportHeight == 0) return@LaunchedEffect
+    if (isConsole || !focused || viewportHeight == 0) return@LaunchedEffect
     val layout = listState.layoutInfo
     val item = layout.visibleItemsInfo.firstOrNull { it.index == caretLine }
     val lineHeight = layout.visibleItemsInfo.firstOrNull()?.size ?: 0
@@ -373,6 +383,18 @@ fun EditorView(
     }
   }
 
+  // A console follows its output while the view is at the end (IntelliJ's caret-at-end scrolling);
+  // scrolled up to read, it stays where it is. Read once a scroll ends, not on every layout, since
+  // new lines make the view "not at the end" until it has scrolled down to them.
+  var atEnd by remember { mutableStateOf(true) }
+  if (isConsole) {
+    LaunchedEffect(listState) {
+      snapshotFlow { listState.isScrollInProgress }
+        .collect { scrolling -> if (!scrolling) atEnd = !listState.canScrollForward }
+    }
+    LaunchedEffect(lines.count) { if (atEnd) listState.scrollToItem(lines.count - 1) }
+  }
+
   LaunchedEffect(longestLine, viewport.width, metrics) {
     // Room for the widest line plus two columns, like IntelliJ's scrolling past the longest line.
     scroll.max =
@@ -381,7 +403,7 @@ fun EditorView(
   }
   LaunchedEffect(file.path) { scroll.x = 0f }
   LaunchedEffect(caret, viewport.width, focused) {
-    if (!focused || viewport.width == 0) return@LaunchedEffect
+    if (isConsole || !focused || viewport.width == 0) return@LaunchedEffect
     val caretX = (caret - lines.starts[caretLine]) * metrics.charWidth
     val textWidth = viewport.width - metrics.gutterWidth
     scroll.x =
@@ -578,6 +600,7 @@ fun EditorView(
       copy()
       return true
     }
+    if (isConsole) return false
     navigationAction(event)?.let { actionId ->
       actions.runAction(actionId)
       return true
@@ -661,6 +684,16 @@ fun EditorView(
   fun menu(): List<MenuEntry> {
     val current = currentFile
     val hasSelection = current.selectionStart != current.selectionEnd
+    if (isConsole)
+      return listOf(
+        MenuItem(
+          "Copy",
+          shortcut("⌘C", "Ctrl+C"),
+          enabled = hasSelection,
+          iconPath = "expui/general/copy.svg",
+          onClick = ::copy,
+        ),
+      )
     return listOf(
       MenuItem(
         "Show Context Actions",
@@ -761,6 +794,11 @@ fun EditorView(
     }
   }
 
+  // IntelliJ's console color key; schemes without it use the editor's background.
+  val background =
+    if (isConsole) scheme.color("CONSOLE_BACKGROUND_KEY") ?: scheme.background
+    else scheme.background
+
   ContextMenuArea(
     entries = {
       if (backendMenu == null) menu() else backendMenu()?.let(::withLocalClipboard)
@@ -781,9 +819,10 @@ fun EditorView(
       modifier =
         Modifier.fillMaxSize()
           .scrollable(scroll.scrollable, Orientation.Horizontal, reverseDirection = true)
-          .background(Color(scheme.background))
+          .background(Color(background))
           .drawWithContent {
             drawContent()
+            if (isConsole) return@drawWithContent
             // The gutter's border line, the editor's full height (New UI,
             // EditorGutterComponentImpl.paint): 1 px in the scheme's INDENT_GUIDE color at
             // getWhitespaceSeparatorOffset() = gutter width - 3, over the caret row.
@@ -868,7 +907,9 @@ fun EditorView(
               // ⌘-click (Ctrl-click off the Mac): IntelliJ's Declaration or Usages at the click.
               // Consumed here so the tap handler doesn't move the caret back after the jump.
               val modifiers = currentEvent.keyboardModifiers
-              if (if (IS_MAC) modifiers.isMetaPressed else modifiers.isCtrlPressed) {
+              if (
+                !isConsole && (if (IS_MAC) modifiers.isMetaPressed else modifiers.isCtrlPressed)
+              ) {
                 down.consume()
                 focusRequester.requestFocus()
                 moveTo(offsetAt(down.position), extend = false)
@@ -905,8 +946,10 @@ fun EditorView(
           measurer = measurer,
           textStyle = textStyle,
           lineNumberStyle = lineNumberStyle,
-          caretColumn = if (lines.lineOf(caret) == line) caret - lines.starts[line] else null,
-          caretVisible = focused && caretOn && line == caretLine,
+          caretColumn =
+            if (!isConsole && lines.lineOf(caret) == line) caret - lines.starts[line] else null,
+          caretVisible = !isConsole && focused && caretOn && line == caretLine,
+          showGutter = !isConsole,
           selectionStart = if (inSelection) selectionStart else -1,
           selectionEnd = if (inSelection) selectionEnd else -1,
           scroll = scroll,
@@ -990,6 +1033,7 @@ fun EditorView(
                 lineNumberStyle = lineNumberStyle,
                 caretColumn = null,
                 caretVisible = false,
+                showGutter = !isConsole,
                 selectionStart = -1,
                 selectionEnd = -1,
                 scroll = scroll,
@@ -1063,6 +1107,8 @@ private fun EditorLine(
   lineNumberStyle: TextStyle,
   caretColumn: Int?,
   caretVisible: Boolean,
+  /** False in a console: no line number, no gutter icon. */
+  showGutter: Boolean,
   selectionStart: Int,
   selectionEnd: Int,
   scroll: SidewaysScroll,
@@ -1156,6 +1202,7 @@ private fun EditorLine(
       }
     }
 
+    if (!showGutter) return@Canvas
     // Gutter: line number right-aligned on the editor's baseline, brighter on the caret line.
     val numberColor =
       scheme
