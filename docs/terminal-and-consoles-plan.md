@@ -503,7 +503,7 @@ results into spec 8, then plan.
 | 1 Console text controls | planned | | |
 | 2 Run and Build tabs | planned | | |
 | 3 Build tree | planned | | |
-| 4 Terminal | done 2026-11-21 (desktop checked live; device run left to the coordinator) | this commit | terminal keys in the keyboard bar, as icons (user, 2026-11-21). Differs from the plan: own canvas renderer (not `EditorView`'s `CONSOLE` mode); the bar sits between the tool window bar and the status bar in every layout; the soft keyboard is detected with `WindowInsets.ime`; tests also in `desktop/src/test` (`TerminalLiveTest`, `TerminalUiTest`); no IntelliJ reference PNG (this environment can't capture a window). Spec 3.4 and 4 have addenda |
+| 4 Terminal | done 2026-11-21 (desktop checked live; device run left to the coordinator) | 515c149 | terminal keys in the keyboard bar, as icons (user, 2026-11-21). Differs from the plan: own canvas renderer (not `EditorView`'s `CONSOLE` mode); the bar sits between the tool window bar and the status bar in every layout; the soft keyboard is detected with `WindowInsets.ime`; tests also in `desktop/src/test` (`TerminalLiveTest`, `TerminalUiTest`); no IntelliJ reference PNG (this environment can't capture a window). Spec 3.4 and 4 have addenda |
 | 5 Services | needs a probe; later (user, 2026-11-21) | | |
 | 6 Debug | needs a probe; later (user, 2026-11-21) | | |
 
