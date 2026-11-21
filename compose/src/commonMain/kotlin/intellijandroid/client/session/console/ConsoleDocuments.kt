@@ -55,6 +55,9 @@ class ConsoleDocuments(
           val version = console.version
           if (version != item.oldVersion) {
             outOfStep("v${item.newVersion.value} came after v${version?.value}")
+            // ponytail: after this, every later change of this console is dropped too (each one
+            // builds on a version we don't have) until the next RdResetDocumentChange, so the text
+            // stays stale. Lift by asking the backend for the console's text again.
             continue
           }
           val end = (item.offset + item.oldText.length).coerceAtMost(console.text.length)

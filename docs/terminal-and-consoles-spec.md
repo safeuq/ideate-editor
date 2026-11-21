@@ -449,6 +449,9 @@ likely way, since `ConsoleContentTypeHandler` maps highlighters), with which att
 
   `EditorScheme.style` resolves them in Islands Dark (stderr `0xFFF75464`, stdout `0xFFBCBEC4`). A highlighter arrives a moment after its text (the "Process finished" one after the
   patch), so a console is published again when its markup changes.
+- **Known limit:** when a change does not build on the version the client has (`oldVersion` differs), the
+  client logs it and drops that change; every later change of that console fails the same check, so the text
+  stays stale until the next `RdResetDocumentChange` for it (`ConsoleDocuments.apply`, `ponytail:` comment).
 
 ---
 

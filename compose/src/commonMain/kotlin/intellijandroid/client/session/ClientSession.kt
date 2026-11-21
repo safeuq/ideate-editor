@@ -383,9 +383,8 @@ class ClientSession(
       requireNotNull(solution) { "No project is open; cannot run $id" }
         .codeWithMeRunConfigurationsModel
     // The backend lists its run configurations a few seconds after the project opens.
-    model.runConfigurations.view(lifetime) { _, key, configuration ->
-      if (key == id)
-        configuration.execute.start(lifetime, CwmRunConfigurationExecuteArgs(executorId))
+    startWhenListed(lifetime, model.runConfigurations, id) { configuration ->
+      configuration.execute.start(lifetime, CwmRunConfigurationExecuteArgs(executorId))
     }
   }
 
