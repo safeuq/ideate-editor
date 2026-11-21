@@ -113,7 +113,7 @@ import intellijandroid.client.connection.Connection
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.connection.SplitWire
 import intellijandroid.client.kernel.SearchKernel
-import intellijandroid.client.session.build.BuildTrees
+import intellijandroid.client.session.buildtree.BuildTrees
 import intellijandroid.client.session.console.ConsoleDocuments
 import intellijandroid.client.session.terminal.TerminalSessions
 import intellijandroid.client.ui.IconJar

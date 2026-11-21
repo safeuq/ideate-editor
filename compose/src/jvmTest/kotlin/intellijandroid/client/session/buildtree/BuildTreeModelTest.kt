@@ -1,4 +1,4 @@
-package intellijandroid.client.session.build
+package intellijandroid.client.session.buildtree
 
 import intellijandroid.client.session.ProjectTree
 import kotlin.test.Test
