@@ -555,3 +555,47 @@ open before (e.g. `beforeFileOpened Main.java`), none after, while "Opening remo
 Same JVM options and plugins. A backend with empty config, system, log and plugins folders (only
 `options/jdk.table.xml` copied, so the project's JDK resolves) calls it again. Cause in the old folder not
 found; use a fresh folder when a test needs the decompiler's question.
+
+## Addendum (2026-11-21): popups with no dialog open are windows of their own
+
+**Cause of the blinking popups.** Hovering a button in a backend-painted panel (e.g. Rerun in the Run
+window's toolbar) makes the backend open its tooltip as an `LxWindow` that is not an `LxDialog`
+(`typePopup = true`, `focusableWindowState = true`, owner `LxIdeFrameRef`, position `LxPoint(431, 594)` in
+window dp, 127 × 34, text "Rerun 'Main' ⌘R"). IDEate showed it in a Compose `Dialog`, which covers the
+whole window. The panel under the still mouse got a pointer exit, IDEate sent `LxMouseEvent Exited`, the
+backend hid the tooltip, the panel got `Entered` again and the backend showed a new tooltip about 0.5 s
+later. This repeated about every 0.75 s (log: `Exited 15:54:05.021`, popup hidden `15:54:05.178`,
+`Entered 15:54:05.214`, popup shown `15:54:05.730`).
+
+**What JetBrains Client does** (`com.jetbrains.thinclient.lux.swing.LuxFrontendWindow` and
+`LuxFrontendWindowAdapter`, `intellij.platform.frontend.split.jar`):
+
+| Part | JetBrains Client |
+|---|---|
+| Window | a `JWindow` of the popup's own size, `Type.POPUP`, at `model.position` |
+| Show / hide | follows `model.visible`, `toFront()` on show |
+| Focus | `setFocusableWindowState(model.focusableWindowState)` |
+| Outside click | does not close the popup |
+| `LxWindowEvent` | `GainedFocus`, `LostFocus`, `Closed` only from real AWT window focus events |
+
+So the popup never covers the panel and the hover stays on the panel.
+
+**The fix.** A popup with no non-popup dialog open (`LuxOwnerlessPopup` in `LuxDialogView.kt`) is shown with
+`AppPopup` at its backend position (window dp from the window's top left, as `LuxDialogs` is at the root of
+the client screen). On the desktop `WindowPopupHost` gives it its own small borderless popup window.
+- `focusable` is the backend's `focusableWindowState` (`LuxDialog.focusableWindowState`), for every popup. A
+  popup over a dialog (`LuxPopup`, Rename's Scope list) follows the same rule.
+- A focusable owner-less popup gets `LxWindowEvent(Activated)` and `(GainedFocus)` when it shows, as AWT
+  does for a window on show. Sending them does not close the tooltip (checked live).
+- No close on an outside click, as in JetBrains Client. A focusable popup closes when its window loses the
+  focus (`closeWindow`: Closing and Escape, from `WindowPopupHost`'s `windowLostFocus`); a non-focusable
+  popup gets `onDismissRequest = null` and the backend closes it (a tooltip when the mouse leaves).
+- Note: Compose's in-window `Popup` (`WindowLayerPopupHost`, Android and the test harness) does call
+  `onDismissRequest` on an outside click, also when it is not focusable (checked with a throwaway test);
+  `WindowPopupHost` does not. A focusable popup in the in-window host also blocks hover under it, so the
+  tooltip loop still shows there; the hover check needs a real window.
+
+**Checked live** (`LuxPopupLiveTest`, `smoke` project on a git repo, backend port 5992): Git ▸ Branches is a
+focusable popup (`inputLocation` stays null: its search is a speed search on the list, no caret), typing
+"two" filters it to `feature-two`, and a click outside closes it. The Run toolbar's ⋮ menu is not a Lux
+popup but a backend list popup (`BackendPopups`).

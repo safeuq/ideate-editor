@@ -40,8 +40,8 @@ class LuxDialog(
   val id: Int,
   val modal: Boolean,
   /**
-   * A popup window (`LxWindow`, e.g. New ▸ File's name popup): no title row, closes on a click
-   * outside.
+   * A popup window (`LxWindow`, e.g. New ▸ File's name popup): no title row. It closes when its
+   * window loses the focus, not on a click outside (docs/lux-protocol.md, 2026-11-21).
    */
   val popup: Boolean,
   /**
@@ -68,6 +68,13 @@ class LuxDialog(
    * (`LxPanel.inputLocation`, e.g. `LxRect(12, 40, 1, 18)`), and null when the focus leaves text.
    */
   var acceptsText by mutableStateOf(false)
+  /**
+   * The backend's `LxWindow.focusableWindowState`, e.g. true for a tooltip and for the Git branches
+   * list. A popup's window takes the focus only when this is true, as JetBrains Client's
+   * `LuxFrontendWindowAdapter` does with `setFocusableWindowState`; a window that is not focusable
+   * never blocks the mouse for what is under it.
+   */
+  var focusableWindowState by mutableStateOf(false)
   /**
    * Controls the client draws itself inside the panel (`LxPanel.localComponents`), e.g. the Run
    * window's console at `LxRect(0, 28, 900, 272)`; see [LuxPanelHost].
@@ -139,6 +146,9 @@ internal class LuxDialogs(
       component.inputLocation.advise(componentLifetime) { location ->
         dialog.acceptsText = location != null
       }
+      component.focusableWindowState.advise(componentLifetime) { focusable ->
+        dialog.focusableWindowState = focusable
+      }
       component.position.advise(componentLifetime) { position ->
         dialog.x = position.x.toInt()
         dialog.y = position.y.toInt()
@@ -170,7 +180,9 @@ internal class LuxDialogs(
           publish(dialogs.values.toList())
           // Without focus the backend's dialog ignores keys and draws no caret (recorded). A popup
           // leaves the focus with its dialog, as an OS does for a combo's list: the combo keeps it.
-          if (!dialog.popup) {
+          // A focusable popup with no dialog open has a window of its own, which gets the focus as
+          // an AWT window does on show (JetBrains Client reports it).
+          if (!dialog.popup || (dialog.focusableWindowState && dialogs.values.none { !it.popup })) {
             send(id, LxWindowEvent(LxWindowEventType.Activated, null))
             send(id, LxWindowEvent(LxWindowEventType.GainedFocus, null))
           }

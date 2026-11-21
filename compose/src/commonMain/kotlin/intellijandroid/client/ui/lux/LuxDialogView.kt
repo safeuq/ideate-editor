@@ -57,10 +57,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.jetbrains.rd.ide.model.LxEvent
 import com.jetbrains.rd.ide.model.LxInputMethodEvent
@@ -80,6 +82,7 @@ import intellijandroid.client.session.SessionState
 import intellijandroid.client.ui.EditorTextTarget
 import intellijandroid.client.ui.LocalEditorTextInput
 import intellijandroid.client.ui.ProjectTreeView
+import intellijandroid.client.ui.component.AppPopup
 import intellijandroid.client.ui.console.ConsoleEditor
 import intellijandroid.client.ui.dialog.DialogLook
 import intellijandroid.client.ui.dialog.dialogFrame
@@ -101,8 +104,42 @@ fun LuxDialogs(dialogs: List<LuxDialog>, session: ClientSession) {
   for (dialog in windows) key(dialog.id) {
     LuxDialogWindow(dialog, session, if (dialog === top) popups else emptyList())
   }
-  if (top == null)
-    for (popup in popups) key(popup.id) { LuxDialogWindow(popup, session, emptyList()) }
+  if (top == null) for (popup in popups) key(popup.id) { LuxOwnerlessPopup(popup, session) }
+}
+
+/**
+ * A popup with no dialog open (a tooltip over a panel, the Git branches list), in a window of its
+ * own at the backend's position, as JetBrains Client's `LuxFrontendWindow` does: a `Dialog` here
+ * would cover the whole window, the panel under the still mouse would get a pointer exit, the
+ * backend would hide its tooltip, the panel would get the enter back and the backend would show it
+ * again, about every 0.75 s. [LuxDialogs] is at the root of the client screen, so the anchor is the
+ * window's top left and the backend's position (window dp) is added to it.
+ */
+@Composable
+private fun LuxOwnerlessPopup(popup: LuxDialog, session: ClientSession) {
+  val density = LocalDensity.current.density
+  fun send(event: LxEvent) = session.luxEvent(popup.id, event)
+  AppPopup(
+    position =
+      object : PopupPositionProvider {
+        override fun calculatePosition(
+          anchorBounds: IntRect,
+          windowSize: IntSize,
+          layoutDirection: LayoutDirection,
+          popupContentSize: IntSize,
+        ) =
+          IntOffset(
+            anchorBounds.left + (popup.x * density).roundToInt(),
+            anchorBounds.top + (popup.y * density).roundToInt(),
+          )
+      },
+    // As JetBrains Client: no close on an outside click. A focusable popup closes when its window
+    // loses the focus (WindowPopupHost); the backend closes the others (a tooltip on mouse exit).
+    onDismissRequest = if (popup.focusableWindowState) ({ closeWindow(::send) }) else null,
+    focusable = popup.focusableWindowState,
+  ) {
+    Box(Modifier.dialogFrame()) { LuxSurface(popup, session, 1f, ::send, softKeyboard = false) }
+  }
 }
 
 /**
@@ -174,8 +211,8 @@ private fun LuxPopup(popup: LuxDialog, owner: LuxDialog, fit: Float, session: Cl
         ((popup.x - owner.x) * fit * density).roundToInt(),
         ((popup.y - owner.y) * fit * density).roundToInt(),
       ),
-    onDismissRequest = { closeWindow(::send) },
-    properties = PopupProperties(focusable = true),
+    onDismissRequest = if (popup.focusableWindowState) ({ closeWindow(::send) }) else null,
+    properties = PopupProperties(focusable = popup.focusableWindowState),
   ) {
     Box(Modifier.dialogFrame()) { LuxSurface(popup, session, fit, ::send, softKeyboard = false) }
   }
