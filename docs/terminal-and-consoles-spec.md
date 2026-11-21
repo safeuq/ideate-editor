@@ -167,6 +167,19 @@ The 16 keys inherit: the eight base ones fall back to `CONSOLE_NORMAL_OUTPUT`, e
 `\e[?1049h` switches to the alternate screen (full-screen programs); `TerminalViewImpl` shows the alternate
 editor (no scroll bars, no history), and `\e[?1049l` switches back with the regular history intact.
 
+**Addendum 2026-11-21 (phase 4, how IDEate draws it):** IDEate has its own small renderer
+(`ui/terminal/TerminalView.kt`), not the editor's: a Compose canvas over a copy of JediTerm's buffer
+(`session/terminal/TerminalScreen.kt`). Seen working against the live backend (PNGs in the phase 4 report):
+colors from the scheme keys of 2.4, the 6 dp space above the first line and below the last, a cell grid in the
+editor font (JetBrains Mono 12, line height = font height rounded up, line spacing 1.0), a filled block cursor
+with the character under it in the background color, scrolling the history, drag selection, Copy / Paste /
+Select All / Clear Buffer. Not done yet (marked `ponytail:` in the code): mouse reports to programs, the
+terminal font and spacing settings, the editor's caret blink period (500 ms is used), find in the terminal,
+IntelliJ's two-step Clear Buffer (IDEate drops the history only). The alternate buffer keeps the same grid as
+the regular one (IntelliJ gives it no 6 dp space), so entering vim doesn't resize the shell. The Escape,
+Ctrl, Tab and arrow keys of a phone's keyboard are the keyboard bar (plan 6.1); the tab title rule of 2.2 is
+`terminalTabTitle`.
+
 ---
 
 ## 3. Terminal: the split-mode wire
@@ -235,7 +248,7 @@ TtyBasedArrayDataStream, …)` reads the connector and feeds `JediEmulator` (sec
 | — the shell prints `\e]2;echo hi\a` and later `\e]2;user@host:~/gradle-smoke\a` | `title.applicationTitle` = `"echo hi"`, then `"echo"` (from `\e]1;`), then the prompt's text: the backend reads OSC 0/1/2 itself |
 | `printf '\033]0;probe-title\007'` | `applicationTitle = "probe-title"` |
 | sets `size = (60, 20)`, then runs `stty size` | output `20 60`: the backend resizes the PTY |
-| sets `closed = true` | the map entry stays until the client removes it; **[Open]** whether the shell ends |
+| sets `closed = true` | the map entry stays until the client removes it; the shell ends (see the addendum below) |
 
 - The shell is the backend user's login shell (`shellCommand = null`); its working folder is the project root.
 - No IntelliJ shell integration: no `\e]1341;…` codes. (IntelliJ's own scripts print
@@ -243,6 +256,20 @@ TtyBasedArrayDataStream, …)` reads the connector and feeds `JediEmulator` (sec
   OSC 133 (`\e]133;A\a` prompt start, `B` input start, `C;` command start, `D;0` command end) and iTerm2's
   OSC 1337 (`CurrentDir=…`, `RemoteHost=…`) appear only when the user's own shell setup prints them.
 - `defaultTitle` is `"Remote"`, so a tab with no program title shows `Remote`.
+
+**Addendum 2026-11-21 (phase 4, closing and a first tab) [Seen run]:**
+
+| Client does | Result |
+|---|---|
+| `echo $$` in the tab, then sets `closed = true` and nothing else | the shell process (the pid it printed) was gone within 5 s: **`closed = true` ends the shell** |
+| then removes the map entry | nothing more to end; the entry is only bookkeeping |
+| types `exit` in a tab | within 5 s the tab was gone from the client: the backend closes the session itself (it sets `closed` or removes the entry; the test could not tell which, because IDEate drops the tab on either) |
+| types text while the login shell is still printing its banner (this Mac's zsh prints a long banner and a two-line prompt) | the text is lost: the shell clears typed-ahead input before its first prompt. A client has nothing to fix; a test must wait until the screen stops changing |
+
+IDEate's `TerminalSessions.close(id)` therefore sets `closed = true` and then removes the entry, as JetBrains
+Client does when its widget goes away. Row 4 of section 12 is answered. Opening the Terminal window before
+the project is bound has to wait: the `terminalModel` extension exists only on the bound solution
+(`SessionState.terminalsReady`).
 
 ---
 
@@ -265,6 +292,27 @@ TtyBasedArrayDataStream, …)` reads the connector and feeds `JediEmulator` (sec
 | `TerminalDisplay` (interface the UI implements) | `setCursor(x, y)`, `setCursorShape(CursorShape)`, `beep()`, `scrollArea(top, height, dy)`, `setCursorVisible(Boolean)`, `useAlternateScreenBuffer(Boolean)`, `getWindowTitle()`/`setWindowTitle(String)`, `getSelection()`, `terminalMouseModeSet(MouseMode)`, `setMouseFormat(MouseFormat)`, `ambiguousCharsAreDoubleWidth()`; defaults `onResize`, `setBracketedPasteMode`, `getWindowForeground/Background` |
 | `TerminalKeyEncoder(Platform)` | `getCode(keyCode, modifiers): ByteArray?`, `arrowKeysApplicationSequences()` / `arrowKeysAnsiCursorSequences()`, `keypadApplicationSequences()` / `keypadAnsiSequences()`, `setAltSendsEscape`, `setMetaSendsEscape` |
 | `core.util.TermSize(columns, rows)`, `RequestOrigin {User, Remote}` | sizes |
+
+**Addendum 2026-11-21 (phase 4, what the jar does when used from Kotlin) [Seen code, Seen run]:**
+
+- `TerminalStarter`'s fifth constructor parameter (the type-ahead manager) is annotated non-null, and a
+  `null` there fails to compile unless the call has `@Suppress("NULL_FOR_NONNULL_TYPE")`. It is only used
+  when `sendBytes` / `sendString` get `userInput = true`, which would throw a `NullPointerException`; IDEate
+  passes `false` always, so no manager is needed.
+- `com.jediterm.core.input.KeyEvent` (`VK_UP = 38`, `VK_ENTER = 10`, `VK_ESCAPE = 27`, `VK_F1 = 112`, …) and
+  `com.jediterm.core.input.InputEvent` (`SHIFT_DOWN_MASK = 64`, `CTRL_DOWN_MASK = 128`, `META_DOWN_MASK = 256`,
+  `ALT_DOWN_MASK = 512`) are the AWT-free constants `getCode(keyCode, modifiers)` takes; the AWT masks
+  (1, 2, 4, 8) are not the ones it reads. `JediTerminal.getCodeForKey` follows `\e[?1h` (Up becomes `\eOA`).
+- The jar calls slf4j (`org.slf4j.Logger`); the client's lib folder has no slf4j jar, but SSHJ brings
+  `slf4j-api`, which prints "No SLF4J providers" once and logs nothing.
+- `TerminalLine` entries hold NUL (`'\u0000'`) for cells nothing was written to, and a wide character is
+  followed by a filler `'\ue000'` (`CharUtils.DWC`); both take a column.
+- The cursor position JediTerm reports is 1-based; `TerminalTextBuffer.getLine(i)` with `i < 0` counts back from
+  the newest history line.
+- The only AWT references in the jar are the three `TtyConnector.resize(java.awt.Dimension…)` default
+  methods; the desktop never calls them. On Android the build (`:android:assembleDebug`) gives no warning
+  for the missing class; whether ART loads `TtyConnector` without `java.awt.Dimension` is not yet run on a
+  device (plan 6.3).
 
 ---
 
@@ -586,7 +634,7 @@ How the [Seen run] facts were recorded, so they can be checked again:
 | 1 | Why a running program's console got only its first change (6.2) | plan phase 1 |
 | 2 | Which markup carries console content types, and its key names (6.2) | plan phase 1 |
 | 3 | Whether `LxLocalComponent.bounds` is set after layout (7.2) | plan phase 2 |
-| 4 | Whether `closed = true` ends the terminal's shell (3.4) | plan phase 4 |
+| 4 | ~~Whether `closed = true` ends the terminal's shell (3.4)~~ Answered 2026-11-21: yes, the shell is gone within 5 s | plan phase 4 |
 | 5 | The serialized `IconId` layout (9.3) | plan phase 3 |
 | 6 | Debug tool window: not probed | plan phase 6 |
 | 7 | Services content: needs a project with a dashboard service, e.g. Spring Boot | plan phase 5 |

@@ -1,5 +1,6 @@
 package intellijandroid.client.session
 
+import intellijandroid.client.session.terminal.TerminalTabState
 import intellijandroid.client.ui.MenuEntry
 
 /** One piece of a tree node's label, e.g. the project name (bold) and its path (grey). */
@@ -217,6 +218,10 @@ data class SessionState(
   val crumbMenu: CrumbMenu? = null,
   /** The backend's running tasks, newest last. */
   val tasks: List<BackgroundTask> = emptyList(),
+  /** The Terminal tool window's tabs, in the order they opened. */
+  val terminals: List<TerminalTabState> = emptyList(),
+  /** A terminal tab can open: the project is bound (its terminal model exists). */
+  val terminalsReady: Boolean = false,
 )
 
 /** Context menu number [serial]; [entries] null until the backend has answered ("Loading…"). */

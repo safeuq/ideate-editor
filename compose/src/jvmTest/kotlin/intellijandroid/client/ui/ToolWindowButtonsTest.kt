@@ -25,7 +25,8 @@ class ToolWindowButtonsTest {
       mapOf(
         Place.LEFT_TOP to listOf("Project", "Pull Requests"),
         Place.LEFT_BOTTOM to listOf("Structure"),
-        Place.BOTTOM_LEFT to listOf("Version Control", "Problems View"),
+        // Terminal is the client's own window: always there, after the backend's bottom windows.
+        Place.BOTTOM_LEFT to listOf("Version Control", "Problems View", "Terminal"),
         Place.RIGHT_TOP to listOf("Database"),
       ),
       buttons.byPlace.mapValues { (_, group) -> group.map { it.id } },

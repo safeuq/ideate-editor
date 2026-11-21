@@ -86,10 +86,10 @@ enum class Place(val side: Side, val split: Boolean) {
 }
 
 /**
- * A tool window button: one of the backend's tool windows ([BackendToolWindow]) or Project, which
- * JetBrains Client registers itself. Every one opens: Project and Structure are IDEate's own; a
- * backend window shows the toolbar and tree the backend sends (Gradle), or "Tool window not
- * implemented" when it sends neither. Two are the same window when their [id]s are.
+ * A tool window button: one of the backend's tool windows ([BackendToolWindow]) or Project and
+ * Terminal, which JetBrains Client registers itself. Every one opens: Project and Structure are
+ * IDEate's own; a backend window shows the toolbar and tree the backend sends (Gradle), or "Tool
+ * window not implemented" when it sends neither. Two are the same window when their [id]s are.
  */
 class ToolWindow(val id: String, val title: String, val icon: String?, val place: Place) {
 
@@ -101,6 +101,9 @@ class ToolWindow(val id: String, val title: String, val icon: String?, val place
     val PROJECT = ToolWindow("Project", "Project", "expui/toolwindows/project.svg", Place.LEFT_TOP)
     val STRUCTURE =
       ToolWindow("Structure", "Structure", "expui/toolwindows/structure.svg", Place.LEFT_BOTTOM)
+    /** The shell on the backend machine; the client draws it (spec 1), no backend window. */
+    val TERMINAL =
+      ToolWindow("Terminal", "Terminal", "icons/expui/toolwindow/terminal.svg", Place.BOTTOM_LEFT)
   }
 }
 
@@ -137,16 +140,17 @@ private val DEFAULT_LAYOUT =
   )
 
 /**
- * The buttons for the backend's [windows] plus Project. Example: on a Mac backend with no version
- * control, left top: Project; left bottom: Structure; bottom left: Version Control, Problems; right
- * top: AI Chat, Database, Gradle; under ⋯: Coverage, Database Output, Endpoints, Learn, Profiler,
- * …; Commit is unavailable, so nowhere.
+ * The buttons for the backend's [windows] plus Project and Terminal. Example: on a Mac backend with
+ * no version control, left top: Project; left bottom: Structure; bottom left: Version Control,
+ * Problems; right top: AI Chat, Database, Gradle; under ⋯: Coverage, Database Output, Endpoints,
+ * Learn, Profiler, …; Commit is unavailable, so nowhere.
  */
 fun toolWindowButtons(windows: List<BackendToolWindow>): ToolWindowButtons {
+  val own = listOf(ToolWindow.PROJECT, ToolWindow.TERMINAL)
   val available =
-    listOf(ToolWindow.PROJECT) +
+    own +
       windows
-        .filter { it.available && it.id != ToolWindow.PROJECT.id }
+        .filter { window -> window.available && own.none { it.id == window.id } }
         .map { window ->
           ToolWindow(
             window.id,

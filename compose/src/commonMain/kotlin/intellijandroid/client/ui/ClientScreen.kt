@@ -18,10 +18,12 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -82,6 +84,9 @@ import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.component.SearchHistory
 import intellijandroid.client.ui.component.SplitPane
 import intellijandroid.client.ui.lux.LuxPaneView
+import intellijandroid.client.ui.terminal.TerminalFocus
+import intellijandroid.client.ui.terminal.TerminalKeyBar
+import intellijandroid.client.ui.terminal.TerminalToolWindow
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
 import intellijandroid.client.ui.theme.label
@@ -246,7 +251,11 @@ fun ClientScreen(
     val backendShown =
       shown
         .map { it.id }
-        .filter { it != ToolWindow.PROJECT.id && it != ToolWindow.STRUCTURE.id }
+        .filter {
+          it != ToolWindow.PROJECT.id &&
+            it != ToolWindow.STRUCTURE.id &&
+            it != ToolWindow.TERMINAL.id
+        }
         .toSet()
     LaunchedEffect(backendShown) { session.setBackendToolWindowsShown(backendShown) }
 
@@ -256,6 +265,9 @@ fun ClientScreen(
       page = Page.MIDDLE
       windows.closeSide(Side.BOTTOM)
     }
+
+    // Which terminal has the keyboard, for the keyboard bar under the tool window bar.
+    val terminalFocus = remember { TerminalFocus() }
 
     // Structure's folded rows, here for its header's Expand All and Collapse All.
     var structureCollapsed by remember { mutableStateOf(emptySet<String>()) }
@@ -321,6 +333,8 @@ fun ClientScreen(
             onNavigated = ::onNavigated,
             structureCollapsed = structureCollapsed,
             onStructureCollapsedChange = { structureCollapsed = it },
+            terminalFocus = terminalFocus,
+            onHide = { barClick(window) },
           )
         }
       }
@@ -523,6 +537,10 @@ fun ClientScreen(
             }
           }
       }
+      // The keyboard bar (docs/feature-parity-plan.md section 1): extra keys under the tool window
+      // bar while the soft keyboard is open. For now only a focused terminal has keys to show.
+      if (WindowInsets.ime.getBottom(LocalDensity.current) > 0)
+        terminalFocus.focused?.let { TerminalKeyBar(it) }
       // IntelliJ's status bar: breadcrumbs, the info text or the newest task, the backend's
       // widgets.
       StatusBar(
@@ -577,6 +595,8 @@ private fun ToolWindowContent(
   onNavigated: () -> Unit,
   structureCollapsed: Set<String>,
   onStructureCollapsedChange: (Set<String>) -> Unit,
+  terminalFocus: TerminalFocus,
+  onHide: () -> Unit,
 ) =
   when {
     // A pane the backend paints, e.g. the welcome project's "Projects and Files".
@@ -627,6 +647,7 @@ private fun ToolWindowContent(
         structureCollapsed,
         onStructureCollapsedChange,
       )
+    window == ToolWindow.TERMINAL -> TerminalToolWindow(state, session, terminalFocus, onHide)
     else -> BackendToolWindowContent(window, state, session, scroll)
   }
 
@@ -1060,7 +1081,7 @@ private fun fileIconPath(state: SessionState, path: String) =
 
 /** IntelliJ's tab close button: `closeSmall`, `closeSmallHovered` under the pointer. */
 @Composable
-private fun TabCloseButton(fileName: String, onClose: () -> Unit) {
+internal fun TabCloseButton(fileName: String, onClose: () -> Unit) {
   val interaction = remember { MutableInteractionSource() }
   val hovered by interaction.collectIsHoveredAsState()
   val icon =

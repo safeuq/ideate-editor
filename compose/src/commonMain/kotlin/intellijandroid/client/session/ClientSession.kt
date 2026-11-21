@@ -109,6 +109,7 @@ import intellijandroid.client.connection.Connection
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.connection.SplitWire
 import intellijandroid.client.kernel.SearchKernel
+import intellijandroid.client.session.terminal.TerminalSessions
 import intellijandroid.client.ui.IconJar
 import intellijandroid.client.ui.MenuEntry
 import intellijandroid.client.ui.MenuItem
@@ -250,6 +251,24 @@ class ClientSession(
   private var fleet: FleetRpc? = null
   private var completion: Completion? = null
 
+  /** Opens a terminal tab (a shell on the backend); it shows up in [SessionState.terminals]. */
+  fun openTerminal() = onRd { checkNotNull(terminalSessions) { "No project yet" }.open() }
+
+  fun closeTerminal(id: String) = onRd { checkNotNull(terminalSessions).close(id) }
+
+  /** The terminal's grid is now [columns] × [rows] cells; keys and text can go from any thread. */
+  fun resizeTerminal(id: String, columns: Int, rows: Int) =
+    terminalSessions?.resize(id, columns, rows)
+
+  fun terminalKey(id: String, keyCode: Int, modifiers: Int) =
+    terminalSessions?.tab(id)?.sendKey(keyCode, modifiers)
+
+  fun terminalText(id: String, text: String) = terminalSessions?.tab(id)?.sendText(text)
+
+  fun pasteToTerminal(id: String, text: String) = terminalSessions?.tab(id)?.paste(text)
+
+  fun clearTerminalBuffer(id: String) = terminalSessions?.tab(id)?.clearBuffer()
+
   /** Search Everywhere, once a project with a kernel id is open. */
   @Volatile
   var searchEverywhere: SearchEverywhere? = null
@@ -259,6 +278,7 @@ class ClientSession(
   private var actionMenus: ActionMenus? = null
   private var luxDialogs: LuxDialogs? = null
   private var backendPopups: BackendPopups? = null
+  private var terminalSessions: TerminalSessions? = null
   private val menuSerials = AtomicInteger()
   private var selectedEditorId: RdFileEditorId? = null
 
@@ -1028,6 +1048,21 @@ class ClientSession(
       breadcrumbs.bind(solutionLifetime, newSolution.navigationBarModel, ::refreshBreadcrumbs)
       bindStructure(solutionLifetime, newSolution)
       bindUsages(solutionLifetime, newSolution)
+      val terminals =
+        TerminalSessions(
+          rdScheduler,
+          { edit -> mutableState.update { it.copy(terminals = edit(it.terminals)) } },
+          ::log,
+        )
+      terminals.bind(solutionLifetime, newSolution)
+      terminalSessions = terminals
+      mutableState.update { it.copy(terminalsReady = true) }
+      solutionLifetime.onTermination {
+        if (terminalSessions === terminals) {
+          terminalSessions = null
+          mutableState.update { it.copy(terminalsReady = false) }
+        }
+      }
       newSolution.isLoaded.advise(solutionLifetime) { loaded ->
         if (!loaded) return@advise
         reopenEditors()

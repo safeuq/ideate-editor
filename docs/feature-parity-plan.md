@@ -105,6 +105,9 @@ Steps 1 to 4 are built.
   bdd3abf put Undo and Redo under the main toolbar's ⋮, which is the run widget's More Actions (run
   configurations), so they were taken out again (user, 2026-11-18). Decided the same day: they go in a **keyboard bar**, an
   extra bar below the tool window bar that shows while the virtual keyboard is open. Not built yet.
+  **Addendum 2026-11-21:** the bar now exists (`ui/terminal/TerminalKeyBar.kt`, terminal plan phase 4) with the
+  terminal's keys only (Esc, Ctrl, Tab, arrows). It sits between the tool window bar and the status bar, and shows
+  while `WindowInsets.ime` has a bottom inset and a terminal has focus. Undo and Redo buttons still to add.
 - **Checked** on the emulator against the Mac backend: typed `hello`, Undo removed it, the enabled states
   followed (Undo greyed, Redo enabled), Redo brought it back and hardware Ctrl+Z removed it again (through the
   ⋮ menu that has since been removed).

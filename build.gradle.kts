@@ -43,6 +43,9 @@ val protocolJars by
       "intellij.libraries.rd.core.jar",
       "intellij.libraries.rd.framework.jar",
       "intellij.libraries.rd.text.jar",
+      // The terminal emulator (docs/terminal-and-consoles-spec.md section 4); no UI classes. Its
+      // only AWT use is TtyConnector.resize(java.awt.Dimension), which nothing here calls.
+      "intellij.libraries.jediterm.core.jar",
       "intellij.platform.split.protocol.jar",
       "intellij.rd.ide.model.generated.jar",
     ),
