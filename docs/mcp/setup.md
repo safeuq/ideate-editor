@@ -1,6 +1,6 @@
 # Setting up the MCP servers
 
-Two MCP servers let an agent (Claude Code, or any MCP client) look at and drive the running desktop app. Both work on the app started with hot reload, so the agent can change code, reload and look again without a restart or a new backend connection.
+Two MCP servers let an agent (Claude Code, or any MCP client) look at and drive the running desktop app. Both work on the app started with hot reload, so the agent can change code, reload and look again without a restart or a new backend connection. Subagents can have them too (section 7).
 
 | Server | Comes from | Talks over | What it can do | Can't do |
 |---|---|---|---|---|
@@ -17,20 +17,15 @@ Use them together: `compose-hot-reload` for IDEate's own UI and for reloading, `
   Hot reload stops with a message when it isn't.
 - A backend to connect to, and its join link, e.g. `tcp://127.0.0.1:5992#jt=4f1c…&fp=9a0e…`. A join token works for one client: start a fresh backend for each new client ([`split-protocol.md`](../split-protocol.md), "Running a backend on the Mac for client work").
 
-## 2. Pick the folder the app runs from
+## 2. Name the folder the app runs from
 
-`compose-hot-reload` finds the app through files in the folder it runs in: it only sees an app started with `hotRun` / `hotRunAsync` from that same folder. So both the MCP server and the app run in one checkout.
-
-That can be your own checkout. If you keep in-flight edits there, a second worktree that only runs the app keeps the two apart:
+`compose-hot-reload` finds the app through the PID file the app writes under `desktop/build/` of the checkout it was started from, so the MCP server must run in that same checkout. Rather than fixing one folder in the registration, put the checkout's path in a small file, and have the registration read it when it starts:
 
 ```sh
-git -C ideate-editor worktree add --detach ../ideate-live origin/main
-cp ideate-editor/local.properties ../ideate-live/
-# later, to run newer code:
-git -C ../ideate-live fetch origin main && git -C ../ideate-live checkout --detach origin/main
+echo /path/to/ideate-editor > ~/.claude/ideate-live-folder
 ```
 
-Below, `/path/to/ideate-live` stands for the folder you picked.
+To work in another checkout or worktree, write its path there and reconnect the server (`/mcp` in Claude Code). Subagents (section 7) read the same file when they start.
 
 ## 3. Register the servers (once)
 
@@ -39,7 +34,7 @@ In Claude Code, from the folder you start Claude Code in. `--scope local` keeps 
 ```sh
 claude mcp add --scope local compose-hot-reload \
   -e JAVA_HOME="/Users/you/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home" \
-  -- bash -c 'cd /path/to/ideate-live && exec ./gradlew --no-daemon --quiet --console=plain :desktop:hotMcpServer'
+  -- bash -c 'cd "$(cat "$HOME/.claude/ideate-live-folder")" && exec ./gradlew --no-daemon --quiet --console=plain :desktop:hotMcpServer'
 
 claude mcp add --scope local --transport http ideate-window http://127.0.0.1:5979/mcp
 ```
@@ -51,7 +46,7 @@ Other MCP clients: `compose-hot-reload` is the command above (stdio); `ideate-wi
 ## 4. Start the app
 
 ```sh
-cd /path/to/ideate-live
+cd "$(cat ~/.claude/ideate-live-folder)"
 export JAVA_HOME="/Users/you/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home"
 ./gradlew :desktop:hotRunAsync -PjoinLink='tcp://127.0.0.1:5992#jt=…&fp=…' -PagentMcpPort=5979
 ```
@@ -77,7 +72,7 @@ curl -s -X POST http://127.0.0.1:5979/mcp -H 'Content-Type: application/json' \
 
 ## 6. Day to day
 
-1. Edit code under `compose/` or `desktop/` in the run folder.
+1. Edit code under `compose/` or `desktop/` in that folder.
 2. Reload: `compose-hot-reload` `reload`, or `./gradlew :desktop:hotReloadMain`.
 3. Look and drive: `take_screenshot` / `get_semantic_tree` / `click`, or `ideate-window` `move` / `click` / `screenshot` for backend-painted parts.
 
@@ -85,11 +80,45 @@ Composables and code called after the reload use the new code. Code that ran onc
 
 Stop the app when done: close its window, or `kill` its process id (`ps` shows it with the run folder in its command line). Stop the backend you started for it too.
 
+## 7. Subagents
+
+A subagent gets its own `compose-hot-reload` server from a subagent definition: `~/.claude/agents/ideate-ui.md` with an `mcpServers` entry. The server starts when the subagent starts, in the folder named in `~/.claude/ideate-live-folder` at that moment, and stops when the subagent finishes. `ideate-window` is shared with the main session by name.
+
+```markdown
+---
+name: ideate-ui
+description: Implements a UI change in the IDEate desktop client and checks it live with hot reload and the MCP tools.
+model: sonnet
+mcpServers:
+  - compose-hot-reload:
+      type: stdio
+      command: bash
+      args:
+        - -c
+        - 'cd "$(cat "$HOME/.claude/ideate-live-folder")" && exec ./gradlew --no-daemon --quiet --console=plain :desktop:hotMcpServer'
+      env:
+        JAVA_HOME: /Users/you/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home
+  - ideate-window
+---
+
+How to start the app there, reload, and which tool to use for which part of the UI.
+```
+
+To hand a UI task to one:
+
+1. Create the subagent's worktree and copy `local.properties` into it.
+2. Write the worktree's path to `~/.claude/ideate-live-folder`.
+3. Spawn the subagent with type `ideate-ui`. It starts the app from its worktree with `hotRunAsync … -PagentMcpPort=5979`.
+
+A running Claude Code session picks up a new agent file after a short while, without a restart.
+
+One such subagent at a time: they share the folder file, and `ideate-window` listens on the one port 5979.
+
 ## Troubleshooting
 
 | What you see | Why | Fix |
 |---|---|---|
-| `status` says `{"connected": false}` | no app is running, or it was started from another folder | start it from the folder `compose-hot-reload` runs in (step 2) |
+| `status` says `{"connected": false}` | no app is running, or it was started from another folder | start it from the folder in `~/.claude/ideate-live-folder` (step 2), or change the file and reconnect the server |
 | `ideate-window` tools fail to connect | the app isn't running, or was started without `-PagentMcpPort`, or with another port | start it with `-PagentMcpPort=5979` |
 | `ideate-window` `press` does nothing to a popup | keys go to the main window unless told otherwise | pass `window: 1` (the popup's index from `list_windows`) |
 | `type` goes nowhere | text goes to what has Compose focus | `click` the field first |
@@ -101,5 +130,5 @@ Stop the app when done: close its window, or `kill` its process id (`ps` shows i
 ```sh
 claude mcp remove compose-hot-reload -s local
 claude mcp remove ideate-window -s local
-git -C ideate-editor worktree remove ../ideate-live    # if you made one
+rm ~/.claude/ideate-live-folder ~/.claude/agents/ideate-ui.md
 ```
