@@ -34,6 +34,7 @@ import com.jetbrains.rd.ide.model.RgbaColor
 import intellijandroid.client.ui.lux.LuxImages
 import intellijandroid.client.ui.lux.LuxPainter
 import intellijandroid.client.ui.lux.PngDecoder
+import intellijandroid.client.ui.lux.luxScreenScale
 import intellijandroid.client.ui.theme.ClientFonts
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -103,6 +104,22 @@ class LuxPainterTest {
     // Backend (12..52, 12..32), on the bitmap × 2: (24..104, 24..64).
     assertEquals(Triple(0x38, 0x71, 0xE1), pixels.rgb(60, 44))
     assertEquals(0f, pixels[10, 44].alpha, "left of the button: nothing drawn")
+  }
+
+  @Test
+  fun `at the reported screen scale the backend's transform carries it, not the canvas too`() {
+    // A Retina Mac: the backend was told scale 2, so its transform includes it (10 → 20 px).
+    luxScreenScale = 2f
+    try {
+      val scaled =
+        LxTransformStateChange(LxAffineTransform(doubleArrayOf(2.0, 0.0, 0.0, 2.0, 0.0, 0.0)))
+      val pixels =
+        paint(2f, op(LxFillShapeCommand(rect(0.0, 0.0, 10.0, 10.0)), scaled, color(255, 0, 0)))
+      assertEquals(Triple(255, 0, 0), pixels.rgb(19, 19))
+      assertEquals(0f, pixels[21, 21].alpha, "not scaled a second time by the density")
+    } finally {
+      luxScreenScale = 1f
+    }
   }
 
   @Test

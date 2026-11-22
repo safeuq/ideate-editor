@@ -16,6 +16,14 @@ fun interface PngDecoder {
 @Volatile var pngDecoder: PngDecoder = PngDecoder { null }
 
 /**
+ * The screen scale reported to the backend (2 on a Retina Mac, `displayMetrics.density` on
+ * Android), set once at startup like [pngDecoder]. The backend then sends images at this scale and
+ * its transforms include it, as for JetBrains Client, which reports its AWT screen's default
+ * transform. [LuxPainter] takes it back out.
+ */
+@Volatile var luxScreenScale: Float = 1f
+
+/**
  * Images Lux sends once and then refers to by id, shared by all dialogs of a session, as the
  * JetBrains Client's `LuxImageCache.Frontend` keeps them: `LxCacheableImage(id, content)` stores,
  * `LxCachedImage(id)` reads, `LuxModel.cleanImagesFromCache(ids)` removes. Thread-safe: the

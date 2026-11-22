@@ -27,9 +27,11 @@ import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.lux.PngDecoder
+import intellijandroid.client.ui.lux.luxScreenScale
 import intellijandroid.client.ui.lux.pngDecoder
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
+import java.awt.GraphicsEnvironment
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
@@ -65,6 +67,13 @@ fun main(arguments: Array<String>) {
   pngDecoder = PngDecoder { bytes ->
     runCatching { Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
   }
+  luxScreenScale =
+    GraphicsEnvironment.getLocalGraphicsEnvironment()
+      .defaultScreenDevice
+      .defaultConfiguration
+      .defaultTransform
+      .scaleX
+      .toFloat()
   // Debug aid: CLIENT_GALLERY=<file.png> renders the shared components and exits.
   System.getenv("CLIENT_GALLERY")?.let { target ->
     ComponentGallery.render(File(target), clientLib, fonts)

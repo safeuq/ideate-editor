@@ -121,12 +121,17 @@ class LuxPainter(
 
   /**
    * Applies one `drawOperations` batch onto [canvas], whose pixels are backend pixels × [scale].
+   *
+   * The backend's transforms already include [luxScreenScale] (they replace the whole transform,
+   * as AWT `setTransform` does on a HiDPI `Graphics2D`), so the canvas is scaled only by what is
+   * left: 1 when the screen is the one reported, and the images keep their full resolution.
    */
   fun paint(canvas: Canvas, scale: Float, operations: List<LxDrawOperation>) {
+    val left = scale / luxScreenScale
     for (operation in operations) {
       operation.stateChanges.forEach(::apply)
       canvas.save()
-      canvas.scale(scale, scale)
+      canvas.scale(left, left)
       state.clip?.let { clip -> canvas.clipPath(clip) }
       canvas.concat(matrixOf(state.transform))
       draw(canvas, operation.command)

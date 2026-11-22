@@ -19,6 +19,7 @@ import intellijandroid.client.connect.StoredText
 import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.lux.PngDecoder
+import intellijandroid.client.ui.lux.luxScreenScale
 import intellijandroid.client.ui.lux.pngDecoder
 
 /**
@@ -41,6 +42,7 @@ class MainActivity : ComponentActivity() {
     pngDecoder = PngDecoder { bytes ->
       BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
     }
+    luxScreenScale = resources.displayMetrics.density
     val fonts = AndroidResources.fonts(this)
     val icons =
       AndroidResources.SvgIcons(AndroidResources.iconJar(this), resources.displayMetrics.density)

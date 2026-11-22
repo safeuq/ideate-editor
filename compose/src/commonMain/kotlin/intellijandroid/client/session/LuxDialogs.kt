@@ -25,6 +25,7 @@ import com.jetbrains.rd.ide.model.luxModel
 import com.jetbrains.rd.util.lifetime.Lifetime
 import com.jetbrains.rd.util.reactive.viewNotNull
 import intellijandroid.client.ui.lux.LuxImages
+import intellijandroid.client.ui.lux.luxScreenScale
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
@@ -204,14 +205,21 @@ internal class LuxDialogs(
   }
 
   internal companion object {
-    private val IDENTITY = LxAffineTransform(doubleArrayOf(1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
-
     /**
-     * One screen at scale 1, so a backend pixel is a dp. Its size only bounds where the backend
-     * places windows; IDEate centres its dialogs itself.
+     * One screen at [luxScreenScale]; a backend pixel (component bounds, events) is still a dp. Its
+     * size only bounds where the backend places windows; IDEate centres its dialogs itself.
      */
-    internal val CONFIGURATION =
-      RemoteGraphicsConfigurationModel("ideate", LxRect(0, 0, 1920, 1200), IDENTITY, IDENTITY)
+    internal val CONFIGURATION: RemoteGraphicsConfigurationModel
+      get() {
+        val scale = luxScreenScale.toDouble()
+        val transform = LxAffineTransform(doubleArrayOf(scale, 0.0, 0.0, scale, 0.0, 0.0))
+        return RemoteGraphicsConfigurationModel(
+          "ideate",
+          LxRect(0, 0, 1920, 1200),
+          transform,
+          transform,
+        )
+      }
     private const val DEVICE = "ideate"
   }
 }
