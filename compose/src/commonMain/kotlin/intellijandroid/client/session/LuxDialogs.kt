@@ -220,6 +220,7 @@ internal class LuxDialogs(
           transform,
         )
       }
+
     private const val DEVICE = "ideate"
   }
 }

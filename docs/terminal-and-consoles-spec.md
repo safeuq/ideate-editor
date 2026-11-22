@@ -779,3 +779,28 @@ How the [Seen run] facts were recorded, so they can be checked again:
 | 5 | ~~The serialized `IconId` layout (9.3)~~ answered 2026-11-21: kind id, path length, UTF-16 path (9.3 addendum) | plan phase 3 |
 | 6 | Debug tool window: not probed | plan phase 6 |
 | 7 | Services content: needs a project with a dashboard service, e.g. Spring Boot | plan phase 5 |
+
+## Addendum (2026-11-22): the terminal on a Termux backend
+
+Seen with xtool on the phone (backend 263.7307.200 started by the app, IDEate on the Mac over SSH and on the
+phone, Gateway on the Mac):
+
+| Client | What happens | Cause (backend `idea.log`, process environment) |
+|---|---|---|
+| IDEate (classic `TerminalModel` path) | the tab never shows a shell | `Failed to start [/bin/sh] in …/xtool` ← `PtyHelpers: Cannot load native pty executor library` ← `UnsatisfiedLinkError: Unable to locate JNA native support library`. The backend starts the shell through pty4j, whose `libpty.so` and JNA's `libjnidispatch.so` in the install are glibc builds |
+| Gateway / JetBrains Client (IJent path) | a shell starts, but `/bin/sh` (Android's), not zsh | IJent is static, so it runs; it inherits the backend's environment, which has no `SHELL`, and Android's `/etc/passwd` has no entry for `u0_a404` |
+
+Why `/bin/sh` in both: the app started the backend through Termux's RUN_COMMAND, which reads no profile, so the
+backend had no `SHELL` (an SSH login has `SHELL=/data/data/com.termux/files/usr/bin/zsh`). IntelliJ then tries
+`/bin/bash`, which Android doesn't have, and falls back to `/bin/sh`.
+
+- Fixed in the app: `AndroidTermux` runs `start` and `stop` as
+  `login -l -c 'exec intellij-backend "$@"' intellij-backend <arguments>`. Termux's `login` sets `SHELL` from
+  `~/.termux/shell` and `-l` reads the profile, as an SSH login does. Checked on the phone with an empty
+  environment: `SHELL=…/zsh`, login shell, `IDEA_JDK` from `~/.zshenv`, `status --json` output unchanged.
+  `status` and `link` still run directly, so nothing a profile prints reaches the parsed output.
+- Not fixed: the libraries. The launcher passes `-Djna.boot.library.path=…/plugins/jna-plugin/lib/jna/aarch64`
+  and `-Dpty4j.preferred.native.folder=…/plugins/pty4j-plugin/lib/pty4j` after the user's VM options, so they
+  can't be redirected; Android builds have to replace the files in place. JNA 5.19.1 (native interface 7.0.4)
+  publishes `dist/android-aarch64.jar`, a Bionic build reporting 7.0.4. `libpty.so` (only `exec_pty`, from
+  pty4j's `exec_pty.c` and `openpty.c`) has to be built with Termux's clang.

@@ -25,8 +25,18 @@ class AndroidTermux(private val context: Context, private val askPermission: () 
 
   override fun requestPermission() = askPermission()
 
+  /**
+   * `start` and `stop` go through Termux's `login` as a login shell, so the backend gets the same
+   * environment as when started over SSH: `SHELL` from `~/.termux/shell` (the Terminal's shell;
+   * without it IntelliJ falls back to Android's `/bin/sh`) and the user's profile. `status` and
+   * `link` run directly, because anything a profile prints would end up in the output parsed here.
+   */
   override fun run(arguments: List<String>, onResult: (kotlin.Result<Termux.Result>) -> Unit) =
-    run(arguments, COMMAND, onResult)
+    if (arguments.firstOrNull() == "start" || arguments.firstOrNull() == "stop") {
+      run(listOf("-l", "-c", "exec $COMMAND \"$@\"", COMMAND) + arguments, LOGIN, onResult)
+    } else {
+      run(arguments, COMMAND, onResult)
+    }
 
   /**
    * Runs `<executable> <arguments>` in the background; [onResult] gets its exit code and output on
@@ -112,6 +122,7 @@ class AndroidTermux(private val context: Context, private val askPermission: () 
     const val COMMAND = "/data/data/com.termux/files/usr/bin/intellij-backend"
 
     private const val SHELL = "/data/data/com.termux/files/usr/bin/sh"
+    private const val LOGIN = "/data/data/com.termux/files/usr/bin/login"
 
     private val requestCodes = AtomicInteger()
   }
