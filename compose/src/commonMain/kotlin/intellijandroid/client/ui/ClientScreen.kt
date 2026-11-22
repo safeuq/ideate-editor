@@ -323,7 +323,17 @@ fun ClientScreen(
       val views = state.projectViews.takeIf { window == ToolWindow.PROJECT && it.options.size > 1 }
       ToolWindowPanel(
         window,
-        underline = layout == ScreenLayout.PORTRAIT,
+        headerLine =
+          headerLineShown(
+            bottom = window.place.side == Side.BOTTOM,
+            tabCount =
+              if (window == ToolWindow.TERMINAL) state.terminals.size
+              else state.backendViews[window.id]?.takeIf { it.panel != null }?.tabs?.size ?: 0,
+            toolbar =
+              state.backendViews[window.id]?.let { it.panel == null && it.toolbar.isNotEmpty() } ==
+                true,
+            portrait = layout == ScreenLayout.PORTRAIT,
+          ),
         modifier.island(LocalIslandRadius.current),
         title = views?.current?.name ?: window.title,
         views =

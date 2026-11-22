@@ -127,6 +127,7 @@ fun ProjectTreeView(
   val focusRequester = remember { FocusRequester() }
   var focused by remember { mutableStateOf(false) }
   val listState = rememberLazyListState()
+  ReportHeaderScrolled(listState)
 
   // Arrow keys like IntelliJ: up/down move, right expands or enters, left collapses or goes to the
   // parent, Enter opens.

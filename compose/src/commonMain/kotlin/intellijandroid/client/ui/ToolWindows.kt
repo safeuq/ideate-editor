@@ -20,11 +20,18 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -459,10 +466,11 @@ private fun StripeButton(
 fun ToolWindowPanel(
   window: ToolWindow,
   /**
-   * Phone upright, where the window covers the editor: a line under the header, in
-   * ToolWindow.Header.borderColor, sets the title apart from the content.
+   * Whether a line under the header, in ToolWindow.Header.borderColor, sets the title apart from
+   * the content; see [headerLineShown] for IntelliJ's rule. The scrolled case (d) is added here:
+   * the content reports it through [LocalHeaderScrolled].
    */
-  underline: Boolean,
+  headerLine: Boolean,
   modifier: Modifier = Modifier,
   title: String = window.title,
   views: List<MenuEntry>? = null,
@@ -477,6 +485,7 @@ fun ToolWindowPanel(
   content: @Composable () -> Unit,
 ) {
   val fonts = LocalClientFonts.current
+  val scrolled = remember { mutableStateOf(false) }
   Column(modifier) {
     Row(
       Modifier.fillMaxWidth()
@@ -522,9 +531,48 @@ fun ToolWindowPanel(
       }
       Spacer(Modifier.width(6.dp))
     }
-    if (underline) Box(Modifier.fillMaxWidth().height(1.dp).background(Bars.headerBorder))
-    Box(Modifier.fillMaxWidth().weight(1f)) { content() }
+    if (headerLine || scrolled.value)
+      Box(Modifier.fillMaxWidth().height(1.dp).background(Bars.headerBorder))
+    Box(Modifier.fillMaxWidth().weight(1f)) {
+      CompositionLocalProvider(LocalHeaderScrolled provides scrolled) { content() }
+    }
   }
+}
+
+/**
+ * IntelliJ's rule for the line under a tool window header (new UI,
+ * `ToolWindowHeader.paintComponent`), without the scrolled case ([LocalHeaderScrolled]). It is
+ * drawn when any of these holds:
+ * - [docked at the bottom][bottom] (`anchor == BOTTOM`): Run, Build, Terminal, Problems, Git;
+ * - the header shows tabs, more than one [tabCount] (TABBED content, `Run: Main, Slow`);
+ * - a [toolbar] sits right under the header (`hasTopToolbar()`, e.g. Gradle);
+ * - [portrait]: IDEate's phone held upright, where the window covers the editor.
+ *
+ * `HIDE_HEADER_BOTTOM_LINE` would switch it off, but nothing in Community sets it.
+ */
+fun headerLineShown(bottom: Boolean, tabCount: Int, toolbar: Boolean, portrait: Boolean) =
+  bottom || tabCount > 1 || toolbar || portrait
+
+/**
+ * Set by a tool window's scrolling content to true while it is scrolled away from its top, which
+ * IntelliJ shows as a line under the header (`ToolWindowHeader.SCROLLED_STATE`, from
+ * `ScrollPaneTracker`). Null outside a [ToolWindowPanel].
+ */
+val LocalHeaderScrolled = compositionLocalOf<MutableState<Boolean>?> { null }
+
+/** Reports whether [listState] is scrolled away from its first row to [LocalHeaderScrolled]. */
+@Composable
+fun ReportHeaderScrolled(listState: LazyListState) {
+  val scrolled = LocalHeaderScrolled.current ?: return
+  val away by
+    remember(listState) {
+      derivedStateOf {
+        listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+      }
+    }
+  // After the composition, not during it: writing state while composing recomposes again.
+  SideEffect { scrolled.value = away }
+  DisposableEffect(Unit) { onDispose { scrolled.value = false } }
 }
 
 /**

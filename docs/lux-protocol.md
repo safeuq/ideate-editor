@@ -599,3 +599,11 @@ the client screen). On the desktop `WindowPopupHost` gives it its own small bord
 focusable popup (`inputLocation` stays null: its search is a speed search on the list, no caret), typing
 "two" filters it to `feature-two`, and a click outside closes it. The Run toolbar's ⋮ menu is not a Lux
 popup but a backend list popup (`BackendPopups`).
+
+## Addendum (2026-11-22): screen scale and blurry images
+
+**Why Lux icons are blurry on a Retina Mac.** IDEate reports one screen at scale 1 (`LuxDialogs.CONFIGURATION`: both transforms identity), so the backend sends every image as a 1x PNG and the 2x screen stretches it. JetBrains Client reports its real AWT screen instead (`ThinClientUnattendedHostControlHostKt.toModel(GraphicsConfiguration)`): id, bounds, `getDefaultTransform()` (scale 2 on Retina) and `getNormalizingTransform()`.
+
+**Why simply reporting scale 2 is not enough.** Tried live on the Mac (`gradle-smoke`, Run window of the `hello` task): with both transforms at `[2, 0, 0, 2, 0, 0]` the Run toolbar's icons (Rerun, Run, Stop, the eye) came out twice their size and overlapped the tree. The backend's transforms then include the screen scale: `LxTransformStateChange` replaces the whole transform (AWT `setTransform`), as it does in a Graphics2D whose base transform is the 2x default transform. `LuxPainter.paint` scales the canvas by the density first, so the 2x counts twice.
+
+**What a fix needs.** Paint Lux in device pixels when the reported scale equals the screen density: don't scale the canvas by the density, let the backend's transforms carry it, and keep the dp → backend pixel mapping for input and layout (`bounds`, events) unchanged. It touches every Lux surface (dialogs, popups, panels) and Android's fractional densities, so it is left for its own change.

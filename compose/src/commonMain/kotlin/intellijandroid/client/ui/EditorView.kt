@@ -237,8 +237,10 @@ fun EditorView(
         val lineNumbersRight = numbersLeft + lineNumberWidth
         val iconAreaLeft = lineNumbersRight + IslandsDark.gutterGap.toPx()
         val gutterWidth =
-          // A console has no line numbers, icons or folding: only the gap before the text.
-          if (isConsole) IslandsDark.gutterGap.toPx()
+          // A console (ConsoleViewUtil.setupConsoleEditor: no line numbers, no line markers,
+          // folding outline on) keeps only the folding column, empty: the fold icon's 9 + 2 = 11
+          // (EditorGutterLayout, getFoldingAreaWidth), text right after it.
+          if (isConsole) 11.dp.toPx()
           else
             iconAreaLeft + 17.dp.toPx() + IslandsDark.gutterGap.toPx() + 11.dp.toPx() + 6.dp.toPx()
         EditorMetrics(

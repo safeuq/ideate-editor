@@ -90,9 +90,10 @@ private data class Cell(val row: Int, val column: Int) : Comparable<Cell> {
 
 /**
  * One terminal (spec 2.3 to 2.7), drawn from [tab]'s snapshot with a small renderer of its own: a
- * cell grid in the editor font, 6 dp of space above the first line and below the last, no gutter,
- * lines cut at the grid's width (JediTerm already did that), no marks at the cut. The columns and
- * rows follow the view's size; each change goes to [actions] (`stty size` then prints them).
+ * cell grid in the editor font, 6 dp of space above the first line and below the last, 13 dp before
+ * the text (see [LEFT_INSET]), lines cut at the grid's width (JediTerm already did that), no marks
+ * at the cut. The columns and rows follow the view's size; each change goes to [actions] (`stty
+ * size` then prints them).
  *
  * The cursor (spec 2.5): focused, a filled cell with the character under it in the background
  * color; not focused, an outline; underline and bar are 2 dp. It blinks, every 500 ms, while
@@ -136,6 +137,7 @@ fun TerminalView(
       )
     }
   val inset = with(density) { VERTICAL_INSET.toPx() }
+  val leftInset = with(density) { LEFT_INSET.toPx() }
 
   val screen = tab.screen
   var viewport by remember { mutableStateOf(IntSize.Zero) }
@@ -166,7 +168,7 @@ fun TerminalView(
   // The grid follows the size: width ÷ cell width columns, (height - the two insets) ÷ line height
   // rows. The alternate buffer has no insets in IntelliJ; here it keeps the same grid so a
   // full-screen program doesn't resize the shell on entering.
-  val columns = (viewport.width / metrics.cellWidth).toInt()
+  val columns = terminalColumns(viewport.width.toFloat(), leftInset, metrics.cellWidth)
   val rows = ((viewport.height - 2 * inset) / metrics.lineHeight).toInt()
   LaunchedEffect(tab.id, columns, rows) {
     if (columns >= 2 && rows >= 1) actions.resize(columns, rows)
@@ -183,7 +185,7 @@ fun TerminalView(
 
   fun cellAt(position: Offset): Cell {
     val row = ((position.y + top() - topInset()) / metrics.lineHeight).toInt()
-    val column = (position.x / metrics.cellWidth).toInt()
+    val column = ((position.x - leftInset) / metrics.cellWidth).toInt()
     return Cell(
       row.coerceIn(0, (screen.lines.size - 1).coerceAtLeast(0)),
       column.coerceIn(0, (screen.columns - 1).coerceAtLeast(0)),
@@ -368,6 +370,7 @@ fun TerminalView(
         baseStyle,
         top = top(),
         topInset = topInset(),
+        leftInset = leftInset,
         fieldBackground = fieldBackground,
         selection = selection,
         selectionColor = selectionColor,
@@ -384,6 +387,18 @@ private class CellMetrics(val cellWidth: Float, val lineHeight: Float, val basel
 
 /** `TerminalUi.blockTopInset` and `blockBottomInset`: 6 above the first line, 6 below the last. */
 private val VERTICAL_INSET = 6.dp
+/**
+ * The space before the text: IntelliJ's terminal output editor
+ * (`TerminalUiUtils.createOutputEditor`) has no line numbers, icons or folding, but keeps the
+ * line-marker area, so its new UI gutter is the empty annotation area 4 + the right free painters
+ * 8 + the gap 1 = 13.
+ */
+private val LEFT_INSET = 13.dp
+
+/** Columns that fit in [width] px after the [leftInset]. */
+internal fun terminalColumns(width: Float, leftInset: Float, cellWidth: Float) =
+  ((width - leftInset) / cellWidth).toInt()
+
 private const val BLINK_PERIOD_MS = 500L
 private const val DEFAULT_SELECTION = 0xFF214283L
 
@@ -395,6 +410,7 @@ private fun DrawScope.drawScreen(
   baseStyle: TextStyle,
   top: Float,
   topInset: Float,
+  leftInset: Float,
   fieldBackground: Color,
   selection: Pair<Cell, Cell>?,
   selectionColor: Color,
@@ -424,7 +440,7 @@ private fun DrawScope.drawScreen(
     for (run in line.runs) colors(run).second?.let { color ->
       drawRect(
         color,
-        Offset(run.column * metrics.cellWidth, y),
+        Offset(leftInset + run.column * metrics.cellWidth, y),
         Size(run.cells * metrics.cellWidth, metrics.lineHeight),
       )
     }
@@ -433,7 +449,7 @@ private fun DrawScope.drawScreen(
       val to = if (row == selected.second.row) selected.second.column + 1 else screen.columns
       drawRect(
         selectionColor,
-        Offset(from * metrics.cellWidth, y),
+        Offset(leftInset + from * metrics.cellWidth, y),
         Size((to - from) * metrics.cellWidth, metrics.lineHeight),
       )
     }
@@ -446,14 +462,14 @@ private fun DrawScope.drawScreen(
           fontStyle = if (run.italic) FontStyle.Italic else null,
           textDecoration = if (run.underline) TextDecoration.Underline else null,
         )
-      drawText(measurer, run.text, Offset(run.column * metrics.cellWidth, y), style)
+      drawText(measurer, run.text, Offset(leftInset + run.column * metrics.cellWidth, y), style)
     }
   }
 
   val cursor = screen.cursor
   val cursorRow = screen.screenTop + cursor.row
   if (!cursor.visible || !cursorShown || cursorRow !in first..last) return
-  val x = cursor.column * metrics.cellWidth
+  val x = leftInset + cursor.column * metrics.cellWidth
   val y = lineTop(cursorRow)
   val under =
     screen.lines[cursorRow].runs.firstOrNull {
