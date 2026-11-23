@@ -65,7 +65,11 @@ class RunTabsLiveTest {
     val session = ClientSession(JoinLink.parse(requireNotNull(link)), initialFile = null)
     session.start()
     try {
-      runDesktopComposeUiTest(width = 1200, height = 800, testTimeout = 5.minutes) {
+      runDesktopComposeUiTest(
+        width = System.getenv("DRIVER_WIDTH")?.toInt() ?: 1200,
+        height = System.getenv("DRIVER_HEIGHT")?.toInt() ?: 800,
+        testTimeout = 5.minutes,
+      ) {
         val icons = DesktopResources.JarIcons(clientLib, Density(1f))
         setContent {
           CompositionLocalProvider(LocalClientFonts provides fonts, LocalIcons provides icons) {
@@ -116,7 +120,8 @@ class RunTabsLiveTest {
    */
   private fun androidx.compose.ui.test.ComposeUiTest.stripeIndex(name: String) =
     onAllNodesWithContentDescription(name).fetchSemanticsNodes().indexOfFirst {
-      it.positionInRoot.x < 100f
+      it.positionInRoot.x < 100f ||
+        it.positionInRoot.y > 700f // the left bar, or a phone's bottom bar
     }
 
   /** Opens a tool window with its stripe button, which shows once the backend lists the window. */
@@ -386,5 +391,68 @@ class RunTabsLiveTest {
       Thread.sleep(3_000)
       println("[rows] ${rows()}")
       shot("build-window-1")
+    }
+
+  /**
+   * The Build window on a phone upright (`DRIVER_WIDTH=411 DRIVER_HEIGHT=891`; any window taller
+   * than wide is the portrait layout): the console above the tree, the panel only its two toolbar
+   * strips, and clicks on the strip still reach the backend: the eye button's menu opens, and "Show
+   * Successful Steps" shows the build's task rows in the tree. Click points are for 411 x 891.
+   */
+  @Test
+  fun buildPortrait() =
+    drive("build-portrait") { session, shot ->
+      fun panel() = session.state.value.backendViews["Build"]?.panel
+      fun consoleTexts() =
+        panel()?.locals.orEmpty().filterIsInstance<PanelConsole>().map {
+          session.state.value.consoles[it.kernelEditorId]?.text.orEmpty()
+        }
+      fun rowCount() = session.state.value.buildTrees.values.firstOrNull()?.visibleRows()?.size ?: 0
+      waitUntil(timeoutMillis = 60_000) { session.state.value.projectName != null }
+      waitUntil(timeoutMillis = 40_000) {
+        session.state.value.toolWindows.any { it.id == "Gradle" && it.available }
+      }
+      session.runProjectAction("CompileDirty")
+      openStripe("Build")
+      waitUntil(timeoutMillis = 40_000) { consoleTexts().isNotEmpty() }
+      waitUntil(timeoutMillis = 20_000) {
+        onAllNodesWithText("Build gradle-smoke", substring = true)
+          .fetchSemanticsNodes()
+          .isNotEmpty()
+      }
+      Thread.sleep(1_500)
+      println("[panel] ${panel()!!.width} x ${panel()!!.height}")
+      shot("build-portrait-1")
+      val console = onNodeWithText("Execution finished", substring = true).fetchSemanticsNode()
+      val row =
+        onAllNodesWithText("Build gradle-smoke", substring = true).fetchSemanticsNodes().first()
+      println("[bounds] console ${console.boundsInRoot} row ${row.boundsInRoot}")
+      assertEquals(65, panel()!!.width)
+      assertTrue(console.boundsInRoot.bottom <= row.boundsInRoot.top, "console above the tree")
+      // The eye button (16, 157) opens its menu; its second item is at about (60, 216).
+      val rowsBefore = rowCount()
+      onRoot().performMouseInput { click(Offset(16f, 157f)) }
+      Thread.sleep(2_000)
+      shot("build-portrait-2-menu")
+      onRoot().performMouseInput { click(Offset(60f, 216f)) }
+      waitUntil(timeoutMillis = 20_000) { rowCount() > rowsBefore }
+      Thread.sleep(1_500)
+      println("[rows] $rowsBefore -> ${rowCount()}")
+      shot("build-portrait-3-successful")
+      // A step in the tree switches the console to that step's own.
+      // (the whole run's console names the task too: the row is the one lowest on the screen)
+      val steps = onAllNodesWithText(":app:testClasses", substring = true)
+      steps[
+          steps.fetchSemanticsNodes().indices.maxBy {
+            steps.fetchSemanticsNodes()[it].boundsInRoot.top
+          }]
+        .performClick()
+      waitUntil(timeoutMillis = 20_000) {
+        consoleTexts().let { texts ->
+          texts.any { it.contains("Task :app:testClasses") } &&
+            texts.none { it.contains("Task :app:compileJava") }
+        }
+      }
+      shot("build-portrait-4-step")
     }
 }

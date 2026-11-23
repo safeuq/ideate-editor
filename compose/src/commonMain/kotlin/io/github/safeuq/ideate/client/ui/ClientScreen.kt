@@ -204,6 +204,8 @@ fun ClientScreen(
     // The backend's dialogs (Rename, New, Delete, …): windows of their own (docs/lux-protocol.md).
     io.github.safeuq.ideate.client.ui.lux.LuxDialogs(state.luxDialogs, session)
     val layout = screenLayout(maxWidth.value, maxHeight.value)
+    // A phone, not a tablet: narrower than Android's tablet line (sw600dp), as in screenLayout.
+    val phoneWidth = maxWidth.value < 600f
     var page by remember { mutableStateOf(Page.MIDDLE) }
     var weights by rememberPaneWeights(session)
     // One per screen, shared by the layouts: the pager asks it whether a sideways swipe scrolls the
@@ -394,6 +396,7 @@ fun ClientScreen(
             onStructureCollapsedChange = { structureCollapsed = it },
             terminalFocus = terminalFocus,
             terminalTabs = terminalTabs,
+            portrait = layout == ScreenLayout.PORTRAIT && phoneWidth,
           )
         }
       }
@@ -669,6 +672,7 @@ private fun ToolWindowContent(
   onStructureCollapsedChange: (Set<String>) -> Unit,
   terminalFocus: TerminalFocus,
   terminalTabs: TerminalTabsState,
+  portrait: Boolean,
 ) =
   when {
     // A pane the backend paints, e.g. the welcome project's "Projects and Files".
@@ -728,7 +732,7 @@ private fun ToolWindowContent(
         onStructureCollapsedChange,
       )
     window == ToolWindow.TERMINAL -> TerminalToolWindow(state, session, terminalFocus, terminalTabs)
-    else -> BackendToolWindowContent(window, state, session, scroll)
+    else -> BackendToolWindowContent(window, state, session, scroll, portrait)
   }
 
 /**
@@ -742,6 +746,7 @@ private fun BackendToolWindowContent(
   state: SessionState,
   session: ClientSession,
   scroll: SidewaysScroll,
+  portrait: Boolean,
 ) {
   val view = state.backendViews[window.id]
   // Run, Build: the backend paints the panel; its console is drawn by the client inside it.
@@ -756,6 +761,8 @@ private fun BackendToolWindowContent(
       send = { event -> session.backendPanelEvent(window.id, event) },
       session = session,
       modifier = Modifier.fillMaxSize(),
+      portrait = portrait,
+      windowId = window.id,
     )
     return
   }

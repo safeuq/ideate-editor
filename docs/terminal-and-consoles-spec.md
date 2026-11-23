@@ -857,3 +857,70 @@ the same with `<its client id><n>`.
 Checked on the S24+ after the change: Ideate restarted with `SessionId#1` and `SessionId#2` restored,
 `exit` in both, the Terminal hidden and shown: `Terminal SessionId#mwtayb5s-1 added (Client)` with a
 working shell; `+` then gave `SessionId#mwtayb5s-2`, also working.
+
+## Addendum (2026-11-23): the Build tab in phone portrait
+
+On a phone held upright the backend's layout (tree left, console right, a toolbar strip on each side) leaves the
+console about 220 dp wide. Ideate now lays the Build window out itself: the console on top, the tree below it.
+
+### Probe answers (Mac backend, `gradle-smoke`, Build ▸ Build Project) [Seen run]
+
+1. **Where the toolbars sit.** Both are vertical strips inside the panel, full height, none above the console or
+   the tree. Left strip 33 dp wide (32 and a divider): Rerun, Stop, Pin, and the eye (Show Warnings, Show
+   Successful Steps), one button every 26 dp from the top. Right strip 32 dp wide at the panel's right edge:
+   the console's Soft-Wrap, Scroll to the End, Clear All. Same widths at every size:
+
+   | Window (dp) | Panel (dp) | Tree `bounds` | Console `bounds` |
+   |---|---|---|---|
+   | 1200 × 800 | 754 × 211 | x 33, y 0, 238 × 211 | x 272, y 0, 450 × 211 (right strip 722 to 754) |
+   | 800 × 600 | 486 × 145 | x 33, y 0, 149 × 145 | x 183, y 0, 271 × 145 |
+   | 411 × 891 (phone upright) | 411 × 764 | x 33, y 0, 124 × 764 | x 158, y 0, 221 × 764 (right strip 379 to 411) |
+
+2. **`bounds` after layout.** It is set after layout, twice: first at the size the panel had before Ideate told it
+   its own (e.g. 369 × 308), then at the real one about 0.1 s later. The backend lays out from the size Ideate
+   sets (`layoutSource` is the frontend), so a narrow panel gives narrow `bounds`:
+
+   | Panel width Ideate reports | Tree `bounds` width | Console `bounds` | What is drawn |
+   |---|---|---|---|
+   | 754 | 238 | x 272, width 450 | both strips, tree, console |
+   | 65 | 8 | x 42, width -9 | the two strips side by side (left 0 to 33, console's 33 to 65) |
+   | 33 | 0 | x 32, width 0, then -32 | the left strip only; the console's strip is cut off |
+
+   Negative widths are normal; the controls still exist and `visible` still switches the step consoles.
+3. **A narrow panel still draws and clicks.** At width 33 and 65 the strips draw fully (screenshots in the
+   scratch dir, `probe-panel-65-wide.png`). Clicks reach the backend: at width 33 Rerun started a new build (the
+   console's last line went from `7:27:05 PM: Execution finished …` to `7:27:56 PM: …`), and the eye opened its
+   list popup (Show Warnings, Show Successful Steps). The tree and console keep working at width 0: Ideate
+   draws them from `BuildTreeApi` and the text control, not from `bounds`.
+
+### Layout (`LuxPaneView`, `stackedBuild`)
+
+Only for `ScreenLayout.PORTRAIT` (taller than wide, so also a tablet held upright), the Build window, and a panel
+with a Build tree. Everything else (desktop, tablet or phone sideways, the Run window) is unchanged.
+
+```
+411 dp wide, Build window 764 dp tall
+ 0     65                                  411
+ +------+----------------------------------+
+ |strips| console (67%)  <- locals' bounds ignored, `visible` still honored
+ |33+32 |----------------- drag border ----|
+ |      | Build tree (33%)                 |
+ +------+----------------------------------+
+```
+
+- Ideate tells the backend the panel is 65 dp wide (`BUILD_STRIPS_WIDTH` = 33 + 32) and as tall as the pane, taken
+  from the whole pane (`positionInWindow` and size), not `boundsInWindow`, so a page slide doesn't resize it.
+- The strips are the panel's own drawing at the left; the console and tree fill a `SplitPane` (stacked) beside it,
+  with the console's share starting at 0.67. The border drags as every other split does; the share is kept while
+  the window is shown.
+- Tree selection to console switching is unchanged (`visible`).
+- Checked on the desktop at a 411 × 891 window (`RunTabsLiveTest.buildPortrait`): panel 65 × 764, console above
+  the tree, the eye menu opens, Show Successful Steps adds the task rows (2 to 8 rows), selecting `:app:testClasses`
+  shows that step's console. `StackedBuildTest` covers the choice of layout.
+- **Not done:** the strips' widths are fixed numbers from one backend and theme; the console's strip sits beside
+  the left one instead of at the console's edge.
+
+Only on a phone: the stacked layout needs `ScreenLayout.PORTRAIT` and a window narrower than 600 dp
+(Android's tablet line, as in `screenLayout`); a tablet upright keeps the backend's layout. Checked on
+the S24+ (411 dp wide) with xtool's Sync tab: console on top, the tree (`xtool: finished`) below, both
+toolbar strips on the left; dragging the divider moves it.

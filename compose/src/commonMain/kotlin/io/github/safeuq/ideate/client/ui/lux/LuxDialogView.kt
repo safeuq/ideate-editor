@@ -6,6 +6,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -20,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,12 +84,14 @@ import io.github.safeuq.ideate.client.session.ClientSession
 import io.github.safeuq.ideate.client.session.LuxDialog
 import io.github.safeuq.ideate.client.session.PanelBuildTree
 import io.github.safeuq.ideate.client.session.PanelConsole
+import io.github.safeuq.ideate.client.session.PanelLocal
 import io.github.safeuq.ideate.client.session.SessionState
 import io.github.safeuq.ideate.client.ui.EditorTextTarget
 import io.github.safeuq.ideate.client.ui.LocalEditorTextInput
 import io.github.safeuq.ideate.client.ui.LocalLandscapeRequest
 import io.github.safeuq.ideate.client.ui.ProjectTreeView
 import io.github.safeuq.ideate.client.ui.component.AppPopup
+import io.github.safeuq.ideate.client.ui.component.SplitPane
 import io.github.safeuq.ideate.client.ui.console.ConsoleEditor
 import io.github.safeuq.ideate.client.ui.dialog.DialogLook
 import io.github.safeuq.ideate.client.ui.dialog.dialogFrame
@@ -719,12 +725,19 @@ fun LuxPaneView(
   send: (LxEvent) -> Unit,
   session: ClientSession,
   modifier: Modifier,
+  /** Phone upright, Build window: see [stackedBuild]. */
+  portrait: Boolean = false,
+  windowId: String = "",
 ) {
   val density = LocalDensity.current
+  val stacked = stackedBuild(portrait, windowId, panel.locals)
   var area by remember { mutableStateOf(IntRect.Zero) }
-  LaunchedEffect(area) {
-    if (area.width > 0 && area.height > 0) onResize(area.left, area.top, area.width, area.height)
+  LaunchedEffect(area, stacked) {
+    // Stacked: the backend is told the width of its two toolbar strips only (spec 2026-11-23).
+    val width = if (stacked) BUILD_STRIPS_WIDTH else area.width
+    if (width > 0 && area.height > 0) onResize(area.left, area.top, width, area.height)
   }
+  var consoleShare by remember { mutableFloatStateOf(BUILD_CONSOLE_SHARE) }
   Box(
     modifier.onGloballyPositioned { coordinates ->
       // The whole pane, not the part on screen (boundsInWindow is cut at the window's edge): while
@@ -745,29 +758,105 @@ fun LuxPaneView(
         }
     },
   ) {
-    LuxSurface(panel, session, 1f, send, softKeyboard = true, pane = true, onNewBitmap = onRepaint)
-    // The controls the client draws itself (spec 7.2), at the bounds the backend laid out.
-    val scheme = state.scheme
-    for (local in panel.locals) {
-      val placed =
-        Modifier.offset(local.bounds.x.dp, local.bounds.y.dp)
-          .size(local.bounds.width.dp, local.bounds.height.dp)
-      when (local) {
-        is PanelConsole -> {
-          val console = state.consoles[local.kernelEditorId]
-          // ponytail: a console shows once its text control and scheme are here, else blank.
-          if (console != null && scheme != null)
-            // The text is in the semantics so tests (and screen readers) can read it.
-            ConsoleEditor(
-              local.kernelEditorId,
-              console,
-              scheme,
-              placed.semantics { text = AnnotatedString(console.text) },
+    val surface =
+      @Composable {
+        LuxSurface(
+          panel,
+          session,
+          1f,
+          send,
+          softKeyboard = true,
+          pane = true,
+          onNewBitmap = onRepaint,
+        )
+      }
+    if (stacked) {
+      Row(Modifier.fillMaxSize()) {
+        Box(Modifier.width(BUILD_STRIPS_WIDTH.dp).fillMaxHeight()) { surface() }
+        // The console on top, the tree below it, a border between that drags.
+        SplitPane(
+          stacked = true,
+          proportion = consoleShare,
+          onProportion = { consoleShare = it },
+          modifier = Modifier.weight(1f).fillMaxHeight(),
+          first = {
+            for (local in panel.locals.filterIsInstance<PanelConsole>()) PanelLocalView(
+              local,
+              state,
+              session,
+              Modifier.fillMaxSize(),
             )
-        }
-        is PanelBuildTree -> BuildTreeView(local.modelUid, state, session, placed)
+          },
+          second = {
+            for (local in panel.locals.filterIsInstance<PanelBuildTree>()) PanelLocalView(
+              local,
+              state,
+              session,
+              Modifier.fillMaxSize(),
+            )
+          },
+        )
+      }
+    } else {
+      surface()
+      // The controls the client draws itself (spec 7.2), at the bounds the backend laid out.
+      for (local in panel.locals) {
+        PanelLocalView(
+          local,
+          state,
+          session,
+          Modifier.offset(local.bounds.x.dp, local.bounds.y.dp)
+            .size(local.bounds.width.dp, local.bounds.height.dp),
+        )
       }
     }
+  }
+}
+
+/**
+ * Phone upright (`ScreenLayout.PORTRAIT` and narrower than 600 dp; a tablet upright keeps the
+ * backend's layout), Build window with a tree: Ideate lays the window out, the console on top and
+ * the tree below it, instead of the backend's tree-left, console-right. The Lux panel is then only
+ * its two toolbar strips ([BUILD_STRIPS_WIDTH]) and the controls' `bounds` are ignored.
+ */
+internal fun stackedBuild(portrait: Boolean, windowId: String, locals: List<PanelLocal>) =
+  portrait && windowId == "Build" && locals.any { it is PanelBuildTree }
+
+/**
+ * The width of the two toolbar strips the backend draws in the Build panel, in dp, seen on the Mac
+ * backend (spec 2026-11-23): the left one (Rerun, Stop, Pin, Filter) 33 with its divider, the
+ * console's (Soft-Wrap, Scroll to the End, Clear All) 32 at the panel's right edge. A panel of this
+ * width draws both side by side. ponytail: fixed numbers from one backend; read them from the
+ * locals' bounds if a theme or scale changes them.
+ */
+internal const val BUILD_STRIPS_WIDTH = 65
+
+/** The console's share of the stacked Build window; the tree gets the rest (about a third). */
+internal const val BUILD_CONSOLE_SHARE = 0.67f
+
+/** A control the client draws inside a Lux panel (spec 7.2), placed by [modifier]. */
+@Composable
+private fun PanelLocalView(
+  local: PanelLocal,
+  state: SessionState,
+  session: ClientSession,
+  modifier: Modifier,
+) {
+  when (local) {
+    is PanelConsole -> {
+      val console = state.consoles[local.kernelEditorId]
+      val scheme = state.scheme
+      // ponytail: a console shows once its text control and scheme are here, else blank.
+      if (console != null && scheme != null)
+        // The text is in the semantics so tests (and screen readers) can read it.
+        ConsoleEditor(
+          local.kernelEditorId,
+          console,
+          scheme,
+          modifier.semantics { text = AnnotatedString(console.text) },
+        )
+    }
+    is PanelBuildTree -> BuildTreeView(local.modelUid, state, session, modifier)
   }
 }
 
