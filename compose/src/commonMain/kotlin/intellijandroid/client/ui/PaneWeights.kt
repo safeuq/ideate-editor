@@ -88,7 +88,8 @@ data class PaneWeights(
 @OptIn(FlowPreview::class)
 @Composable
 fun rememberPaneWeights(session: ClientSession): MutableState<PaneWeights> {
-  val weights = remember(session) { mutableStateOf(PaneWeights.from(session.savedPanes())) }
+  // Not keyed by session: after a reconnect the weights stay as they are on screen.
+  val weights = remember { mutableStateOf(PaneWeights.from(session.savedPanes())) }
   LaunchedEffect(session) {
     snapshotFlow { weights.value }
       .drop(1)

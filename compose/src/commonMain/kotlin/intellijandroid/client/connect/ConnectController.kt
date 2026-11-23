@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -19,6 +20,8 @@ import intellijandroid.client.connection.ClientCertificate
 import intellijandroid.client.connection.JoinLink
 import intellijandroid.client.session.ClientSession
 import intellijandroid.client.session.OpenEditors
+import intellijandroid.client.session.SessionState
+import intellijandroid.client.session.handOver
 import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.LocalBackHandler
 import intellijandroid.client.ui.LocalTitleBarArea
@@ -80,7 +83,18 @@ class ConnectController(
   }
 
   var session by mutableStateOf<ClientSession?>(null)
-    private set
+
+  /**
+   * The old session's last state after a reconnect, which the screen shows while the new session
+   * catches up (`handOver`); null when not handing over.
+   */
+  var handOverFrom by mutableStateOf<SessionState?>(null)
+
+  /**
+   * What the screen last showed for a session that still had its connection, so a new session that
+   * breaks while filling in doesn't blank the screen: the next hand-over starts from this.
+   */
+  internal var lastShown: Pair<ClientSession, SessionState>? = null
 
   /** The connection being made or in use; saved to history once the backend accepts it. */
   private var attempt: Attempt? = null
@@ -508,6 +522,7 @@ class ConnectController(
       candidate.stop()
       return false
     }
+    handOverFrom = lastShown?.takeIf { it.first === session }?.second ?: session?.state?.value
     session?.stop()
     session = candidate
     return true
@@ -886,6 +901,12 @@ fun ConnectApp(controller: ConnectController, fonts: ClientFonts, modifier: Modi
 }
 
 /**
+ * The longest the old screen stays up after a reconnect; what closed meanwhile then shows as
+ * closed.
+ */
+private const val HAND_OVER_LIMIT_MS = 10_000L
+
+/**
  * The editor window for [session]: the IDE screen, which paints its own background (with the
  * project tint) and takes [modifier] inside it. Back leaves the session; the platform then closes
  * this window, and the connections window is there again.
@@ -898,11 +919,35 @@ fun EditorApp(
   modifier: Modifier = Modifier,
 ) {
   Box(Modifier.fillMaxSize().background(IslandsDark.windowBackground)) {
-    val state by session.state.collectAsState()
+    val current by session.state.collectAsState()
+    val previous = controller.handOverFrom
+    var switched by remember(previous) { mutableStateOf(emptySet<String>()) }
+    val handedOver = previous?.let { handOver(it, current, switched) }
+    val shown = handedOver?.shown ?: current
+    // A session that broke clears its own state; keep showing what was there before.
+    val state =
+      if (current.connectionLost != null)
+        controller.lastShown?.takeIf { it.first === session }?.second ?: shown
+      else shown
+    if (current.connectionLost == null) controller.lastShown = session to shown
+    LaunchedEffect(handedOver?.switched, handedOver?.done) {
+      handedOver?.let {
+        switched = it.switched
+        if (it.done) controller.handOverFrom = null
+      }
+    }
+    LaunchedEffect(previous) {
+      if (previous != null) {
+        delay(HAND_OVER_LIMIT_MS)
+        controller.handOverFrom = null
+      }
+    }
     // The backend keeps running; another project or connection can be opened from the
     // connections window.
     LocalBackHandler.current(true) { controller.leave() }
-    LaunchedEffect(state.connectionLost) { state.connectionLost?.let(controller::connectionLost) }
+    LaunchedEffect(current.connectionLost) {
+      current.connectionLost?.let(controller::connectionLost)
+    }
     LaunchedEffect(state.projectName, controller.isAccepted) {
       state.projectName?.let(controller::projectNamed)
     }

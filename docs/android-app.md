@@ -55,6 +55,14 @@ emulator (2026-11-17): screen off, `dumpsys battery unplug`, `dumpsys deviceidle
 app was back on the connect screen with that message. The cached-app freezer wasn't the cause: the app stayed
 "top sleeping", not frozen.
 
+**The screen stays as it was on reconnect.** When the backend accepts the new session, its state starts empty and fills
+in over a second or more. Until then the screen shows the old session's last state (`session/HandOver.kt`): each panel
+(tree, editors, tool windows, terminals, status bar, …) keeps the old content until the new session has sent its
+first content for that panel, then follows the new one for good. Open editors stay as they were but read-only until the
+new session's editor for that file is editable, so nothing typed goes to a document it hasn't loaded. Popups, menus and
+failures never carry over. The old state is dropped once every panel has switched, or after 10 s at most. If the connection drops, the screen keeps showing what it showed last (a dropped session clears its own state), also
+when the new session breaks while filling in. Pane weights are kept across the swap. Only reconnects inside the running app are covered, not a restart.
+
 **No keep-alive on purpose.** IDEate follows the normal Doze rules: with the screen off the connection may drop,
 and it is reconnected when the app comes back. A foreground service would keep the network on in Doze (tried
 2026-11-17: forced deep Doze on the emulator for a minute, and about 20 minutes locked on the phone, with no drop).
