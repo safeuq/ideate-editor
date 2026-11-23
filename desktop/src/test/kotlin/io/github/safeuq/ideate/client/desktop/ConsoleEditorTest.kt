@@ -54,26 +54,27 @@ class ConsoleEditorTest {
   private val consoleBackground = 0x1E1F22
   private val errorRed = 0xFF6B68
   private val scheme =
-    EditorScheme(
+    EditorScheme.resolve(
       "Test",
-      listOf(
-        ColorsSchemeModel(
-          "Test",
-          listOf(
-            entry("TEXT", attributes(0xBCBEC4, 0x2B2D30)),
-            entry("CONSOLE_NORMAL_OUTPUT", attributes(0xBCBEC4)),
-            entry("CONSOLE_ERROR_OUTPUT", attributes(errorRed)),
-          ),
-          listOf(
-            ColorsSchemeColorEntry(
-              IdeaColorKey(null, "CONSOLE_BACKGROUND_KEY", rgb(consoleBackground)),
-              false,
-              rgb(consoleBackground),
+      mapOf(
+        "Test" to
+          ColorsSchemeModel(
+            "Test",
+            listOf(
+              entry("TEXT", attributes(0xBCBEC4, 0x2B2D30)),
+              entry("CONSOLE_NORMAL_OUTPUT", attributes(0xBCBEC4)),
+              entry("CONSOLE_ERROR_OUTPUT", attributes(errorRed)),
+            ),
+            listOf(
+              ColorsSchemeColorEntry(
+                IdeaColorKey(null, "CONSOLE_BACKGROUND_KEY", rgb(consoleBackground)),
+                false,
+                rgb(consoleBackground),
+              ),
             ),
           ),
-        ),
       ),
-    )
+    )!!
 
   @Test
   fun consoleEditorHasNoGutterAndColorsStderr() {
