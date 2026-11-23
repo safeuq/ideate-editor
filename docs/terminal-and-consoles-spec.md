@@ -996,3 +996,25 @@ toolbar strips on the left; dragging the divider moves it.
 
 Checked on the S24+ (xtool's Sync tab): both rows drawn with their lines, and the Filter menu opens
 under its button.
+
+## Addendum (2026-11-23): stacked BuildView in any window
+
+IntelliJ's `BuildView` (tree | console, the console with its own `BuildConsole` toolbar on its right) is shown in two places: the Build window (with a `BuildView` toolbar strip on the left: Rerun, Stop, Pin, Filter) and the Run window for a Gradle or Maven task (BuildView alone, under the Run tab's own horizontal toolbar row). The stacked layout on a phone held upright now applies to any Lux panel whose locals hold both a `PanelBuildTree` and a `PanelConsole`, in any window (`stackedBuildView(portrait, locals)`), with the strips read from the locals' bounds (`buildStrips`).
+
+Measured bounds (Ideate's log "Lux panel N: local M has bounds"):
+
+| Window | Panel width | Tree | Console | Strips |
+|---|---|---|---|---|
+| Run (S24, 411 dp) | 411 | `x=0, y=32, width=135, height=681` | `x=136, y=32, width=243, height=681` | top row 0..32, no left strip, console strip x 379..411 |
+| Build (stacked) | 73 | `x=33, y=0, width=10` | `x=44, y=0, width=-3` | left strip 0..33, no top row, console strip from 41 to 73 |
+
+Rule, in panel dp:
+
+- Top row: y 0 until the smaller `y` of the tree and the console (0: none). Drawn whole, full width, cut from the Lux bitmap, with pointer events sent to the panel at the same spot. The backend already draws a line under it, so Ideate adds none.
+- Left strip: x 0 until the tree's `x` (0: none).
+- Console strip: from the console's right edge (`x + width`) to the panel's right edge.
+- A strip's buttons are 22 dp squares at (strip left + 5, strip top + 4 + 26 * index), where the strip top is the top row's bottom. Build: x 5 and x 46, y 4 + 26 i (as before). Run's console cells: x 384, y 36 + 26 i.
+- Width told to the backend: with a left strip (tree `x` > 0, Build) 73, as before; without one (Run) the pane's full width, so the backend's own top row stays whole. The tree's `x` is the same at any width, so the rule doesn't flip.
+- Order, top to bottom: top row; then a split with the console toolbar row and console first, the `BuildView` toolbar row (only with a left strip) and tree second.
+
+Checked on the Android emulator (Pixel_3a_API_34, portrait) against a Mac backend: Run window after the Gradle task `projects` shows the console on top and the tree below, Run's toolbar row whole (its ⋮ opens "Modify Run Configuration..." under it), and the console toolbar row's Soft-Wrap toggles; the Build window after a Gradle sync looks as before and its Filter menu opens under the button.

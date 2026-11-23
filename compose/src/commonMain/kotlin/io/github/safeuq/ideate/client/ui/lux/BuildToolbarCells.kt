@@ -31,16 +31,23 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.jetbrains.rd.ide.model.LxEvent
 import io.github.safeuq.ideate.client.session.LuxDialog
+import io.github.safeuq.ideate.client.session.PanelBuildTree
+import io.github.safeuq.ideate.client.session.PanelConsole
+import io.github.safeuq.ideate.client.session.PanelLocal
 import io.github.safeuq.ideate.client.ui.theme.IslandsDark
 import kotlin.math.roundToInt
 
 /**
- * One toolbar button of the Build panel's backend-drawn strips, in the panel's own dp: the square
- * named [label] at ([x], [y]) that is [BUILD_CELL_SIZE] wide and tall. [maskX] is a column of the
- * strip that holds the line the backend's tree draws over the console strip, not the button: it is
- * drawn as a copy of the column before it.
+ * One piece of the BuildView panel's backend-drawn toolbars, in the panel's own dp: the rectangle
+ * named [label] at ([x], [y]), [width] by [height]; a toolbar button is [BUILD_CELL_SIZE] square.
  */
-internal data class BuildCell(val label: String, val x: Int, val y: Int, val maskX: Int? = null) {
+internal data class BuildCell(
+  val label: String,
+  val x: Int,
+  val y: Int,
+  val width: Int = BUILD_CELL_SIZE,
+  val height: Int = BUILD_CELL_SIZE,
+) {
   /** The panel point under [offsetX], [offsetY] dp inside this cell; where a click goes. */
   fun panelPoint(offsetX: Int, offsetY: Int) = IntOffset(x + offsetX, y + offsetY)
 
@@ -52,21 +59,45 @@ internal data class BuildCell(val label: String, val x: Int, val y: Int, val mas
 }
 
 /**
- * The buttons in the 65 dp panel, measured on the Mac backend with the new UI dark theme (spec
- * 2026-11-23, "Cell geometry"): every button is a 22 dp square, one every 26 dp from 4 dp under the
- * panel's top. The left strip's are 5 dp from the left (Rerun, Stop, Pin, Filter); the console
- * strip's are 38 dp from the left (Soft-Wrap, Scroll to the End, Clear All), and the tree's border
- * at x = 41 runs over them top to bottom. ponytail: fixed numbers from one backend and theme; read
- * the buttons' places from the backend, or find them in the bitmap, if a theme or scale moves them.
+ * Where the backend put the BuildView's toolbars, read from its tree's and console's bounds in the
+ * panel (dp). [top] is the height of a toolbar row above both (the Run window's: tree `y=32`,
+ * console `y=32` gives 32; 0 in the Build window), [left] the width of a strip left of the tree
+ * (the Build window's `BuildView` toolbar: tree `x=33` gives 33; 0 in the Run window), and
+ * [consoleLeft] where the strip right of the console starts (its right edge: Run at 411 dp wide:
+ * console `x=136, width=243` gives 379; Build at 73 dp: `x=44, width=-3` gives 41).
  */
-internal val BUILD_TOOLBAR_CELLS =
-  listOf("Rerun", "Stop", "Pin", "Filter").mapIndexed { index, label ->
-    BuildCell(label, 5, 4 + 26 * index)
+internal data class BuildStrips(val top: Int, val left: Int, val consoleLeft: Int)
+
+/** The toolbars' places for [locals] that hold a [PanelBuildTree] and a [PanelConsole]. */
+internal fun buildStrips(locals: List<PanelLocal>): BuildStrips {
+  val tree = locals.filterIsInstance<PanelBuildTree>().first().bounds
+  val console = locals.filterIsInstance<PanelConsole>().first().bounds
+  return BuildStrips(
+    top = minOf(tree.y, console.y).coerceAtLeast(0),
+    left = tree.x.coerceAtLeast(0),
+    consoleLeft = console.x + console.width,
+  )
+}
+
+/** The labels of the "BuildView" toolbar's buttons, as IntelliJ names the place. */
+internal val BUILD_VIEW_LABELS = listOf("Rerun", "Stop", "Pin", "Filter")
+
+/** The labels of the "BuildConsole" toolbar's buttons. */
+internal val BUILD_CONSOLE_LABELS = listOf("Soft-Wrap", "Scroll to the End", "Clear All")
+
+/**
+ * The buttons of a vertical strip whose top left is ([stripLeft], [stripTop]), measured on the Mac
+ * backend with the new UI dark theme (spec 2026-11-23, "Cell geometry"): every button is a 22 dp
+ * square, 5 dp from the strip's left, the first 4 dp under its top, one every 26 dp. Build: the
+ * left strip at (0, 0) gives x 5; the console's at (41, 0) gives x 46. Run: the console's at (379,
+ * 32) gives (384, 36 + 26 * i). ponytail: fixed numbers from one backend and theme; read the
+ *     buttons' places from the backend, or find them in the bitmap, if a theme or scale moves them.
+ */
+internal fun stripCells(labels: List<String>, stripLeft: Int, stripTop: Int) =
+  labels.mapIndexed { index, label ->
+    BuildCell(label, stripLeft + 5, stripTop + 4 + 26 * index)
   }
-internal val CONSOLE_TOOLBAR_CELLS =
-  listOf("Soft-Wrap", "Scroll to the End", "Clear All").mapIndexed { index, label ->
-    BuildCell(label, 46, 4 + 26 * index)
-  }
+
 internal const val BUILD_CELL_SIZE = 22
 
 /**
@@ -115,7 +146,7 @@ internal fun PixelLine() {
 }
 
 @Composable
-private fun BuildCellView(
+internal fun BuildCellView(
   dialog: LuxDialog,
   frame: LuxFrame,
   cell: BuildCell,
@@ -126,7 +157,7 @@ private fun BuildCellView(
   var windowPosition by remember { mutableStateOf(Offset.Zero) }
   fun pixels(dp: Int) = (dp * density).roundToInt()
   Canvas(
-    Modifier.size(BUILD_CELL_SIZE.dp)
+    Modifier.size(cell.width.dp, cell.height.dp)
       .semantics { contentDescription = cell.label }
       .onGloballyPositioned { windowPosition = it.positionInWindow() }
       // Before the pointer's events go to the backend (the Initial pass comes first): the panel is
@@ -157,22 +188,12 @@ private fun BuildCellView(
   ) {
     frame.painted // read, so a painted batch redraws
     val source = IntOffset(pixels(cell.x), pixels(cell.y))
-    val size = IntSize(pixels(BUILD_CELL_SIZE), pixels(BUILD_CELL_SIZE))
+    val size = IntSize(pixels(cell.width), pixels(cell.height))
     drawImage(
       frame.bitmap,
       source,
       size,
       dstSize = IntSize(this.size.width.roundToInt(), this.size.height.roundToInt()),
     )
-    cell.maskX?.let { column ->
-      val width = pixels(column + 1) - pixels(column)
-      drawImage(
-        frame.bitmap,
-        IntOffset(pixels(column) - width, pixels(cell.y)),
-        IntSize(width, size.height),
-        dstOffset = IntOffset(pixels(column - cell.x), 0),
-        dstSize = IntSize(width, this.size.height.roundToInt()),
-      )
-    }
   }
 }

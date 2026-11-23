@@ -752,16 +752,18 @@ fun LuxPaneView(
   send: (LxEvent) -> Unit,
   session: ClientSession,
   modifier: Modifier,
-  /** Phone upright, Build window: see [stackedBuild]. */
+  /** Phone upright: see [stackedBuildView]. */
   portrait: Boolean = false,
-  windowId: String = "",
 ) {
   val density = LocalDensity.current
-  val stacked = stackedBuild(portrait, windowId, panel.locals)
+  val stacked = stackedBuildView(portrait, panel.locals)
+  val strips = if (stacked) buildStrips(panel.locals) else null
   var area by remember { mutableStateOf(IntRect.Zero) }
+  // Stacked: the backend is told the width of its toolbar strips only, or the whole width when
+  // there is no left strip, so its own toolbar row on top stays whole (spec 2026-11-23).
+  fun panelWidth() = if (strips != null && strips.left > 0) BUILD_STRIPS_WIDTH else area.width
   LaunchedEffect(area, stacked) {
-    // Stacked: the backend is told the width of its two toolbar strips only (spec 2026-11-23).
-    val width = if (stacked) BUILD_STRIPS_WIDTH else area.width
+    val width = panelWidth()
     if (width > 0 && area.height > 0) onResize(area.left, area.top, width, area.height)
   }
   var consoleShare by remember { mutableFloatStateOf(BUILD_CONSOLE_SHARE) }
@@ -786,46 +788,64 @@ fun LuxPaneView(
     },
   ) {
     if (stacked) {
-      // The panel is only its two toolbar strips; the buttons are cut out of its bitmap and drawn
-      // in a row above the console and one above the tree.
+      // The buttons are cut out of the panel's bitmap and drawn in a row above the console and one
+      // above the tree; the backend's own top row (Run's), if any, is drawn whole above both.
       val frame = rememberLuxFrame(panel, session, onRepaint)
       val anchor = { panelX: Int, panelY: Int ->
-        if (area.height > 0) onResize(panelX, panelY, BUILD_STRIPS_WIDTH, area.height)
+        if (area.height > 0) onResize(panelX, panelY, panelWidth(), area.height)
       }
-      SplitPane(
-        stacked = true,
-        proportion = consoleShare,
-        onProportion = { consoleShare = it },
-        modifier = Modifier.fillMaxSize(),
-        // The line between console and tree is the border itself, as IntelliJ's OnePixelSplitter
-        // inside a tool window: 1 px in the tool window's border colour.
-        gap = with(LocalDensity.current) { 1.toDp() },
-        gapColor = IslandsDark.toolWindowBorder,
-        first = {
-          Column(Modifier.fillMaxSize()) {
-            if (frame != null) BuildToolbarRow(panel, frame, CONSOLE_TOOLBAR_CELLS, send, anchor)
-            Box(Modifier.fillMaxWidth().weight(1f)) {
-              for (local in panel.locals.filterIsInstance<PanelConsole>()) PanelLocalView(
+      val consoleCells = stripCells(BUILD_CONSOLE_LABELS, strips!!.consoleLeft, strips.top)
+      Column(Modifier.fillMaxSize()) {
+        if (frame != null && strips.top > 0)
+          BuildCellView(
+            panel,
+            frame,
+            BuildCell("Toolbar", 0, 0, width = area.width, height = strips.top),
+            send,
+            anchor,
+          )
+        SplitPane(
+          stacked = true,
+          proportion = consoleShare,
+          onProportion = { consoleShare = it },
+          modifier = Modifier.fillMaxWidth().weight(1f),
+          // The line between console and tree is the border itself, as IntelliJ's OnePixelSplitter
+          // inside a tool window: 1 px in the tool window's border colour.
+          gap = with(LocalDensity.current) { 1.toDp() },
+          gapColor = IslandsDark.toolWindowBorder,
+          first = {
+            Column(Modifier.fillMaxSize()) {
+              if (frame != null) BuildToolbarRow(panel, frame, consoleCells, send, anchor)
+              Box(Modifier.fillMaxWidth().weight(1f)) {
+                for (local in panel.locals.filterIsInstance<PanelConsole>()) PanelLocalView(
+                  local,
+                  state,
+                  session,
+                  Modifier.fillMaxSize(),
+                )
+              }
+            }
+          },
+          second = {
+            Column(Modifier.fillMaxSize()) {
+              if (frame != null && strips.left > 0)
+                BuildToolbarRow(
+                  panel,
+                  frame,
+                  stripCells(BUILD_VIEW_LABELS, 0, strips.top),
+                  send,
+                  anchor,
+                )
+              for (local in panel.locals.filterIsInstance<PanelBuildTree>()) PanelLocalView(
                 local,
                 state,
                 session,
-                Modifier.fillMaxSize(),
+                Modifier.fillMaxWidth().weight(1f),
               )
             }
-          }
-        },
-        second = {
-          Column(Modifier.fillMaxSize()) {
-            if (frame != null) BuildToolbarRow(panel, frame, BUILD_TOOLBAR_CELLS, send, anchor)
-            for (local in panel.locals.filterIsInstance<PanelBuildTree>()) PanelLocalView(
-              local,
-              state,
-              session,
-              Modifier.fillMaxWidth().weight(1f),
-            )
-          }
-        },
-      )
+          },
+        )
+      }
     } else {
       LuxSurface(
         panel,
@@ -852,22 +872,24 @@ fun LuxPaneView(
 
 /**
  * Phone upright (`ScreenLayout.PORTRAIT` and narrower than 600 dp; a tablet upright keeps the
- * backend's layout), Build window with a tree: Ideate lays the window out, the console on top and
- * the tree below it, instead of the backend's tree-left, console-right. The Lux panel is then only
- * its two toolbar strips ([BUILD_STRIPS_WIDTH]), not shown as a column: each toolbar is a
- * horizontal row above its part ([BuildToolbarRow]). The controls' `bounds` are ignored.
+ * backend's layout), any panel whose locals hold a build tree and a console (IntelliJ's
+ * `BuildView`: the Build window, and the Run window for a Gradle or Maven task): Ideate lays it
+ * out, the console on top and the tree below it, instead of the backend's tree-left, console-right.
+ * The buttons are cut out of the Lux bitmap and drawn as rows ([BuildToolbarRow]), their places
+ * taken from the locals' bounds ([buildStrips]); the bounds are not used to place the controls.
  */
-internal fun stackedBuild(portrait: Boolean, windowId: String, locals: List<PanelLocal>) =
-  portrait && windowId == "Build" && locals.any { it is PanelBuildTree }
+internal fun stackedBuildView(portrait: Boolean, locals: List<PanelLocal>) =
+  portrait && locals.any { it is PanelBuildTree } && locals.any { it is PanelConsole }
 
 /**
- * The width the backend is told for the Build panel in the stacked layout, in dp, seen on the Mac
- * backend (spec 2026-11-23): the left toolbar strip (Rerun, Stop, Pin, Filter) 33 with its divider,
- * the tree's least width 8, the console's strip (Soft-Wrap, Scroll to the End, Clear All) 32 at the
- * panel's right edge. At 65 (33 + 32) the tree's border and the console's own area cover the left 9
- * dp of the console's strip, so its buttons were cut; at 73 they are whole. The panel is not shown:
- * [BuildToolbarRow] draws the buttons from its bitmap. ponytail: fixed numbers from one backend;
- * read them from the locals' bounds if a theme or scale changes them.
+ * The width the backend is told for a stacked panel with a left strip (the Build window), in dp,
+ * seen on the Mac backend (spec 2026-11-23): the left toolbar strip (Rerun, Stop, Pin, Filter) 33
+ * with its divider, the tree's least width 8, the console's strip (Soft-Wrap, Scroll to the End,
+ * Clear All) 32 at the panel's right edge. At 65 (33 + 32) the tree's border and the console's own
+ * area cover the left 9 dp of the console's strip, so its buttons were cut; at 73 they are whole. A
+ * panel with no left strip (the Run window, tree `x=0`) is told its pane's whole width, so the
+ * backend's toolbar row on top stays whole. ponytail: fixed numbers from one backend; read them
+ * from the locals' bounds if a theme or scale changes them.
  */
 internal const val BUILD_STRIPS_WIDTH = 73
 

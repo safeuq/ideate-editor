@@ -5,8 +5,22 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Where the Build panel's toolbar buttons are, and how a point in a drawn cell maps back. */
+/** Where the BuildView panel's toolbar buttons are, and how a point in a drawn cell maps back. */
 class BuildToolbarCellsTest {
+  private val buildStrips = BuildStrips(top = 0, left = 33, consoleLeft = 41)
+  private val buildCells =
+    stripCells(BUILD_VIEW_LABELS, 0, 0) + stripCells(BUILD_CONSOLE_LABELS, 41, 0)
+
+  @Test
+  fun runCellsAreUnderItsToolbarRow() {
+    // Run at 411 dp: console strip at 379, under the 32 dp toolbar row
+    val cells = stripCells(BUILD_CONSOLE_LABELS, 379, 32)
+    assertEquals(
+      listOf(IntOffset(384, 36), IntOffset(384, 62), IntOffset(384, 88)),
+      cells.map { IntOffset(it.x, it.y) },
+    )
+  }
+
   @Test
   fun cellsAreWhereTheBackendDrewThem() {
     // label to (x, y) of the cell's top left in the 73 dp panel, measured on the Mac backend
@@ -20,14 +34,14 @@ class BuildToolbarCellsTest {
         "Scroll to the End" to IntOffset(46, 30),
         "Clear All" to IntOffset(46, 56),
       )
-    val actual =
-      (BUILD_TOOLBAR_CELLS + CONSOLE_TOOLBAR_CELLS).associate { it.label to IntOffset(it.x, it.y) }
+    assertEquals(41, buildStrips.consoleLeft)
+    val actual = buildCells.associate { it.label to IntOffset(it.x, it.y) }
     assertEquals(expected, actual)
   }
 
   @Test
   fun cellsStayInsideThePanelAndDontOverlap() {
-    val cells = BUILD_TOOLBAR_CELLS + CONSOLE_TOOLBAR_CELLS
+    val cells = buildCells
     for (cell in cells) {
       assertTrue(cell.x >= 0 && cell.x + BUILD_CELL_SIZE <= BUILD_STRIPS_WIDTH, cell.label)
     }
@@ -51,7 +65,7 @@ class BuildToolbarCellsTest {
         ("Filter" to IntOffset(21, 21)) to IntOffset(26, 103),
         ("Clear All" to IntOffset(11, 11)) to IntOffset(57, 67),
       )
-    val cells = (BUILD_TOOLBAR_CELLS + CONSOLE_TOOLBAR_CELLS).associateBy { it.label }
+    val cells = buildCells.associateBy { it.label }
     val actual = expected.mapValues { (input, _) ->
       cells.getValue(input.first).panelPoint(input.second.x, input.second.y)
     }
@@ -61,7 +75,7 @@ class BuildToolbarCellsTest {
   @Test
   fun panelOriginPutsTheCellWhereItIsDrawn() {
     // Filter drawn at (94, 583) on the screen: the panel's top left must be at (89, 501)
-    val filter = BUILD_TOOLBAR_CELLS.first { it.label == "Filter" }
+    val filter = buildCells.first { it.label == "Filter" }
     assertEquals(IntOffset(89, 501), filter.panelOrigin(94, 583))
   }
 }

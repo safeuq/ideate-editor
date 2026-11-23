@@ -13,22 +13,34 @@ class StackedBuildTest {
   private val console = PanelConsole(kernelEditorId = "pecp68j6afdfimptnf60", bounds = bounds)
 
   @Test
-  fun onlyBuildWindowWithATreeOnAPhoneUpright() {
-    // (portrait, window id, locals) to whether Ideate stacks them
+  fun anyPanelWithATreeAndAConsoleOnAPhoneUpright() {
+    // (portrait, locals) to whether Ideate stacks them
     val expected =
       mapOf(
-        Triple(true, "Build", listOf(tree, console)) to true, // phone upright
-        Triple(false, "Build", listOf(tree, console)) to
-          false, // desktop, tablet sideways, phone sideways
-        Triple(true, "Run", listOf(tree, console)) to
-          false, // the Run window keeps the backend's layout
-        Triple(true, "Build", listOf(console)) to false, // no tree yet (a Sync tab)
-        Triple(true, "Build", emptyList<PanelConsole>()) to false, // nothing drawn yet
+        (true to listOf(tree, console)) to true, // phone upright, Build or Run
+        (false to listOf(tree, console)) to false, // desktop, tablet sideways, phone sideways
+        (true to listOf(console)) to false, // no tree yet (a Sync tab, a plain Run console)
+        (true to emptyList<PanelConsole>()) to false, // nothing drawn yet
       )
     assertEquals(
       expected,
-      expected.mapValues { (input, _) -> stackedBuild(input.first, input.second, input.third) },
+      expected.mapValues { (input, _) -> stackedBuildView(input.first, input.second) },
     )
+  }
+
+  @Test
+  fun stripsComeFromTheBounds() {
+    // Run at 411 dp: the toolbar row is 32 tall, no left strip, the console's strip starts at 379.
+    val run =
+      listOf(
+        PanelBuildTree(6, LxRect(0, 32, 135, 681)),
+        PanelConsole("a", LxRect(136, 32, 243, 681)),
+      )
+    // Build at 73 dp: left strip 33, no top row, the console's strip starts at 41.
+    val build =
+      listOf(PanelBuildTree(6, LxRect(33, 0, 10, 681)), PanelConsole("a", LxRect(44, 0, -3, 681)))
+    assertEquals(BuildStrips(top = 32, left = 0, consoleLeft = 379), buildStrips(run))
+    assertEquals(BuildStrips(top = 0, left = 33, consoleLeft = 41), buildStrips(build))
   }
 
   @Test
