@@ -599,7 +599,7 @@ withKernel(middleware) {                                   // withTransactor { w
      - `ClientScreen` also feeds `DoubleShift` from `Modifier.onPreInterceptKeyBeforeSoftKeyboard`, which sees
        every key before the keyboard app. Once an event has come that way, `DoubleShift` ignores the ones from
        `onPreviewKeyEvent`. That path repeats the same keys. A first build that skipped only an event object it had
-       already counted still missed some real double ⇧ in the editor (open in 2 of 6 tries), so something else
+       already counted still missed some real double ⇧ in the editor (it opened in 2 of 9 tries), so something else
        also arrives there; most likely the keyboard app's own Shift events (`InputConnection.sendKeyEvent`), not
        proven. With only the pre-keyboard events counted it opened every time.
      - Desktop Compose never calls that hook (`FocusOwnerImpl.dispatchInterceptedSoftKeyboardEvent` has no
