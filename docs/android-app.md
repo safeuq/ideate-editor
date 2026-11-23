@@ -170,3 +170,9 @@ phone still holds open), the backend keeps it as `controllerConnected` and answe
 identity, with `USER_DECLINED`. Leaving with Back avoids it. After `am kill` the saved identity was accepted again
 within about 14 s (the second attempt), so Ideate's retry loop covers it; a reinstall wipes the identity, which is a
 different case (the join token stays bound to the old client until the backend is restarted).
+
+## Addendum (2026-11-23): leaving off the main thread; a stale saved session
+
+- **Back threw `NetworkOnMainThreadException`.** `ClientSession.stop()` ended the rd lifetime on the UI thread, and rd sends each model's last state through the wire while it ends (`RdExtBase.sendState` → `SplitWire.send`). `stop()` now ends the lifetime on a thread of its own. Checked on the emulator: Back logs no exception, and joining again right after is accepted. The backend's status still said `controllerConnected: true`, with `secondsSinceLastControllerActivity` counting from before the test, so that flag is not a sign of a client stuck on the backend; the `USER_DECLINED` seen earlier came after a reinstall killed the app mid-connection.
+- **A launch with a `joinLink` extra no longer restores the saved screen.** The restore and the new link both ran; the link connected, but the restored stand-in stayed on screen and kept retrying its old link.
+- **A saved link whose backend has restarted is given up at once.** The backend's certificate is new, so every attempt fails with "Server fingerprint … does not match fp …" (`FingerprintTrustManager`). Example: saved `fp=F66A…`, backend now `A2D3…`. The reconnect loop now stops after the first such failure: a Termux backend goes on to `termuxStatus` (Termux gives the new link), a link connection shows "The backend was restarted; connect to it again with its new link." on the connections screen, instead of 2 minutes of "Trying to reconnect".

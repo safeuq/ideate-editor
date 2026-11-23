@@ -328,9 +328,15 @@ class ClientSession(
     }
   }
 
+  /**
+   * Ends the session. Callers are on the UI thread (Back, a reconnect replacing this session), but
+   * ending the lifetime makes rd send each model's last state through the wire
+   * (`RdExtBase.sendState` → `SplitWire.send`), and Android refuses network use on the main thread
+   * (`NetworkOnMainThreadException`, seen on Back). So it ends on a thread of its own.
+   */
   fun stop() {
     markupTimer.shutdownNow()
-    lifetimeDefinition.terminate()
+    thread(name = "client-session-stop", isDaemon = true) { lifetimeDefinition.terminate() }
   }
 
   // ---- Actions from the UI (any thread) ----

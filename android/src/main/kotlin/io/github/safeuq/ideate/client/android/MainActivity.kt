@@ -113,7 +113,8 @@ class MainActivity : ComponentActivity() {
     IdeateProcess.icons = icons
     // The editor window was open when Android ended the process: it opens again at once with its
     // saved screen, and this window shows nothing until it covers it.
-    val restored = controller.restoreSaved()
+    // Not when started with a link: that connection is the one wanted.
+    val restored = intent.getStringExtra("joinLink") == null && controller.restoreSaved()
 
     setContent {
       // A session shows in the editor window (EditorActivity); this one stays the connections

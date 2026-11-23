@@ -536,6 +536,9 @@ class ConnectController(
    * allowed to use the join token again (docs/split-protocol.md, "Same join token, same client
    * id").
    */
+  /** Set by [reconnectOnce] when the backend's certificate changed since the link was made. */
+  private var backendRestarted = false
+
   private fun reconnect(lost: Attempt, identity: String, reason: String) {
     val certificate = runCatching { ClientCertificate.decode(identity) }.getOrNull()
     if (certificate == null) {
@@ -560,6 +563,15 @@ class ConnectController(
         if (reconnectOnce(lost, identity, certificate)) {
           watching.cancel()
           reconnecting = null
+          return@launch
+        }
+        // The backend restarted: a new certificate, so the saved link can never work again.
+        if (backendRestarted) {
+          watching.cancel()
+          reconnecting = null
+          endSession()
+          if (lost.kind == ConnectionKind.TERMUX) termuxStatus(lost.project, resumeTried = true)
+          else warn("The backend was restarted; connect to it again with its new link.")
           return@launch
         }
         delay(pause)
@@ -628,6 +640,8 @@ class ConnectController(
         pending = null
       }
     if (!connected) {
+      // Connection.kt's FingerprintTrustManager: "Server fingerprint … does not match fp …".
+      backendRestarted = "does not match fp" in candidate.state.value.connectionLost.orEmpty()
       candidate.stop()
       return false
     }
