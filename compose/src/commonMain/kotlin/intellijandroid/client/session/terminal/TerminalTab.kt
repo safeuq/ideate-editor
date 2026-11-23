@@ -3,21 +3,31 @@ package intellijandroid.client.session.terminal
 import com.jediterm.core.util.TermSize
 import com.jediterm.terminal.CursorShape
 import com.jediterm.terminal.RequestOrigin
+import com.jediterm.terminal.TerminalColor
 import com.jediterm.terminal.TerminalDisplay
 import com.jediterm.terminal.TerminalExecutorServiceManager
 import com.jediterm.terminal.TerminalStarter
+import com.jediterm.terminal.TextStyle
 import com.jediterm.terminal.TtyBasedArrayDataStream
 import com.jediterm.terminal.emulator.mouse.MouseFormat
 import com.jediterm.terminal.emulator.mouse.MouseMode
+import com.jediterm.terminal.model.CharBuffer
 import com.jediterm.terminal.model.JediTerminal
 import com.jediterm.terminal.model.StyleState
+import com.jediterm.terminal.model.TerminalLine
 import com.jediterm.terminal.model.TerminalSelection
 import com.jediterm.terminal.model.TerminalTextBuffer
+import com.jetbrains.codeWithMe.model.BeTerminalColor
+import com.jetbrains.codeWithMe.model.BeTerminalEntryStyle
+import com.jetbrains.codeWithMe.model.BeTerminalLine
+import com.jetbrains.codeWithMe.model.BeTerminalScreenState
 import com.jetbrains.codeWithMe.model.RdTerminalSession
 import com.jetbrains.codeWithMe.model.RdTerminalSize
 import com.jetbrains.rd.util.lifetime.Lifetime
 import com.jetbrains.rd.util.lifetime.onTermination
 import com.jetbrains.rd.util.reactive.IScheduler
+import com.jetbrains.rd.util.reactive.adviseNotNull
+import java.util.EnumSet
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
@@ -129,6 +139,13 @@ internal class TerminalTab(
     if (session.size.valueOrNull == null)
       session.size.set(RdTerminalSize(initialSize.columns, initialSize.rows))
     if (session.outputConnected.valueOrNull != true) session.outputConnected.set(true)
+    // A session that was open before this connection (a reconnect, or the app started again) comes
+    // with the screen so far; the client takes it and clears it, as JetBrains Client's
+    // `setInitialState` does. Advised before the output, which continues from that screen.
+    session.initialState.adviseNotNull(sessionLifetime) { state ->
+      restore(state)
+      session.initialState.set(null)
+    }
     session.output.adviseOn(sessionLifetime, scheduler) { bytes ->
       connector.onOutput(bytes.toByteArray())
     }
@@ -148,6 +165,19 @@ internal class TerminalTab(
       connector.close()
       executors.shutdownWhenAllExecuted()
     }
+  }
+
+  private fun restore(state: BeTerminalScreenState) {
+    buffer.lock()
+    try {
+      buffer.clearScreenAndHistoryBuffers()
+      state.historyLines?.let { lines -> buffer.historyBuffer.addLines(lines.map(::terminalLine)) }
+      buffer.screenBuffer.addLines(state.screenLines.map(::terminalLine))
+    } finally {
+      buffer.unlock()
+    }
+    terminal.cursorPosition(state.cursorX, state.cursorY)
+    queuePublish()
   }
 
   fun resize(columns: Int, rows: Int) {
@@ -237,3 +267,31 @@ private class TerminalExecutors : TerminalExecutorServiceManager {
     unbounded.shutdown()
   }
 }
+
+/** One line of a backend screen state (spec 3.3), as JetBrains Client's `fromModel` builds it. */
+internal fun terminalLine(line: BeTerminalLine): TerminalLine {
+  val terminalLine = TerminalLine()
+  var column = 0
+  line.entries.forEach { entry ->
+    terminalLine.insertString(column, CharBuffer(entry.text), textStyle(entry.style))
+    column += entry.text.length
+  }
+  return terminalLine
+}
+
+/** Bit `n` of `optionsMask` is JediTerm's `TextStyle.Option` number `n` (bold, italic, …). */
+private fun textStyle(style: BeTerminalEntryStyle): TextStyle {
+  val options = EnumSet.noneOf(TextStyle.Option::class.java)
+  TextStyle.Option.entries
+    .filter { option -> style.optionsMask and (1 shl option.ordinal) != 0 }
+    .forEach(options::add)
+  return TextStyle(
+    style.foreground?.let(::terminalColor),
+    style.background?.let(::terminalColor),
+    options,
+  )
+}
+
+/** A palette index (0 to 255), or an RGB color when the index is negative. */
+private fun terminalColor(color: BeTerminalColor): TerminalColor =
+  if (color.index >= 0) TerminalColor(color.index) else TerminalColor(color.r, color.g, color.b)

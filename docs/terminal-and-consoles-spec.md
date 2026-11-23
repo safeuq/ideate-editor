@@ -814,3 +814,8 @@ backend had no `SHELL` (an SSH login has `SHELL=/data/data/com.termux/files/usr/
 Typing `echo` on the phone showed `e  o`: JediTerm's buffer and the screen snapshot both held `echo`, but the canvas painted some letters invisible until the screen was redrawn (e.g. by closing the keyboard).
 
 Cause: Compose's `TextMeasurer` caches layouts by text and the attributes that change the layout; color is not one of them. `drawText(measurer, "c", topLeft, style)` therefore reused the layout of `"c"` last measured under the cursor, painted in the field background color. `TerminalView` now measures first and passes the color at draw time (`drawText(layoutResult, color = …)`), for both the text runs and the character under the cursor.
+
+## Addendum (2026-11-23): the screen after a reconnect
+
+A session that was open before the connection (IDEate reconnected, or Android restarted the app in the background) came back empty until the shell printed something new. The backend sends the screen so far in the session's `initialState` (`BeTerminalScreenState`: `historyLines`, `screenLines` of styled entries, `cursorX`, `cursorY`); JetBrains Client's `setInitialState` (intellij.platform.frontend.split.jar, `TerminalWidgetControlKt`) clears JediTerm's buffers, adds those lines, moves the cursor, and sets `initialState` back to null. `TerminalTab` now does the same, before it reads the output. Style entries: `optionsMask` bit n = `TextStyle.Option` number n; a color with `index` ≥ 0 is a palette color, else RGB. Switching apps through Recents keeps the connection, so the screen was never lost there.
+
