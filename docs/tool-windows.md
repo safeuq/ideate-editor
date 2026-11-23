@@ -48,6 +48,13 @@ IDEate does what JetBrains Client does with no saved changes (`toolWindowButtons
 - each window goes in one of six places from its side (`BeToolWindow.position`) and IntelliJ's split flag (`BeToolWindow.sideTool`): left top/bottom, bottom left/right, right top/bottom; Structure is split, so it sits under Project, as in IntelliJ (since 2026-11-18; before, IDEate kept it on the right). How each screen shape shows the places: [`mobile-layout.md`](mobile-layout.md);
 - every other available window is under ⋯ ("More tool windows", `MoreSquareStripeButton`), by name.
 
+### Stripe button tooltips (2026-11-23)
+
+A mouse over a stripe button shows IntelliJ's `HelpTooltip` (`HelpTooltip.kt`, platform-api) with the window's name, as `SquareStripeButton.updateToolTipText` sets it up: no delay (`setInitialDelay(0)`, `setHideDelay(0)`), 5 dp from the button on the side facing the islands (`Alignment.RIGHT` on the left bar, `LEFT` on the right bar; above on the horizontal bar, `Alignment.TOP`). It hides when the mouse leaves or presses the button. Look: `HelpTooltip.smallTextBorderInsets` 8/12/9/12 dp, corner radius 4 (`ToolTip.borderCornerRadius`), background and border `feedback-bg` = gray-40 (`ToolTip.background`, `ToolTip.borderColor` in `ManyIslandsDark.theme.json`), text `text-default` in the 13 sp UI font. The code is `HelpTooltip` in `ui/component/HelpTooltip.kt`, ready for other buttons.
+
+- **Shortcut:** IntelliJ adds the activate shortcut (`ActivateToolWindowAction`, e.g. `⌘1`) in `ToolTip.shortcutForeground`. `BackendToolWindow` carries no shortcuts, so the title is alone; `HelpTooltip` already takes a `shortcut` for when the backend sends keymap data.
+- **Not done:** the shadow IntelliJ draws, tooltip descriptions and links, and a long press on touch (a tap shows nothing).
+
 Mac backend result: left top Project, ⋯; left bottom Structure; bottom left Version Control, Problems; right top Database. Under ⋯: Bookmarks, Coverage, Database Changes, Database Output, Endpoints, Learn, Profiler, Pull Requests. Commit, AI Chat and Gradle are unavailable there.
 
 IDEate doesn't keep the user's own layout (moving a window to another side); add it when IDEate can move windows.

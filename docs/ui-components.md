@@ -60,6 +60,7 @@ the SSH message dialog (32b2677) and step 1, so they have moved a little since.
 | `TreeRow` / `ProjectTreeView` (already shared by Project, Structure, FolderChooser) | ui/ProjectTreeView.kt:216, :96 | `Tree` + `DefaultTreeUI` (`IC/platform/ui.tree/src/com/intellij/ui/tree/ui/DefaultTreeUI.java`) | LazyTree.kt |
 | `ToolWindowPanel` header | ui/ToolWindows.kt:250 | `ToolWindowHeader` (`IC/platform/platform-impl/src/com/intellij/toolWindow/ToolWindowHeader.kt`) | none |
 | `StripeButton`, `ToolWindowBar` | ui/ToolWindows.kt:142, :101 | `StripeButton.kt`, `ToolWindowToolbar` (same folder) | none |
+| `HelpTooltip` (title, optional shortcut; stripe buttons) | ui/component/HelpTooltip.kt | `HelpTooltip` (`IC/platform/platform-api/src/com/intellij/ide/HelpTooltip.kt`) | none |
 | `MainToolbar` | ui/ToolWindows.kt:162 | `MainToolbar.kt` (`IC/platform/platform-impl/src/com/intellij/openapi/wm/impl/headertoolbar/`) | none |
 | `EditorTabs` | ui/ClientScreen.kt:439 | `JBEditorTabs` / `JBTabsImpl.kt` | Tabs.kt |
 | `BottomTabs`, `Sidebar` | connect/ConnectScreen.kt:192, :239 | welcome screen's tab list (`TabbedWelcomeScreen.java`) | none |

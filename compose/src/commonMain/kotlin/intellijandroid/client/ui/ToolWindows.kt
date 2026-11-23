@@ -51,8 +51,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupPositionProvider
 import intellijandroid.client.session.BackendToolWindow
 import intellijandroid.client.ui.component.AppPopup
+import intellijandroid.client.ui.component.HelpTooltip
 import intellijandroid.client.ui.component.IconButton
 import intellijandroid.client.ui.component.Menu
+import intellijandroid.client.ui.component.TooltipAlignment
 import intellijandroid.client.ui.component.keep
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -433,26 +435,41 @@ private fun StripeButton(
   val interaction = remember { MutableInteractionSource() }
   val hovered by interaction.collectIsHoveredAsState()
   val pressed by interaction.collectIsPressedAsState()
-  Box(
-    (if (vertical) Modifier.size(across, along) else Modifier.size(along, across))
-      .clickable(interaction, indication = null, onClick = onClick)
-      .padding(
-        if (vertical && mirrored) PaddingValues(start = end, top = top, end = start, bottom = top)
-        else if (vertical) PaddingValues(start = start, top = top, end = end, bottom = top)
-        else PaddingValues(start = top, top = end, end = top, bottom = start),
-      )
-      .background(
-        when {
-          selected || pressed -> IslandsDark.stripeHighlight
-          hovered -> IslandsDark.toolbarHover
-          else -> Color.Transparent
-        },
-        RoundedCornerShape(IslandsDark.stripeHighlightRadius),
-      ),
-    contentAlignment = Alignment.Center,
+  // IntelliJ's SquareStripeButton.getAlignment: the tooltip goes on the side facing the islands; a
+  // horizontal bar (IntelliJ's ToolWindowStripeExtension case) puts it above.
+  HelpTooltip(
+    description,
+    when {
+      !vertical -> TooltipAlignment.TOP
+      mirrored -> TooltipAlignment.LEFT
+      else -> TooltipAlignment.RIGHT
+    },
   ) {
-    icon?.let {
-      Image(it, contentDescription = description, modifier = Modifier.size(IslandsDark.stripeIcon))
+    Box(
+      (if (vertical) Modifier.size(across, along) else Modifier.size(along, across))
+        .clickable(interaction, indication = null, onClick = onClick)
+        .padding(
+          if (vertical && mirrored) PaddingValues(start = end, top = top, end = start, bottom = top)
+          else if (vertical) PaddingValues(start = start, top = top, end = end, bottom = top)
+          else PaddingValues(start = top, top = end, end = top, bottom = start),
+        )
+        .background(
+          when {
+            selected || pressed -> IslandsDark.stripeHighlight
+            hovered -> IslandsDark.toolbarHover
+            else -> Color.Transparent
+          },
+          RoundedCornerShape(IslandsDark.stripeHighlightRadius),
+        ),
+      contentAlignment = Alignment.Center,
+    ) {
+      icon?.let {
+        Image(
+          it,
+          contentDescription = description,
+          modifier = Modifier.size(IslandsDark.stripeIcon),
+        )
+      }
     }
   }
 }

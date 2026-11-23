@@ -91,6 +91,10 @@ object IslandsDark {
   // *.borderColor = tool-window-border = layer-0-border = gray-30: tool window header line,
   // scroll pane borders
   val toolWindowBorder = Color(0xFF26282C)
+  // ToolTip.background and ToolTip.borderColor = feedback-bg = layer-2-bg = gray-40
+  val tooltipBackground = Color(0xFF33353B)
+  // ToolTip.shortcutForeground = text-muted = gray-100
+  val tooltipShortcut = Color(0xFF9FA2A8)
   val toolbarSeparator = Color(0x21FFFFFF) // ToolBar.separatorColor = toolbar-border
 
   val headerHeight
