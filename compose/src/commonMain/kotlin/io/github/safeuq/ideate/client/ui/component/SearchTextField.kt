@@ -11,6 +11,8 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -22,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -49,6 +52,11 @@ fun SearchTextField(
   undecorated: Boolean = false,
   /** From the icon to the text: 2 (`getSearchIconGap`); Search Everywhere's history icon has 6. */
   iconGap: Dp = SearchLook.iconGap,
+  /**
+   * The soft keyboard's action key (shown as Go, →): it sends no Enter key event, so a field whose
+   * Enter does something needs this too. Example: Search Everywhere opens the selected row.
+   */
+  onSubmit: (() -> Unit)? = null,
 ) {
   val icons = LocalIcons.current
   val currentValue by rememberUpdatedState(value)
@@ -58,6 +66,10 @@ fun SearchTextField(
       value,
       onValueChange,
       modifier.onFocusChanged { if (!it.isFocused) history?.add(currentValue) },
+      keyboardOptions =
+        if (onSubmit == null) KeyboardOptions.Default
+        else KeyboardOptions(imeAction = ImeAction.Go),
+      keyboardActions = KeyboardActions(onGo = { onSubmit?.invoke() }),
       placeholder = placeholder,
       undecorated = undecorated,
       leadingIcon = {

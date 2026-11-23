@@ -167,6 +167,9 @@ internal fun SearchEverywherePopup(
         // a click lists the tab's earlier searches.
         history = history,
         iconGap = 6.dp,
+        // The soft keyboard's action key, as Enter: opens the selected row (the first one
+        // unless the arrows moved it).
+        onSubmit = { popup.rows.getOrNull(popup.selected)?.let(::choose) },
       )
       if (popup.rows.isNotEmpty() || (popup.query.isNotBlank() && !popup.searching)) Separator()
       if (popup.rows.isEmpty() && popup.query.isNotBlank() && !popup.searching) {
