@@ -819,3 +819,21 @@ Cause: Compose's `TextMeasurer` caches layouts by text and the attributes that c
 
 A session that was open before the connection (IDEate reconnected, or Android restarted the app in the background) came back empty until the shell printed something new. The backend sends the screen so far in the session's `initialState` (`BeTerminalScreenState`: `historyLines`, `screenLines` of styled entries, `cursorX`, `cursorY`); JetBrains Client's `setInitialState` (intellij.platform.frontend.split.jar, `TerminalWidgetControlKt`) clears JediTerm's buffers, adds those lines, moves the cursor, and sets `initialState` back to null. `TerminalTab` now does the same, before it reads the output. Style entries: `optionsMask` bit n = `TextStyle.Option` number n; a color with `index` ≥ 0 is a palette color, else RGB. Switching apps through Recents keeps the connection, so the screen was never lost there.
 
+
+## Addendum (2026-11-23): a blank "Local" tab after the app restarts
+
+Seen on the S24 (xtool on the phone backend) after the app was installed again over a running backend. The Terminal showed a "Local" tab with a lone cursor, no prompt, and typed commands never reached the shell (not in `~/.zsh_history`), though the backend had started a shell. A tab opened later with `+` worked.
+
+Reproduced on the Mac with a test backend:
+
+| Step | Client log | Result |
+|---|---|---|
+| open a terminal, then kill the client (as an install does) | `SessionId#1 added (Client)` | |
+| start the client again, open the Terminal | `SessionId#1 added (Host)` | the old shell, restored |
+| press `+` | `SessionId#1 removed`, `SessionId#1 added (Client)` | blank "Local" tab, no `Started …UnixPtyProcess` in idea.log, the restored tab gone |
+
+Cause: `TerminalSessions.open` numbered tabs `SessionId#1`, `#2`, … from a counter that starts at 1 again with every app start. The sessions from before the restart are still in `terminalModel.sessions` under their old ids (`origin = Host` now), so a new tab could take the id of one of them. Putting a new `RdTerminalSession` under an existing key replaces the entry: the restored tab goes, and the backend starts no shell for the replacement, so it keeps the backend's default title, "Local".
+
+JetBrains Client doesn't hit this: `ThinClientTerminalHost.getOrCreate` keys a new session `<ClientId.localId.value><n>` (concatenated with nothing between), and the client id is new for each connection. Only an id passed in as `SessionId#<id>` (a session the backend already has) keeps that prefix, which it strips.
+
+Fix (2026-11-23): `open` takes the first `SessionId#<n>` from the counter on that isn't in the map (`TerminalSessions.freeSessionId`, tested in `TerminalSessionsTest`). Checked on the Mac: with the restored `SessionId#1` open, `+` added `SessionId#2` with a working shell, and the restored tab stayed.

@@ -75,7 +75,8 @@ internal class TerminalSessions(
   /** Opens a tab and returns its id. */
   fun open(): String {
     val terminalModel = checkNotNull(model) { "Terminal sessions aren't bound to a project yet" }
-    val id = "SessionId#${++counter}"
+    val id = freeSessionId(counter + 1) { terminalModel.sessions.containsKey(it) }
+    counter = id.removePrefix(SESSION_ID_PREFIX).toInt()
     terminalModel.sessions[id] = newClientSession(lastSize)
     return id
   }
@@ -94,6 +95,19 @@ internal class TerminalSessions(
   fun tab(id: String): TerminalTab? = tabs[id]
 
   companion object {
+    private const val SESSION_ID_PREFIX = "SessionId#"
+
+    /**
+     * The first `SessionId#<n>` from [from] on that isn't [taken]. The counter starts at 1 again
+     * when the app starts again, while sessions from before (`origin = Host` now) are still in the
+     * map under their old ids. Putting a new session under one of them replaced it: its tab went,
+     * and the backend started no shell for the new one, which stayed blank as "Local" (seen on the
+     * S24 2026-11-23). JetBrains Client avoids this with `<its client id><n>`
+     * (`ThinClientTerminalHost.getOrCreate`).
+     */
+    internal fun freeSessionId(from: Int, taken: (String) -> Boolean): String =
+      generateSequence(from) { it + 1 }.map { "$SESSION_ID_PREFIX$it" }.first { !taken(it) }
+
     /**
      * A session the client starts (spec 3.4): the size and `outputConnected` are set before the
      * session goes into the map, so the backend starts its shell at that size. `shellCommand` null:

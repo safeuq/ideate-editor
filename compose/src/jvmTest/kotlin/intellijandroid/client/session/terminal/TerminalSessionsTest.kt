@@ -17,4 +17,13 @@ class TerminalSessionsTest {
     assertEquals(RdTerminalSize(100, 30), session.size.valueOrNull)
     assertEquals(true, session.outputConnected.valueOrNull)
   }
+
+  /** After a restart, sessions from before keep their ids: a new tab must not reuse one. */
+  @Test
+  fun aNewTabSkipsIdsStillInTheMap() {
+    val restored = setOf("SessionId#1", "SessionId#3")
+    assertEquals("SessionId#2", TerminalSessions.freeSessionId(1) { it in restored })
+    assertEquals("SessionId#4", TerminalSessions.freeSessionId(3) { it in restored })
+    assertEquals("SessionId#1", TerminalSessions.freeSessionId(1) { false })
+  }
 }
