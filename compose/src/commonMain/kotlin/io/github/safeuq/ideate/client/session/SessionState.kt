@@ -2,8 +2,10 @@ package io.github.safeuq.ideate.client.session
 
 import io.github.safeuq.ideate.client.session.terminal.TerminalTabState
 import io.github.safeuq.ideate.client.ui.MenuEntry
+import kotlinx.serialization.Serializable
 
 /** One piece of a tree node's label, e.g. the project name (bold) and its path (grey). */
+@Serializable
 data class TextFragment(
   val text: String,
   /**
@@ -16,6 +18,7 @@ data class TextFragment(
 )
 
 /** One row of the Project view, as `RdProjectViewItem` describes it. */
+@Serializable
 data class TreeNode(
   val id: Int,
   val parentId: Int?,
@@ -38,6 +41,7 @@ data class TreeNode(
   val trailing: String? = null,
 )
 
+@Serializable
 data class ProjectTree(
   val nodes: Map<Int, TreeNode> = emptyMap(),
   val expanded: Set<Int> = emptySet(),
@@ -92,6 +96,7 @@ data class UsageRow(
 )
 
 /** A highlighted range. [style] is already resolved against the current scheme. */
+@Serializable
 data class Highlight(
   val id: Long,
   val start: Int,
@@ -105,13 +110,13 @@ data class Highlight(
  * [indentLevel] (a column). The guide is drawn at that column on the lines after [startLine] and
  * before [endLine] (exclusive; equal to the line count when the block runs to the end).
  */
-data class IndentGuide(val indentLevel: Int, val startLine: Int, val endLine: Int)
+@Serializable data class IndentGuide(val indentLevel: Int, val startLine: Int, val endLine: Int)
 
 /**
  * A gutter icon (run marker, override marker, …) on the line of [offset]; [iconPaths] are paths in
  * the icons jar.
  */
-data class GutterIcon(val offset: Int, val iconPaths: List<String>)
+@Serializable data class GutterIcon(val offset: Int, val iconPaths: List<String>)
 
 /** [windowId] is a backend tool window id, e.g. `Run`. */
 data class ShowRequest(val windowId: String, val serial: Int)
@@ -125,6 +130,7 @@ enum class EditorKind {
   CONSOLE,
 }
 
+@Serializable
 data class EditorFile(
   val path: String,
   val text: String,
@@ -162,7 +168,7 @@ data class EditorFile(
  * document offsets: [start] is the scope's name (e.g. `Main` in `public class Main {`), where a tap
  * on its pinned line puts the caret; [end] is its end.
  */
-data class StickyRange(val start: Int, val end: Int)
+@Serializable data class StickyRange(val start: Int, val end: Int)
 
 /** Editor keys that become backend editor actions. */
 enum class EditorKey {
@@ -248,6 +254,11 @@ data class SessionState(
   val terminals: List<TerminalTabState> = emptyList(),
   /** A terminal tab can open: the project is bound (its terminal model exists). */
   val terminalsReady: Boolean = false,
+  /**
+   * The backend's project has loaded and the editors reopened on connecting have been opened or
+   * found gone (not that their text has arrived). A reconnect's hand-over ends on it.
+   */
+  val loaded: Boolean = false,
 )
 
 /** Context menu number [serial]; [entries] null until the backend has answered ("Loading…"). */

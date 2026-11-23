@@ -158,6 +158,8 @@ class ClientSession(
   private val expandedPaths: Set<String> = emptySet(),
   /** After a reconnect, the path of the row that was selected; it is selected again. */
   private val selectedPath: String? = null,
+  /** False while the app is in the background; the wire checks nothing then (SplitWire). */
+  private val inForeground: () -> Boolean = { true },
   /**
    * Called on the connect thread once the backend has accepted the connection, with the identity it
    * accepted.
@@ -830,7 +832,7 @@ class ClientSession(
     val connection = Connection.open(link, certificate, ::log)
     onAccepted(certificate)
     val wire =
-      SplitWire(connection) { failure ->
+      SplitWire(connection, inForeground) { failure ->
         fail(failure ?: IllegalStateException("Connection closed"), connectionLost = true)
       }
     lifetime.onTermination { wire.close() }
@@ -1170,6 +1172,8 @@ class ClientSession(
         if (!loaded) return@advise
         reopenEditors()
         if (initialFile != null) openFile(initialFile)
+        solutionLoaded = true
+        markLoaded()
       }
     }
     protocol.solutionModel.solutions.view(lifetime) { solutionLifetime, solutionKey, newSolution ->
@@ -1492,6 +1496,14 @@ class ClientSession(
   private fun finishedOpening(path: String) {
     reopening -= path
     saveEditors()
+    markLoaded()
+  }
+
+  private var solutionLoaded = false
+
+  /** [SessionState.loaded] once the project has loaded and every reopened editor is settled. */
+  private fun markLoaded() {
+    if (solutionLoaded && reopening.isEmpty()) mutableState.update { it.copy(loaded = true) }
   }
 
   /** Opens [path] in a tab; [select] makes it the selected tab. */

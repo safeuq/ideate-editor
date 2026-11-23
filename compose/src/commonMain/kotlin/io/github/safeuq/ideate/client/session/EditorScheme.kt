@@ -8,8 +8,11 @@ import com.jetbrains.rd.ide.model.AbstractColor
 import com.jetbrains.rd.ide.model.IdeaColorKey
 import com.jetbrains.rd.ide.model.RgbColor
 import com.jetbrains.rd.ide.model.RgbaColor
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 /** IntelliJ's `EffectType`, as sent in `IdeaTextAttributes.effectType`. */
+@Serializable
 enum class TextEffect {
   LINE_UNDERSCORE,
   WAVE_UNDERSCORE,
@@ -23,6 +26,7 @@ enum class TextEffect {
  * Resolved text attributes. Colors are ARGB; null means "keep what is below" (the default
  * foreground, no background).
  */
+@Serializable
 data class TextStyle(
   val foreground: Long? = null,
   val background: Long? = null,
@@ -44,30 +48,18 @@ data class TextStyle(
  * (`JAVA_KEYWORD` → `DEFAULT_KEYWORD`) and repeat. The backend sends each scheme with only its own
  * entries ("Islands Dark" has 154; Darcula supplies the rest).
  */
-class EditorScheme(val name: String, private val chain: List<ColorsSchemeModel>) {
-  private val attributes: List<Map<String, IdeaTextAttributes>> = chain.map { scheme ->
-    scheme.attributes
-      .filter { !it.isInherited && it.attributes != null }
-      .associate { it.textAttributesKey.externalName to it.attributes!! }
-  }
-  private val colors: List<Map<String, Long>> = chain.map { scheme ->
-    scheme.colors
-      .filter { !it.isInherited }
-      .mapNotNull { entry -> entry.color?.toArgb()?.let { entry.colorKey.externalName to it } }
-      .toMap()
-  }
-  private val colorFallbacks: Map<String, String> =
-    chain
-      .flatMap { it.colors }
-      .mapNotNull { entry ->
-        (entry.colorKey as? IdeaColorKey)?.fallback?.let {
-          entry.colorKey.externalName to it.externalName
-        }
-      }
-      .toMap()
-
-  val defaultText: TextStyle = style(listOf(listOf("TEXT")))
+@Serializable
+class EditorScheme(
+  val name: String,
+  /** Per scheme of the chain (the scheme, then its parent): its own entries by key. */
+  private val attributes: List<Map<String, TextStyle>>,
+  private val colors: List<Map<String, Long>>,
+  private val colorFallbacks: Map<String, String>,
+) {
+  @Transient val defaultText: TextStyle = style(listOf(listOf("TEXT")))
+  @Transient
   val background: Long = defaultText.background ?: error("Scheme $name has no TEXT background")
+  @Transient
   val foreground: Long = defaultText.foreground ?: error("Scheme $name has no TEXT foreground")
 
   /**
@@ -79,7 +71,7 @@ class EditorScheme(val name: String, private val chain: List<ColorsSchemeModel>)
       for (key in keyChain) {
         for (level in attributes) {
           level[key]?.let {
-            return it.toStyle()
+            return it
           }
         }
       }
@@ -108,7 +100,35 @@ class EditorScheme(val name: String, private val chain: List<ColorsSchemeModel>)
 
     fun resolve(name: String, schemes: Map<String, ColorsSchemeModel>): EditorScheme? {
       val chain = generateSequence(name) { PARENTS[it] }.map(schemes::get).toList()
-      return if (chain.all { it != null }) EditorScheme(name, chain.filterNotNull()) else null
+      if (chain.any { it == null }) return null
+      val models = chain.filterNotNull()
+      return EditorScheme(
+        name,
+        attributes =
+          models.map { scheme ->
+            scheme.attributes
+              .filter { !it.isInherited && it.attributes != null }
+              .associate { it.textAttributesKey.externalName to it.attributes!!.toStyle() }
+          },
+        colors =
+          models.map { scheme ->
+            scheme.colors
+              .filter { !it.isInherited }
+              .mapNotNull { entry ->
+                entry.color?.toArgb()?.let { entry.colorKey.externalName to it }
+              }
+              .toMap()
+          },
+        colorFallbacks =
+          models
+            .flatMap { it.colors }
+            .mapNotNull { entry ->
+              (entry.colorKey as? IdeaColorKey)?.fallback?.let {
+                entry.colorKey.externalName to it.externalName
+              }
+            }
+            .toMap(),
+      )
     }
 
     /**

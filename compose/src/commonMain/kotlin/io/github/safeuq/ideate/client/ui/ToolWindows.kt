@@ -223,6 +223,19 @@ class ToolWindowState {
 
   fun isOpen(window: ToolWindow) = open[window.place] == window
 
+  /** The open windows as saved: place name to window id, e.g. `{"LEFT_TOP": "Project"}`. */
+  fun saved(): Map<String, String> =
+    open.entries.associate { (place, window) -> place.name to window.id }
+
+  /** Opens the windows [saved] says, as far as [buttons] has them. */
+  fun restore(saved: Map<String, String>, buttons: ToolWindowButtons) {
+    val windows = buttons.byPlace.values.flatten() + buttons.more
+    open.clear()
+    for ((place, id) in saved) windows
+      .firstOrNull { it.id == id }
+      ?.let { open[Place.valueOf(place)] = it }
+  }
+
   fun open(window: ToolWindow, layout: ScreenLayout) {
     open[window.place] = window
     last[window.place] = window

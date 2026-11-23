@@ -83,4 +83,45 @@ class HandOverTest {
     val reopened = ProjectTree(rootOnly.nodes + (8 to node(8, 7, "/p/src")), setOf(7))
     assertEquals(reopened, handOver(withOld, SessionState(tree = reopened), emptySet()).shown.tree)
   }
+
+  @Test
+  fun settledShowsNewValuesForPanelsItNeverSentAndDropsGoneEditors() {
+    // The new session has no breadcrumbs and not the file /a any more, and it says it has loaded.
+    val current = SessionState(editors = listOf(editor("/b", true)))
+    assertEquals(previous.breadcrumbs, handOver(previous, current, emptySet()).shown.breadcrumbs)
+    val result = handOver(previous, current, emptySet(), settled = true)
+    assertEquals(emptyList(), result.shown.breadcrumbs)
+    assertEquals(listOf("/b"), result.shown.editors.map { it.path })
+    assertFalse(result.done)
+    assertTrue(handOver(previous, current, emptySet(), settled = true, forced = true).done)
+  }
+
+  @Test
+  fun settledStillWaitsForTheProjectNameUntilForced() {
+    val current = SessionState()
+    assertEquals("demo", handOver(previous, current, emptySet(), settled = true).shown.projectName)
+    assertNull(
+      handOver(previous, current, emptySet(), settled = true, forced = true).shown.projectName,
+    )
+  }
+
+  @Test
+  fun settledStillWaitsForAnEditorThatIsLoading() {
+    val current = SessionState(editors = listOf(editor("/a", false, "new")))
+    val result = handOver(previous, current, emptySet(), settled = true)
+    assertEquals(editor("/a", false, "old"), result.shown.editors.single())
+    assertFalse(result.done)
+  }
+
+  @Test
+  fun editorWaitsForItsHighlightsToo() {
+    val colors = listOf(Highlight(1, 0, 3, 0, TextStyle(foreground = 1)))
+    val colored =
+      previous.copy(editors = listOf(editor("/a", true, "old").copy(highlights = colors)))
+    val plain = SessionState(editors = listOf(editor("/a", true, "new")))
+    assertEquals("old", handOver(colored, plain, emptySet()).shown.editors.single().text)
+    val withColors =
+      SessionState(editors = listOf(editor("/a", true, "new").copy(highlights = colors)))
+    assertEquals("new", handOver(colored, withColors, emptySet()).shown.editors.single().text)
+  }
 }

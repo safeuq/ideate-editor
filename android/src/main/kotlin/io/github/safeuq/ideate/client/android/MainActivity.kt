@@ -9,6 +9,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntSize
@@ -34,6 +37,9 @@ import io.github.safeuq.ideate.client.ui.lux.pngDecoder
  */
 class MainActivity : ComponentActivity() {
   private lateinit var controller: ConnectController
+
+  /** The restored editor window is on top of this one (this window has stopped). */
+  private var editorCovers by mutableStateOf(false)
   private val termuxPermission =
     registerForActivityResult(ActivityResultContracts.RequestPermission()) { controller.refresh() }
 
@@ -74,6 +80,7 @@ class MainActivity : ComponentActivity() {
         openEditors = OpenEditors(preferenceText("connection", "openEditors")),
         termux = termux,
         device = "This phone",
+        savedSession = preferenceText("connection", "savedSession"),
         ssh =
           SshSetup(
             hosts = preferenceText("ssh", "hosts"),
@@ -104,6 +111,9 @@ class MainActivity : ComponentActivity() {
     IdeateProcess.controller = controller
     IdeateProcess.fonts = fonts
     IdeateProcess.icons = icons
+    // The editor window was open when Android ended the process: it opens again at once with its
+    // saved screen, and this window shows nothing until it covers it.
+    val restored = controller.restoreSaved()
 
     setContent {
       // A session shows in the editor window (EditorActivity); this one stays the connections
@@ -111,7 +121,8 @@ class MainActivity : ComponentActivity() {
       val connected = controller.session != null
       LaunchedEffect(connected) { if (connected) EditorActivity.start(this@MainActivity) }
       IdeateWindow(fonts, icons) {
-        ConnectApp(controller, fonts, Modifier.windowInsetsPadding(appInsets()))
+        if (!(restored && connected && !editorCovers))
+          ConnectApp(controller, fonts, Modifier.windowInsetsPadding(appInsets()))
       }
     }
     transparentCaptionBar()
@@ -125,6 +136,7 @@ class MainActivity : ComponentActivity() {
   }
 
   override fun onStop() {
+    editorCovers = true
     IdeateProcess.started(-1)
     super.onStop()
   }

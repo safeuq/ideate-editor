@@ -56,6 +56,12 @@ internal object IdeateProcess {
  * It finishes when the session ends (Back, a lost connection that isn't retried).
  */
 class EditorActivity : ComponentActivity() {
+  /**
+   * Sent on to [MainActivity] at once; its finishing must not end a session [MainActivity]
+   * restores.
+   */
+  private var redirected = false
+
   override fun onCreate(savedInstanceState: Bundle?) {
     edgeToEdge()
     super.onCreate(savedInstanceState)
@@ -64,6 +70,7 @@ class EditorActivity : ComponentActivity() {
     val fonts = IdeateProcess.fonts
     // Recreated by the system after the process ended: the session is gone with it.
     if (controller == null || fonts == null || controller.session == null) {
+      redirected = true
       startActivity(Intent(this, MainActivity::class.java))
       finish()
       return
@@ -84,7 +91,9 @@ class EditorActivity : ComponentActivity() {
     IdeateProcess.started(1)
   }
 
+  // Android may end the process while the app is away; the screen is kept for the next start.
   override fun onStop() {
+    IdeateProcess.controller?.saveScreen()
     IdeateProcess.started(-1)
     super.onStop()
   }
@@ -93,7 +102,7 @@ class EditorActivity : ComponentActivity() {
   // closing the desktop app's editor window does.
   override fun onDestroy() {
     val controller = IdeateProcess.controller
-    if (isFinishing && controller?.session != null) controller.leave()
+    if (isFinishing && !redirected && controller?.session != null) controller.leave()
     super.onDestroy()
   }
 

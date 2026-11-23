@@ -4,12 +4,14 @@ import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.Solution
 import com.jetbrains.rd.ide.model.toolWindowModel
 import com.jetbrains.rd.util.lifetime.Lifetime
+import kotlinx.serialization.Serializable
 
 /**
  * A tool window the backend has registered, from `solution.toolWindowModel.availableToolWindows`
  * (docs/tool-windows.md). Project, Run, Debug, Terminal, Services and Notifications aren't among
  * them: JetBrains Client registers those itself.
  */
+@Serializable
 data class BackendToolWindow(
   /** E.g. `Commit`, `Problems View`, `Pull Requests`. */
   val id: String,

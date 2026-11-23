@@ -14,14 +14,24 @@ import kotlin.concurrent.thread
  * ponytail: no resend buffer and no reconnect. A dropped connection ends the session; add the
  * backend's resend-after-reconnect (WIRE_EXIST = 1) when a flaky network makes that matter.
  */
-class SplitWire(private val connection: Connection, private val onClosed: (Throwable?) -> Unit) :
-  WireBase() {
+class SplitWire(
+  private val connection: Connection,
+  /**
+   * False while the app is in the background: nothing is checked then. The phone may freeze the app
+   * for minutes, which looks like a silent backend, and nobody is looking at the screen anyway.
+   */
+  private val inForeground: () -> Boolean = { true },
+  private val onClosed: (Throwable?) -> Unit,
+) : WireBase() {
   private val sendLock = Any()
   private var sentSequence = 0
 
   @Volatile private var lastReceivedSequence = 0
 
   @Volatile private var closed = false
+
+  /** When something last came in, or the app was last seen in the background. */
+  @Volatile private var lastActivityMillis = System.currentTimeMillis()
 
   /**
    * Starts the reader and ping threads. Call once the rd protocol exists (it starts message
@@ -34,6 +44,8 @@ class SplitWire(private val connection: Connection, private val onClosed: (Throw
     thread(name = "split-wire-pings", isDaemon = true) {
       while (!closed) {
         runCatching { connection.frames.writePing() }.onFailure { failure -> close(failure) }
+        // The idle time starts again when the app is back.
+        if (!inForeground()) lastActivityMillis = System.currentTimeMillis()
         Thread.sleep(PING_INTERVAL_MILLIS)
       }
     }
@@ -68,7 +80,16 @@ class SplitWire(private val connection: Connection, private val onClosed: (Throw
   private fun readLoop() {
     try {
       while (!closed) {
-        when (val frame = connection.frames.read()) {
+        val frame =
+          try {
+            connection.frames.read()
+          } catch (timeout: SocketTimeoutException) {
+            // The 15 s ran out while the app was away, or since it came back: keep waiting.
+            if (System.currentTimeMillis() - lastActivityMillis < IDLE_TIMEOUT_MILLIS) continue
+            throw timeout
+          }
+        lastActivityMillis = System.currentTimeMillis()
+        when (frame) {
           is Frame.Ping -> Unit
           is Frame.System ->
             when (frame.status) {
@@ -94,9 +115,11 @@ class SplitWire(private val connection: Connection, private val onClosed: (Throw
   fun close(failure: Throwable? = null) {
     if (closed) return
     closed = true
+    // First, so the session says "connection lost" before `connected = false` makes rd end its
+    // models, which empties the session's state; the screen keeps what it showed until then.
+    onClosed(failure)
     connected.set(false)
     connection.close()
-    onClosed(failure)
   }
 
   private companion object {

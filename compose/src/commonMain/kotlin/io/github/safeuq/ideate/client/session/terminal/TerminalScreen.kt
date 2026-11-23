@@ -5,6 +5,7 @@ import com.jediterm.terminal.TextStyle.Option
 import com.jediterm.terminal.model.TerminalLine
 import com.jediterm.terminal.model.TerminalTextBuffer
 import com.jediterm.terminal.util.CharUtils
+import kotlinx.serialization.Serializable
 
 /**
  * A color as the program asked for it: [Default] (no color set), a palette number from 0 to 255
@@ -12,13 +13,14 @@ import com.jediterm.terminal.util.CharUtils
  * turns the first two into real colors with the editor scheme (spec 2.4), so a snapshot doesn't
  * change when the theme does.
  */
+@Serializable
 sealed interface TerminalPaint {
-  data object Default : TerminalPaint
+  @Serializable data object Default : TerminalPaint
 
-  data class Indexed(val index: Int) : TerminalPaint
+  @Serializable data class Indexed(val index: Int) : TerminalPaint
 
   /** ARGB. */
-  data class Rgb(val argb: Long) : TerminalPaint
+  @Serializable data class Rgb(val argb: Long) : TerminalPaint
 }
 
 /**
@@ -26,6 +28,7 @@ sealed interface TerminalPaint {
  * no double-width filler characters; [cells] is how many columns the run covers, which is larger
  * than `text.length` when it holds wide characters (e.g. 2 columns for `日`).
  */
+@Serializable
 data class TerminalRun(
   val column: Int,
   val cells: Int,
@@ -42,6 +45,7 @@ data class TerminalRun(
  * [wrapped]: this line continues the one before it (a long line the terminal cut), so copying joins
  * them.
  */
+@Serializable
 data class TerminalScreenLine(val runs: List<TerminalRun>, val wrapped: Boolean) {
   /** The line as plain text with columns kept, trailing spaces cut: `"red plain"`. */
   val text: String
@@ -51,6 +55,7 @@ data class TerminalScreenLine(val runs: List<TerminalRun>, val wrapped: Boolean)
       .trimEnd()
 }
 
+@Serializable
 enum class TerminalCursorShape {
   BLOCK,
   UNDERLINE,
@@ -58,6 +63,7 @@ enum class TerminalCursorShape {
 }
 
 /** [column] and [row] are 0-based; [row] counts from the first screen row, not from the history. */
+@Serializable
 data class TerminalCursor(
   val column: Int,
   val row: Int,
@@ -71,6 +77,7 @@ data class TerminalCursor(
  * [lines] are the history followed by the screen (the last [rows] lines). In the alternate buffer
  * (vim, less, top) there is no history, so [lines] is the screen only.
  */
+@Serializable
 data class TerminalScreen(
   val lines: List<TerminalScreenLine>,
   val columns: Int,

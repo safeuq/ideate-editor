@@ -95,3 +95,78 @@ For this and any other drop (a network change, a backend on another machine, the
 
 **Back.** Back from a tool window page (phone held upright) goes to the editor. Back from the editor goes to the
 connect screen: the session ends, the backend keeps running, and the history entry reconnects.
+
+## Addendum (2026-11-23): the screen stays as it was when the app comes back
+
+What the S24 showed (Termux backend, big project, 2 editors, a terminal): the user left Ideate, used other
+apps, and opened it from Recents. Once the editor window had closed (connections screen), once the reconnect
+popup sat over a blank screen until the client was back. The process was not killed: Samsung's freezer froze it
+(`am_freeze`). After the thaw SplitWire's idle check fired ("Nothing received for 15 s"), and the 2-minute
+reconnect window had run out while the app was frozen (it was checked before `inForeground`).
+
+Wishes: no foreground service; no connection checks in the background; when Ideate comes back it shows the last
+screen unchanged, and parts change only when the backend sends something different.
+
+What changed:
+- **No checks in the background.** `SplitWire` takes `inForeground`. While the app is away, a read timeout no
+  longer ends the wire; the ping thread keeps "last activity" at now, so the 15 s start again when the app is back
+  (the idle end then comes 15 to 30 s later, because the blocked read still wakes every 15 s). Pings still go out;
+  a failed write only starts a reconnect, which waits for the foreground.
+- **The 2 minutes count foreground time only** (`ForegroundClock`). A drop while frozen or in the background never
+  ends the session or closes the editor window.
+- **No 10 s cap on the hand-over.** It ends when every panel has its first value from the new session, or on
+  `SessionState.loaded`: the project has loaded and every reopened editor is opened or found gone
+  (`ClientSession.markLoaded`, from `isLoaded` and `finishedOpening`). The text of an editor may still be on its
+  way then, so an editor stays read-only and old until the new one is editable. Two steps, because the project name,
+  tree and terminals arrive some seconds after `loaded` (seen on the emulator: ending the hand-over 2 s after
+  `loaded` showed "..." and a blank terminal):
+  - 2 s after `loaded` (`SETTLE_MS`): panels the backend never sent (a console that is gone, breadcrumbs of a deleted
+    file) show the new, empty value, and an editor the new session doesn't have is dropped.
+  - 15 s after that (`FORCE_MS`): the project name, tree, tab icons, scheme, tool windows and terminals too (a
+    deleted folder never makes the tree "show every old row").
+  A new terminal tab counts as sent only when it has text; before that it is a blank screen.
+- **The saved screen.** `SavedScreen` (@Serializable, `session/SavedScreen.kt`) holds the project name, tree,
+  open editors (text, caret, highlights, guides), tab icons, selected editor, scheme, tool windows, the open
+  tool windows by place, and each terminal's visible lines and cursor (not the 5000-line history). It is a
+  `SavedSession` with the link, identity, project and `editorsKey`. `EditorScheme` now keeps flat maps (key to
+  style, key to color) instead of the rd models, so it can be saved. Pane sizes and open files were already kept
+  per `editorsKey` in `OpenEditors`.
+- **When it is written.** `ConnectController.saveScreen()` runs in `EditorActivity.onStop` and writes the
+  `connection/savedSession` preference. Not for SSH connections (their local forward is gone with the process).
+  It is cleared when the session ends for good: Back (`leave`), 2 foreground minutes without success, a backend that
+  was taken over.
+- **After process death.** `MainActivity.onCreate` calls `restoreSaved()`. It puts a stand-in `ClientSession` (never
+  started) in `session`, shows the saved screen as the hand-over source, and runs the normal `reconnect` loop with the
+  saved link and identity, so the reconnect popup sits over the saved screen and the editor window opens at once. The
+  recreated `EditorActivity` (`redirected`) must not call `leave()` when it finishes. The connections window shows
+  nothing until the editor covers it.
+- The screen under the popup is not interactive: the popup is a dialog window that takes all touches.
+
+Tests: `SavedScreenTest` (round trip), `ForegroundClockTest`, `HandOverTest` (settled and forced).
+
+Two more causes found on the emulator (freeze of 60 s, reopen from Recents), both fixed:
+- `SplitWire.close` set `connected = false` before telling the session, so rd ended its models and emptied the
+  session's state a few ms before `connectionLost` was set; the screen then saved that empty state as "what was
+  shown" (title "...", no editor text). It now calls `onClosed` first.
+- `collectAsState()` keeps the old session's last value for one frame after `session` changes. The hand-over took
+  that full old state for "the new session has sent everything" and switched every panel at once. `EditorApp` now
+  reads `session.state.value`, and `handOverFrom` holds the new session with the old state (`incoming`), so a frame
+  that still has the old session shows the saved state.
+- An editor that had colors waits for the new session's colors as well as its text; the backend's tool windows count
+  as arrived when all the old ones are back.
+
+Tested on the emulator (Pixel 3a, API 34; screenshots show the editor, title, tool window bar and terminal
+unchanged in every frame):
+- Freeze 60 s, reopen from Recents: unchanged; the reconnect popup fades in over the unchanged screen.
+- The backend paused 15 s during the reconnect: unchanged for the whole time under the popup; after the reconnect the
+  terminal view moves to the backend's own screen (the backend sends the whole scrollback, so the visible lines can
+  differ from the saved ones by a few lines).
+- `am kill`, reopen from Recents: the editor window with the saved screen and the popup at once, no connections screen;
+  the first attempt failed ("Broken pipe"), the second connected with the saved identity 14 s later.
+- Back, then the process killed and reopened: the connections screen; the saved entry is empty.
+
+**Backend caveat.** When a client vanishes without closing (reinstalling the APK, a killed process whose socket the
+phone still holds open), the backend keeps it as `controllerConnected` and answers a new client, even with its saved
+identity, with `USER_DECLINED`. Leaving with Back avoids it. After `am kill` the saved identity was accepted again
+within about 14 s (the second attempt), so Ideate's retry loop covers it; a reinstall wipes the identity, which is a
+different case (the join token stays bound to the old client until the backend is restarted).

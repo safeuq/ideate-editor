@@ -20,15 +20,19 @@ import io.github.safeuq.ideate.client.connection.ClientCertificate
 import io.github.safeuq.ideate.client.connection.JoinLink
 import io.github.safeuq.ideate.client.session.ClientSession
 import io.github.safeuq.ideate.client.session.OpenEditors
+import io.github.safeuq.ideate.client.session.SavedScreen
+import io.github.safeuq.ideate.client.session.SavedSession
 import io.github.safeuq.ideate.client.session.SessionState
 import io.github.safeuq.ideate.client.session.handOver
 import io.github.safeuq.ideate.client.ui.ClientScreen
 import io.github.safeuq.ideate.client.ui.LocalBackHandler
 import io.github.safeuq.ideate.client.ui.LocalTitleBarArea
 import io.github.safeuq.ideate.client.ui.TitleBarSpacer
+import io.github.safeuq.ideate.client.ui.ToolWindowState
 import io.github.safeuq.ideate.client.ui.dialog.MessageKind
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
 import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.toolWindowButtons
 import kotlin.concurrent.thread
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -66,6 +70,11 @@ class ConnectController(
   private val openEditors: OpenEditors,
   private val termux: Termux?,
   private val device: String,
+  /**
+   * The screen as it was when the app went to the background, for a start after Android ended the
+   * process (docs/android-app.md, "Addendum (2026-11-23)"); null keeps none (the desktop).
+   */
+  private val savedSession: StoredText? = null,
   ssh: SshSetup? = null,
 ) {
   /** The SSH page; it hands an opened project's forwarded link back to [connect]. */
@@ -86,16 +95,24 @@ class ConnectController(
     private set
 
   /**
-   * The old session's last state after a reconnect, which the screen shows while the new session
-   * catches up (`handOver`); null when not handing over.
+   * After a reconnect: the new session and the old session's last state, which the screen shows
+   * while the new session catches up (`handOver`); null when not handing over. The pair says whose
+   * state the screen may compare with: for a frame the screen can still have the old session, whose
+   * full state would count as "the new session has sent everything".
    */
-  internal var handOverFrom by mutableStateOf<SessionState?>(null)
+  internal var handOverFrom by mutableStateOf<Pair<ClientSession, SessionState>?>(null)
 
   /**
    * What the screen last showed for a session that still had its connection, so a new session that
    * breaks while filling in doesn't blank the screen: the next hand-over starts from this.
    */
   internal var lastShown: Pair<ClientSession, SessionState>? = null
+
+  /** The editor window's open tool windows, kept for [saveScreen]. */
+  internal var windows: ToolWindowState? = null
+
+  /** After [restoreSaved]: the tool windows that were open, for the editor window to open again. */
+  internal var restoredWindows: Map<String, String>? = null
 
   /** The connection being made or in use; saved to history once the backend accepts it. */
   private var attempt: Attempt? = null
@@ -271,8 +288,87 @@ class ConnectController(
     pending?.stop()
     pending = null
     session?.stop()
-    session = null
+    endSession()
     inform("Disconnected. The backend keeps running; tap it under History to reconnect.")
+  }
+
+  /** No session any more: the editor window closes, and there is nothing to restore later. */
+  private fun endSession() {
+    session = null
+    handOverFrom = null
+    lastShown = null
+    savedSession?.write("")
+  }
+
+  /**
+   * The app goes to the background (Android: the editor window stops): keeps what the screen shows
+   * and how to reconnect, in case Android ends the process there. [restoreSaved] reads it back.
+   * Nothing for an SSH connection (its local forward is gone with the process).
+   */
+  fun saveScreen() {
+    val storage = savedSession ?: return
+    val current = attempt ?: return
+    val identity = current.identity ?: return
+    if (session == null || current.kind == ConnectionKind.SSH) return
+    val state = shownBeforeReconnect() ?: return
+    val screen = SavedScreen.of(state, windows?.saved().orEmpty())
+    storage.write(
+      SavedSession(
+          current.kind,
+          current.text,
+          current.project,
+          current.openFile,
+          identity,
+          current.editorsKey,
+          screen,
+        )
+        .encode(),
+    )
+  }
+
+  /**
+   * The app started with the editor window open when it last went to the background: shows that
+   * screen (not interactive, under the reconnect popup) and connects again with the saved link and
+   * identity, as a lost connection would. True when there was one to restore.
+   */
+  fun restoreSaved(): Boolean {
+    val saved = SavedSession.decode(savedSession?.read()) ?: return false
+    val joinLink = runCatching { JoinLink.parse(saved.text) }.getOrNull()
+    val certificate = runCatching { ClientCertificate.decode(saved.identity) }.getOrNull()
+    if (joinLink == null || certificate == null) {
+      savedSession?.write("")
+      return false
+    }
+    val lost =
+      Attempt(
+        saved.kind,
+        joinLink,
+        saved.text,
+        saved.project,
+        saved.openFile,
+        resumed = true,
+        saved.editorsKey,
+      )
+    lost.identity = saved.identity
+    attempt = lost
+    accepted = true
+    restoredWindows = saved.screen.openWindows
+    // A session that never starts stands in for the one the old process had; the reconnect below
+    // replaces it, and the screen shows the saved state until then.
+    val standIn =
+      ClientSession(
+        joinLink,
+        saved.openFile,
+        certificate,
+        openEditors.slot(lost.editorsKey),
+        saved.project,
+      )
+    session = standIn
+    val screen = saved.screen.toState()
+    lastShown = standIn to screen
+    handOverFrom = standIn to screen
+    reconnect(lost, saved.identity, "The app was closed in the background")
+    return true
   }
 
   /**
@@ -287,7 +383,7 @@ class ConnectController(
     val identity = failed?.identity
     if (accepted && failed != null && identity != null && "Backend terminated the wire" !in lost)
       return reconnect(failed, identity, lost)
-    session = null
+    endSession()
     // A join token works once: after another client (e.g. Gateway) took over, the saved one is
     // declined.
     if (!accepted && failed?.resumed == true)
@@ -366,6 +462,7 @@ class ConnectController(
     accepted = false
     message = null
     question = null
+    handOverFrom = null
     session =
       ClientSession(
           joinLink,
@@ -373,6 +470,7 @@ class ConnectController(
           certificate,
           openEditors.slot(current.editorsKey),
           current.project,
+          inForeground = { inForeground },
         ) { acceptedCertificate ->
           val encoded = acceptedCertificate.encode()
           main.launch { onAccepted(current, encoded) }
@@ -431,42 +529,45 @@ class ConnectController(
   }
 
   /**
-   * Tries [lost]'s link and identity again, after 1 s, 2 s, 4 s, … (at most 10 s apart) for 2
-   * minutes of the app being in the foreground ([inForeground]), while the old session's screen
-   * stays under the reconnect popup; the first session the backend accepts replaces it. The same
-   * identity is allowed to use the join token again (docs/split-protocol.md, "Same join token, same
-   * client id").
+   * Tries [lost]'s link and identity again, after 1 s, 2 s, 4 s, … (at most 10 s apart) until 2
+   * minutes of the app being in the foreground have passed ([ForegroundClock]: time in the
+   * background, or frozen by the phone, doesn't count), while the old session's screen stays under
+   * the reconnect popup; the first session the backend accepts replaces it. The same identity is
+   * allowed to use the join token again (docs/split-protocol.md, "Same join token, same client
+   * id").
    */
   private fun reconnect(lost: Attempt, identity: String, reason: String) {
     val certificate = runCatching { ClientCertificate.decode(identity) }.getOrNull()
     if (certificate == null) {
-      session = null
+      endSession()
       warn("Connection lost: $reason. Tap it under History to reconnect.")
       return
     }
     reconnectJob?.cancel()
     reconnectJob = main.launch {
-      var deadline = System.currentTimeMillis() + RECONNECT_FOR_MILLIS
+      val clock = ForegroundClock()
+      val watching = launch { snapshotFlow { inForeground }.collect(clock::inForeground) }
       var pause = 1_000L
       var number = 0
-      while (System.currentTimeMillis() < deadline) {
+      while (clock.elapsed() < RECONNECT_FOR_MILLIS) {
         if (!inForeground) {
-          // Back in the foreground: try at once, with the full 2 minutes again.
+          // Back in the foreground: try at once.
           snapshotFlow { inForeground }.first { it }
-          deadline = System.currentTimeMillis() + RECONNECT_FOR_MILLIS
           pause = 1_000L
         }
         number++
         reconnecting = number
         if (reconnectOnce(lost, identity, certificate)) {
+          watching.cancel()
           reconnecting = null
           return@launch
         }
         delay(pause)
         pause = (pause * 2).coerceAtMost(10_000L)
       }
+      watching.cancel()
       reconnecting = null
-      session = null
+      endSession()
       warn(
         "Connection lost: $reason. Reconnecting didn't work for 2 minutes; tap it under History to try again.",
       )
@@ -505,6 +606,7 @@ class ConnectController(
             ?.let { tree -> tree.expanded.mapNotNull { tree.nodes[it]?.path }.toSet() }
             .orEmpty(),
         selectedPath = shownTree?.let { tree -> tree.selected?.let { tree.nodes[it]?.path } },
+        inForeground = { inForeground },
       ) { acceptedCertificate ->
         val encoded = acceptedCertificate.encode()
         main.launch {
@@ -529,7 +631,7 @@ class ConnectController(
       candidate.stop()
       return false
     }
-    handOverFrom = shownBeforeReconnect()
+    handOverFrom = shownBeforeReconnect()?.let { candidate to it }
     session?.stop()
     session = candidate
     return true
@@ -912,10 +1014,13 @@ fun ConnectApp(controller: ConnectController, fonts: ClientFonts, modifier: Modi
 }
 
 /**
- * The longest the old screen stays up after a reconnect; what closed meanwhile then shows as
- * closed.
+ * How long after the new session says it has loaded that panels it hasn't sent anything for show
+ * its (empty) value: the status bar and breadcrumbs arrive a little after the project loads.
  */
-private const val HAND_OVER_LIMIT_MS = 10_000L
+private const val SETTLE_MS = 2_000L
+
+/** After that, the project name, tree and terminals show the new value even if none came. */
+private const val FORCE_MS = 15_000L
 
 /**
  * The editor window for [session]: the IDE screen, which paints its own background (with the
@@ -930,27 +1035,41 @@ fun EditorApp(
   modifier: Modifier = Modifier,
 ) {
   Box(Modifier.fillMaxSize().background(IslandsDark.windowBackground)) {
-    val current by session.state.collectAsState()
-    val previous = controller.handOverFrom
+    // collectAsState alone keeps the old session's last value for a frame after [session] changes,
+    // which looked like "the new session has sent everything"; so read the value itself. Reading
+    // the collected value is what makes this recompose on a change.
+    val collected by session.state.collectAsState()
+    val current = collected.let { session.state.value }
+    val source = controller.handOverFrom
+    val previous = source?.second
+    // False for a frame after a reconnect: the screen still has the old session.
+    val incoming = source?.first === session
     var switched by remember(previous) { mutableStateOf(emptySet<String>()) }
-    val handedOver = previous?.let { handOver(it, current, switched) }
+    var settled by remember(previous) { mutableStateOf(false) }
+    var forced by remember(previous) { mutableStateOf(false) }
+    LaunchedEffect(previous, incoming && current.loaded) {
+      if (previous != null && incoming && current.loaded) {
+        delay(SETTLE_MS)
+        settled = true
+        delay(FORCE_MS)
+        forced = true
+      }
+    }
+    val handedOver = previous?.let {
+      handOver(it, if (incoming) current else SessionState(), switched, settled, forced)
+    }
     val shown = handedOver?.shown ?: current
     // A session that broke clears its own state; keep showing what was there before.
     val state =
       if (current.connectionLost != null)
         controller.lastShown?.takeIf { it.first === session }?.second ?: shown
       else shown
-    if (current.connectionLost == null) controller.lastShown = session to shown
+    if (current.connectionLost == null && (source == null || incoming))
+      controller.lastShown = session to shown
     LaunchedEffect(handedOver?.switched, handedOver?.done) {
       handedOver?.let {
         switched = it.switched
         if (it.done) controller.handOverFrom = null
-      }
-    }
-    LaunchedEffect(previous) {
-      if (previous != null) {
-        delay(HAND_OVER_LIMIT_MS)
-        controller.handOverFrom = null
       }
     }
     // The backend keeps running; another project or connection can be opened from the
@@ -962,7 +1081,13 @@ fun EditorApp(
     LaunchedEffect(state.projectName, controller.isAccepted) {
       state.projectName?.let(controller::projectNamed)
     }
-    ClientScreen(state, session, insets = modifier)
+    val windows = remember {
+      ToolWindowState().also { opened ->
+        controller.restoredWindows?.let { opened.restore(it, toolWindowButtons(state.toolWindows)) }
+      }
+    }
+    controller.windows = windows
+    ClientScreen(state, session, insets = modifier, windows = windows)
     controller.reconnecting?.let { attemptNumber ->
       StartProgress(
         "No connection to IDE Backend",

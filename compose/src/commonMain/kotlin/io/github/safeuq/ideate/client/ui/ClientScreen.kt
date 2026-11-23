@@ -133,6 +133,8 @@ fun ClientScreen(
    * gradient runs behind the merged title bar on macOS.
    */
   insets: Modifier = Modifier,
+  /** The open tool windows; the caller keeps it to save the layout (`ConnectController`). */
+  windows: ToolWindowState = remember { ToolWindowState() },
 ) {
   val fonts = LocalClientFonts.current
   var notice by remember { mutableStateOf<String?>(null) }
@@ -202,7 +204,6 @@ fun ClientScreen(
     // The backend's dialogs (Rename, New, Delete, …): windows of their own (docs/lux-protocol.md).
     io.github.safeuq.ideate.client.ui.lux.LuxDialogs(state.luxDialogs, session)
     val layout = screenLayout(maxWidth.value, maxHeight.value)
-    val windows = remember { ToolWindowState() }
     var page by remember { mutableStateOf(Page.MIDDLE) }
     var weights by rememberPaneWeights(session)
     // One per screen, shared by the layouts: the pager asks it whether a sideways swipe scrolls the

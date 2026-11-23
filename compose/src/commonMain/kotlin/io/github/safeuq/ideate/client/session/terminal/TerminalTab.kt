@@ -33,8 +33,10 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.serialization.Serializable
 
 /** What the UI gets of one terminal tab: [title] is the tab's text (see [terminalTabTitle]). */
+@Serializable
 data class TerminalTabState(val id: String, val title: String, val screen: TerminalScreen)
 
 /**
