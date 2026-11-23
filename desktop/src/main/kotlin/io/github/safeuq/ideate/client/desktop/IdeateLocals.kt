@@ -23,7 +23,6 @@ import java.io.File
 @Composable
 fun IdeateLocals(
   window: ComposeWindow,
-  fullScreen: Boolean,
   clientLib: File,
   fonts: ClientFonts,
   content: @Composable () -> Unit,
@@ -32,7 +31,7 @@ fun IdeateLocals(
   val icons = remember(density) { DesktopResources.JarIcons(clientLib, density) }
   // On macOS the app draws in the title bar's place, as in IntelliJ: the main toolbar in the
   // editor window, an empty strip in the connections window.
-  val titleBar = rememberMacTitleBar(window, fullScreen)
+  val titleBar = rememberMacTitleBar(window)
   // Menus and popups in their own windows, so they can go past this window's edge.
   val popups = remember(window) { WindowPopupHost(window) }
   CompositionLocalProvider(

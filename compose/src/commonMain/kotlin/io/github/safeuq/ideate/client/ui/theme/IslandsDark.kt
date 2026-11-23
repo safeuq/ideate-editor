@@ -54,6 +54,10 @@ object IslandsDark {
     if (density == UiDensity.COMPACT) compact else normal
 
   val windowBackground = Color(0xFF26282C) // main-window-bg, behind the islands
+  // MainWindow.FullScreeControl.Background: the full-screen traffic lights' circles at rest.
+  // Islands
+  // Dark doesn't set it, so IntelliJ's dark default (MacFullScreenControlsManager.configureColors).
+  val fullScreenControlBackground = Color(0xFF57595C)
   val islandBackground = Color(0xFF191A1C) // layer-0-bg: tool windows and editor
   val islandRadius
     get() = byDensity(10.dp, 8.dp) // Island.arc 20 (compact 16), halved

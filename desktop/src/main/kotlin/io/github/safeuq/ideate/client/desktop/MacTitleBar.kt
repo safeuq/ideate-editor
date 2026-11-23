@@ -30,21 +30,21 @@ import java.awt.event.MouseEvent
  * native title bar.
  */
 @Composable
-fun rememberMacTitleBar(window: ComposeWindow, fullScreen: Boolean): TitleBarArea? {
+fun rememberMacTitleBar(window: ComposeWindow): TitleBarArea? {
   if (!System.getProperty("os.name").startsWith("Mac")) return null
   if (!JBR.isWindowDecorationsSupported()) return null
   val decorations = JBR.getWindowDecorations()
   val titleBar = remember(window) { decorations.createCustomTitleBar() }
   val controls = remember(window) { ControlAreas() }
   val height = IslandsDark.toolbarHeight
-  // Set before the first layout so the left inset is known: the room JBR leaves for the traffic
-  // lights. They stay in the toolbar in full screen too (useMacFullScreenControls).
-  val leftInset =
-    remember(titleBar, height, fullScreen) {
-      titleBar.height = height.value
-      decorations.setCustomTitleBar(window, titleBar)
-      titleBar.leftInset
-    }
+  // Set once per window and height, as MacToolbarFrameHeader does, never again on entering full
+  // screen: JBR's updateCustomTitleBar then calls setWindowControlsHidden:NO, which hides its
+  // full-screen buttons (MacFullScreenControlsManager) and brings back macOS's own, shown only on
+  // hover, without minimize, and off the toolbar's centre line.
+  remember(titleBar, height) {
+    titleBar.height = height.value
+    decorations.setCustomTitleBar(window, titleBar)
+  }
   DisposableEffect(window, titleBar) {
     val listener =
       object : MouseAdapter() {
@@ -74,9 +74,11 @@ fun rememberMacTitleBar(window: ComposeWindow, fullScreen: Boolean): TitleBarAre
       window.removeMouseMotionListener(listener)
     }
   }
-  return remember(leftInset, controls) {
+  // The room for the traffic lights, in a window and in full screen alike: IntelliJ's fixed gap
+  // (MacToolbarFrameHeader.updateBorders) rather than JBR's leftInset, which is 0 in full screen.
+  return remember(controls) {
     TitleBarArea(
-      start = leftInset.dp,
+      start = GAP_FOR_BUTTONS.dp,
       end = titleBar.rightInset.dp,
       height = 0.dp,
       control = Modifier.then(ControlAreaElement(controls)),
@@ -85,18 +87,10 @@ fun rememberMacTitleBar(window: ComposeWindow, fullScreen: Boolean): TitleBarAre
 }
 
 /**
- * Full screen as IntelliJ's new UI has it on macOS (`MacFullScreenControlsManager`): the traffic
- * lights stay where they are in the main toolbar, and macOS's own title bar no longer slides down
- * when the pointer reaches the top of the screen. JetBrains Runtime reads these properties when a
- * window enters full screen, so they are set once, before any window opens. The background is the
- * buttons' backdrop, IntelliJ's `MainWindow.FullScreeControl.Background` in a dark theme (Islands
- * Dark doesn't set it). Other runtimes ignore the properties.
+ * IntelliJ's room for the traffic lights, in points: 26 + 52
+ * (`MacToolbarFrameHeaderKt.GAP_FOR_BUTTONS`, used by `MacToolbarFrameHeader.updateBorders`).
  */
-fun useMacFullScreenControls() {
-  if (!System.getProperty("os.name").startsWith("Mac")) return
-  System.setProperty("apple.awt.newFullScreenControls", "true")
-  System.setProperty("apple.awt.newFullScreenControls.background", 0x57595C.toString())
-}
+private const val GAP_FOR_BUTTONS = 26f + 52f
 
 /** Where the title bar's controls are, in window px; one entry per [ControlAreaNode]. */
 private class ControlAreas {

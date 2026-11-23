@@ -908,3 +908,46 @@ delegate through Objective-C when the setting or theme changes at run time; Idea
 
 Checked on the Mac (2026-11-23, connect window): in full screen the close and full-screen buttons stay at the
 toolbar's left; minimize is gone, as in IntelliJ, because macOS can't minimize a full-screen window.
+
+## 26. Full screen, corrected: buttons visible at rest, on the toolbar's centre line (2026-11-24)
+
+Section 25's version had three faults the user found: the buttons showed only on hover, minimize was missing
+instead of grey, and the buttons sat above the line of the other title bar items. Each had its own cause.
+
+| Fault | Cause | Fix |
+|---|---|---|
+| Buttons only on hover, no minimize | `rememberMacTitleBar` called `setCustomTitleBar` again when `fullScreen` changed. JBR's `updateCustomTitleBar` then runs `setWindowControlsHidden:NO`, which hides its full-screen `AWTButtonsView` and brings back macOS's own buttons (hover only, no minimize) | Set the title bar once per window and height, as `MacToolbarFrameHeader` does; the `fullScreen` parameter is gone |
+| Circles invisible at rest | `AWTButtonsView.configureColors` reads the background as ARGB; `0x57595C` has alpha `00` | `0xFF57595C`, as IntelliJ's `JBColor.getRGB()` gives (`IslandsDark.fullScreenControlBackground`); code moved to `MacFullScreenControlsManager` (`configureEnable`, `configureColors`), IntelliJ's names |
+| Buttons 2 pt high | macOS 26 lays out the title bar by the SDK the app's executable was built with (below) | Run on a `java` launcher marked as built with SDK 26 |
+| Toolbar under the green button | JBR reports `leftInset` 0 in full screen | `GAP_FOR_BUTTONS` = 26 + 52 = 78 always, as `MacToolbarFrameHeader.updateBorders` |
+
+**The 2 pt.** Measured inside both processes with a read-only probe (objc_msgSend through Java's foreign
+function API: `frame` of the window's views; for IntelliJ loaded with the attach API):
+
+| | IntelliJ (`Contents/MacOS/idea`, SDK 26.0) | Ideate on JBR's `java` (SDK 13.3) | Ideate on `java` marked SDK 26 |
+|---|---|---|---|
+| title bar height given to JBR | 32 | 32 | 32 |
+| window: close button | 14 × 14 at (9, 9) in a 32 pt bar | 20 × 21 at (6, 5.5) in a 32 pt bar | 14 × 14 at (9, 9) |
+| full screen: `AWTButtonsView` | 74 × 32 | 74 × 28 | 74 × 32 |
+| full screen: close button centre from the top | 16 | 14 | 16 |
+
+JBR places the full-screen buttons at `(titleBarHeight − h) / 2` from the top, where `h` is the height of the
+view macOS put the original buttons in (`AWTWindow.updateFullScreenButtons`). With SDK 13.3 linkage macOS gives
+the older 28 pt bar, so the buttons land 2 pt high; with SDK 26 it gives 32 pt and 14 pt buttons, as IntelliJ
+gets. Both apps run the same JBR (25.0.4.1+1-b635.79).
+
+`:desktop:prepareSdk26Jbr` (desktop/build.gradle.kts) builds `desktop/build/jbr-sdk26/Home`: links to every
+entry of the client's JBR except `bin/java`, which is a copy re-marked with
+`xcrun vtool -set-build-version macos 11.0 26.0 -replace` and signed ad hoc. `run` and the Compose packaging
+tasks depend on it, and `javaHome` points there on macOS. A packaged app will need its own launcher built
+with SDK 26; jpackage's launcher comes from the JDK, so it would get the old layout.
+
+**Mistake on the way.** The first version of that task cleared its folder with Kotlin's
+`File.deleteRecursively()`, which follows symbolic links to folders: on its second run it emptied `lib`, `conf`,
+`include` and `legal` of the JetBrains Client's JBR (2026-11-24 00:08 IST). They were restored from a full copy
+made at 00:03 the same night (`ditto`, signatures checked). The task now removes only the links it made
+(`removeWithoutFollowingLinks`) and declares just `bin/java` as its output, so Gradle never cleans the folder
+either.
+
+Not changed: hot reload (`hotRun`) runs on JAVA_HOME's runtime, which has the old layout (2 pt high in full
+screen).

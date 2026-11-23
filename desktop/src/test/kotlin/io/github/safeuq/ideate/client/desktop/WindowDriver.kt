@@ -116,7 +116,7 @@ class WindowDriver private constructor(private val outputFolder: File) {
         window.setSize(1200, 800)
         window.setLocation(40, 40)
         window.setContent {
-          IdeateLocals(window, fullScreen = false, clientLib = clientLib, fonts = fonts) {
+          IdeateLocals(window, clientLib = clientLib, fonts = fonts) {
             val state by session.state.collectAsState()
             ClientScreen(state, session)
           }

@@ -5,7 +5,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -22,8 +21,8 @@ import io.github.safeuq.ideate.client.desktop.DesktopOpenSshFiles
 import io.github.safeuq.ideate.client.desktop.DesktopResources
 import io.github.safeuq.ideate.client.desktop.FileSecretStore
 import io.github.safeuq.ideate.client.desktop.IdeateLocals
+import io.github.safeuq.ideate.client.desktop.MacFullScreenControlsManager
 import io.github.safeuq.ideate.client.desktop.Snapshots
-import io.github.safeuq.ideate.client.desktop.useMacFullScreenControls
 import io.github.safeuq.ideate.client.session.JetBrainsWorkspace
 import io.github.safeuq.ideate.client.session.OpenEditors
 import io.github.safeuq.ideate.client.ssh.RemoteHosts
@@ -63,7 +62,7 @@ fun main(arguments: Array<String>) {
         "System property jetbrains.client.lib is not set (the Gradle run task sets it)"
       },
     )
-  useMacFullScreenControls()
+  MacFullScreenControlsManager.configureEnable()
   val fonts = DesktopResources.fonts(clientLib)
   IslandsDark.density = DesktopResources.uiDensity()
   // Lux dialogs' images (ui/lux/LuxImages.kt).
@@ -177,7 +176,6 @@ private fun IdeateWindow(
     }
     IdeateLocals(
       window,
-      windowState.placement == WindowPlacement.Fullscreen,
       clientLib,
       fonts,
       content,
