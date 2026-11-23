@@ -42,9 +42,17 @@ class SshSetup(
   /** Ideate's known_hosts. */
   val knownHosts: StoredText,
   val secrets: SecretStore,
-  /** Desktop only: `~/.ssh`. Null on Android, where OPEN_SSH isn't offered. */
-  val openSsh: OpenSshFiles?,
-  /** More trusted known_hosts text (the desktop's `~/.ssh/known_hosts`). */
+  /**
+   * The user's `~/.ssh`: the desktop's own, or Termux's on Android. Asked each time it is needed,
+   * because on Android it exists only while Termux is installed and has the permission. Null when
+   * OPEN_SSH isn't offered. Its `read` may block, so it is only used on background threads.
+   */
+  val openSsh: () -> OpenSshFiles?,
+  /** The OPEN_SSH radio button's text. */
+  val openSshLabel: String = "OpenSSH config and authentication agent",
+  /** Whether OPEN_SSH, when offered, is the log-in method a new connection starts with. */
+  val openSshIsDefault: Boolean = false,
+  /** More trusted known_hosts text (`~/.ssh/known_hosts`). Background threads only. */
   val alsoKnownHosts: () -> String? = { null },
   /** Picks the worker or the shell for a connected host (RemoteHosts.forSession). */
   val remoteHostFor: (SshSession) -> RemoteHost,
@@ -71,6 +79,10 @@ data class SshHostView(
     AUTHENTICATE,
   }
 }
+
+/** The log-in method a new connection starts with. */
+fun defaultLoginMethod(offersOpenSsh: Boolean, openSshIsDefault: Boolean) =
+  if (offersOpenSsh && openSshIsDefault) LoginMethod.OPEN_SSH else LoginMethod.GENERATED_KEY
 
 /** The new-connection form, Gateway's "Connect to SSH". */
 data class SshForm(
@@ -123,6 +135,7 @@ data class SshPageState(
   /** The last message, shown as a popup. */
   val message: ConnectMessage? = null,
   val offersOpenSsh: Boolean = false,
+  val openSshLabel: String = "",
 )
 
 class SshActions(
@@ -160,7 +173,7 @@ class SshController(
   private val connect: (link: String, projectPath: String, hostName: String) -> Unit,
 ) {
   private val deviceName = setup.deviceName
-  var state by mutableStateOf(SshPageState(offersOpenSsh = setup.openSsh != null))
+  var state by mutableStateOf(SshPageState(openSshLabel = setup.openSshLabel))
     private set
 
   private val hosts = SshHosts(setup.hosts)
@@ -181,7 +194,13 @@ class SshController(
       poll = { includeUnreachable -> if (includeUnreachable) refresh() else refreshReachable() },
       authenticateHost = ::askLogin,
       reconnect = { entry -> refreshHost(entry, forceReconnect = true) },
-      newConnection = { showNewConnection(SshForm()) },
+      newConnection = {
+        val offered = setup.openSsh() != null
+        state = state.copy(offersOpenSsh = offered)
+        showNewConnection(
+          SshForm(method = defaultLoginMethod(offered, setup.openSshIsDefault)),
+        )
+      },
       newProjectOn = ::chooseIde,
       formChanged = { form ->
         updateDialog<SshDialog.NewConnection> { it.copy(form = form, error = null) }
@@ -285,7 +304,7 @@ class SshController(
       remotes[entry.id]?.let {
         return it
       }
-    val login = SshLogins.resolve(entry, setup.secrets, setup.openSsh, deviceName, typed)
+    val login = SshLogins.resolve(entry, setup.secrets, setup.openSsh(), deviceName, typed)
     val session = SshSession.open(login.host, login.port, login.user, login.logins, hostKeyCheck())
     sessions.put(entry.id, session)?.let { runCatching { it.close() } }
     return setup.remoteHostFor(session).also { remotes[entry.id] = it }

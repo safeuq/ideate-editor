@@ -1,6 +1,7 @@
 package io.github.safeuq.ideate.client.ssh
 
 import io.github.safeuq.ideate.client.connect.StoredText
+import io.github.safeuq.ideate.client.connect.defaultLoginMethod
 import java.security.KeyPairGenerator
 import java.security.PublicKey
 import kotlin.test.Test
@@ -128,6 +129,16 @@ class SshSetupTest {
       SshLogin.Password("typed"),
       SshLogins.resolve(password, secrets, null, "Pixel 3a", typed = "typed").logins.single(),
     )
+  }
+
+  @Test
+  fun newConnectionsStartWithOpenSshOnlyWhenOfferedAndPreferred() {
+    assertEquals(
+      LoginMethod.OPEN_SSH,
+      defaultLoginMethod(offersOpenSsh = true, openSshIsDefault = true),
+    )
+    assertEquals(LoginMethod.GENERATED_KEY, defaultLoginMethod(true, openSshIsDefault = false))
+    assertEquals(LoginMethod.GENERATED_KEY, defaultLoginMethod(false, openSshIsDefault = true))
   }
 
   @Test

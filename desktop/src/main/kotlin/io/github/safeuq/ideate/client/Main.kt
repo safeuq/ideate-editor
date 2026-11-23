@@ -105,7 +105,7 @@ fun main(arguments: Array<String>) {
           hosts = FileText(dataFolder.resolve("ssh-hosts.json")),
           knownHosts = FileText(dataFolder.resolve("known_hosts")),
           secrets = FileSecretStore(dataFolder.resolve("secrets")),
-          openSsh = DesktopOpenSshFiles,
+          openSsh = { DesktopOpenSshFiles },
           alsoKnownHosts = DesktopOpenSshFiles::knownHosts,
           remoteHostFor = RemoteHosts::forSession,
           deviceName =

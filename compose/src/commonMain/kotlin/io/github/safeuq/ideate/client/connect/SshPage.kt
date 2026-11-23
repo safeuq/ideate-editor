@@ -159,7 +159,8 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
 internal fun SshOverlays(state: SshPageState, actions: SshActions, fonts: ClientFonts) {
   var browsing by remember { mutableStateOf(false) }
   when (val dialog = state.dialog) {
-    is SshDialog.NewConnection -> NewConnectionDialog(dialog, state.offersOpenSsh, actions, fonts)
+    is SshDialog.NewConnection ->
+      NewConnectionDialog(dialog, state.offersOpenSsh, state.openSshLabel, actions, fonts)
     is SshDialog.ChooseIde ->
       if (browsing) {
         FolderChooser(
@@ -210,6 +211,7 @@ private fun QuestionDialog(question: Question, actions: SshActions) {
 private fun NewConnectionDialog(
   dialog: SshDialog.NewConnection,
   offersOpenSsh: Boolean,
+  openSshLabel: String,
   actions: SshActions,
   fonts: ClientFonts,
 ) {
@@ -285,10 +287,7 @@ private fun NewConnectionDialog(
       }
     }
     if (offersOpenSsh) {
-      RadioButtonRow(
-        "OpenSSH config and authentication agent",
-        form.method == LoginMethod.OPEN_SSH,
-      ) {
+      RadioButtonRow(openSshLabel, form.method == LoginMethod.OPEN_SSH) {
         actions.formChanged(form.copy(method = LoginMethod.OPEN_SSH))
       }
     }

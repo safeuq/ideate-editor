@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
     val icons =
       AndroidResources.SvgIcons(AndroidResources.iconJar(this), resources.displayMetrics.density)
     val termux = AndroidTermux(this) { termuxPermission.launch(AndroidTermux.PERMISSION) }
+    val termuxSsh = AndroidOpenSshFiles(termux)
     // The same preference files and keys as before the connect screen moved to shared code, so
     // history survives updates.
     controller =
@@ -78,7 +79,20 @@ class MainActivity : ComponentActivity() {
             hosts = preferenceText("ssh", "hosts"),
             knownHosts = preferenceText("ssh", "known_hosts"),
             secrets = AndroidSecretStore(this),
-            openSsh = null,
+            // Termux's ~/.ssh, offered while Termux is installed and has the permission.
+            openSsh = { if (termux.isInstalled && termux.hasPermission) termuxSsh else null },
+            openSshLabel = "Termux's ~/.ssh",
+            openSshIsDefault = true,
+            // Extra trust only: a Termux failure here must not stop hosts that don't use ~/.ssh.
+            alsoKnownHosts = {
+              if (termux.isInstalled && termux.hasPermission) {
+                runCatching { termuxSsh.knownHosts() }
+                  .onFailure { failure ->
+                    println("Termux known_hosts not read: ${failure.message}")
+                  }
+                  .getOrNull()
+              } else null
+            },
             remoteHostFor = RemoteHosts::forSession,
             deviceName = android.os.Build.MODEL,
           ),

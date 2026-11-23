@@ -74,7 +74,7 @@ object OpenSshConfig {
   }
 }
 
-/** The files the desktop's OPEN_SSH mode reads; the platform supplies them. */
+/** The files OPEN_SSH mode reads; the platform supplies them (the desktop's, or Termux's). */
 interface OpenSshFiles {
   /** E.g. `/Users/dev`. */
   val home: String
@@ -82,7 +82,10 @@ interface OpenSshFiles {
   /** Whether `SSH_AUTH_SOCK` points at an agent. */
   val hasAgent: Boolean
 
-  /** A file's text, or null when it doesn't exist. */
+  /**
+   * A file's text, or null when it doesn't exist. Throws when the file can't be looked up at all.
+   * May block, so not for the main thread.
+   */
   fun read(path: String): String?
 }
 
@@ -137,7 +140,10 @@ object SshLogins {
       }
       LoginMethod.OPEN_SSH -> {
         val files =
-          checkNotNull(openSsh) { "${entry.name} uses ~/.ssh, which only the desktop has" }
+          checkNotNull(openSsh) {
+            "${entry.name} uses ~/.ssh, which isn't available now (on Android it needs Termux " +
+              "installed and its RUN_COMMAND permission granted)"
+          }
         val config =
           OpenSshConfig.resolve(files.read("${files.home}/.ssh/config").orEmpty(), entry.host)
         val keys =

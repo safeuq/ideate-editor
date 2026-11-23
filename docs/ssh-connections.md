@@ -128,7 +128,7 @@ every 10 s for reachable hosts and every 30 s for unreachable ones.
 
 | Question | Answer |
 |---|---|
-| Log-in methods | all four: a key Ideate generates; password; an imported private key file; on the desktop, `~/.ssh/config` and the agent |
+| Log-in methods | all four: a key Ideate generates; password; an imported private key file; `~/.ssh/config` and the agent (the desktop's own, or Termux's `~/.ssh` on Android, without the agent) |
 | Host systems | Linux, Termux and macOS (Windows later) |
 | Commands on the host | Gateway's worker when it is already on the host, else Ideate's own shell commands. We don't ship JetBrains' worker in the app: it's their proprietary binary |
 | Projects not in the recent list | a folder browser, like Gateway's |
@@ -146,7 +146,7 @@ the APK size.
 |---|---|
 | `SshHostEntry` + storage | saved hosts as JSON in `StoredText`: id, host, port, user, log-in method, key reference |
 | `SshConnector` | SSHJ session: log-in, host-key check, exec, SFTP, local port forward |
-| `KeyStore` (platform) | Android: the generated or imported key in app-private storage, encrypted with an Android Keystore key. Desktop: `~/.ideate/`, plus `~/.ssh` and the agent |
+| `KeyStore` (platform) | Android: the generated or imported key in app-private storage, encrypted with an Android Keystore key. Desktop: `~/.ideate/`, plus `~/.ssh` and the agent. Android: Termux's `~/.ssh`, read through Termux |
 | `KnownHosts` | the app's own known-hosts file. Unknown key: ask, showing the MD5 fingerprint as Gateway does (see "Host key question as Gateway shows it"). Changed key: refuse with a warning. On the desktop, `~/.ssh/known_hosts` is also read |
 | `RemoteHost` | the host commands below, in two implementations |
 | `WorkerHost` | used when `<RemoteDev>/remote-dev-worker/remote-dev-worker_*` exists, is executable and passes `worker-check`. Calls `installed-ides`, `recent-projects-data`, `host-status`, `host-launch`, `list-files` in Gateway's way (login shell, marker line, JSON lines) |
@@ -176,7 +176,7 @@ phone page gets a device icon instead.
 |---|---|
 | Header | "SSH Connections" with a **New Connection** button |
 | Host groups | `user@host:port` with refresh and ⋮ (edit, remove), and its recent projects underneath: path, **Running** with a stop square, or **Last active** |
-| New connection | host, port 22, user, log-in method (generated key with copy-public-key, password, key file, desktop agent), **Check connection and continue**, then the host-key prompt, then the IDEs found |
+| New connection | host, port 22, user, log-in method (generated key with copy-public-key, password, key file, `~/.ssh`), **Check connection and continue**, then the host-key prompt, then the IDEs found |
 | Open a project | pick the IDE (if more than one), then the folder browser, then Gateway's start popup ("Starting the remote IDE backend", Cancel) |
 | Refresh | 10 s while the page shows, 30 s for unreachable hosts |
 
@@ -321,7 +321,7 @@ Not tested yet:
 | Piece | What it does | Example |
 |---|---|---|
 | `SshHosts`, `SshHostEntry` | the SSH page's hosts, as JSON in `StoredText` | `{"id":"586e…","host":"192.168.0.107","port":8022,"user":"u0_a404","method":"GENERATED_KEY"}`, shown as `u0_a404@192.168.0.107:8022` (Gateway's `user@host`, `:port` unless 22) |
-| `LoginMethod` | `GENERATED_KEY`, `KEY_FILE`, `PASSWORD`, `OPEN_SSH` (desktop) | |
+| `LoginMethod` | `GENERATED_KEY`, `KEY_FILE`, `PASSWORD`, `OPEN_SSH` | |
 | `SecretStore` | keys and passwords, encrypted | Android: `AndroidSecretStore`, AES-GCM under an Android Keystore key, values in the `ssh-secrets` preferences. Desktop: `FileSecretStore`, files in `~/.ideate/secrets/` readable by the user only |
 | `IdeateKey` | one Ed25519 key for the app, made on first use | public line `ssh-ed25519 AAAA… Ideate on Pixel 3a` for the user to add to `~/.ssh/authorized_keys` |
 | `KnownHosts` | OpenSSH `known_hosts` lines in `StoredText`, checked with SSHJ's parser. `KNOWN` passes; `UNKNOWN` asks the user with the fingerprint; `CHANGED` is refused unless the user accepts it (`forget`, then `trust`) | `[192.168.0.107]:8022 ssh-ed25519 AAAA…`. On the desktop `~/.ssh/known_hosts` also counts, read only |
@@ -359,7 +359,7 @@ Dialogs, drawn like IntelliJ's (the folder chooser's frame: 475 dp wide, 32 dp t
 
 | Dialog | Gateway | Ideate |
 |---|---|---|
-| Connect to SSH | Username, Host, Port (22), "Specify private key", **Check Connection and Continue** | the same fields, then the log-in method: Ideate key (its public line and **Copy Public Key**), Specify private key (paste the key and its passphrase), Password (with Save password), and on the desktop "OpenSSH config and authentication agent". The host is saved only once it logs in |
+| Connect to SSH | Username, Host, Port (22), "Specify private key", **Check Connection and Continue** | the same fields, then the log-in method: Ideate key (its public line and **Copy Public Key**), Specify private key (paste the key and its passphrase), Password (with Save password), and "OpenSSH config and authentication agent" on the desktop, "Termux's ~/.ssh" on Android. The host is saved only once it logs in |
 | Host key, unknown | "The authenticity of host '{0}' cannot be established. {1} key fingerprint is {2}. Are you sure you want to continue connecting?" | Gateway's dialog: "Connecting To Remote Host", OK / Cancel, Cancel focused (see "Host key question as Gateway shows it") |
 | Host key, changed | "Warning: remote host identification has changed! …" | the same; accepting replaces Ideate's entry |
 | Choose IDE and Project | "IDE version:" (installed ones marked "installed"), "Project directory:" with a browse button, **Start IDE and Connect** | the installed IDEs only (no downloads), the path (`~` allowed), **…** opens the folder browser |
@@ -567,3 +567,30 @@ Compared with Gateway's dialog for the phone's Termux SSH (screenshot from the u
 With Cancel focused, Enter presses Cancel and Escape cancels; OK needs a click or a tap. The
 changed-key warning keeps its own text and its "Update and Connect" button, with the same title
 and fingerprint format. Checked in the component gallery (`CLIENT_GALLERY`, `-message.png`).
+
+## Addendum (2026-11-23): Termux's ~/.ssh on Android
+
+OPEN_SSH is no longer desktop-only. On Android it is offered as "Termux's ~/.ssh", and it is the method a new
+connection starts with (on the desktop the default is still the generated key).
+
+- **How the files are read.** Ideate can't open Termux's private folder, so each read runs
+  `/data/data/com.termux/files/usr/bin/sh -c 'cat -- "$1"' sh <path>` through Termux's RUN_COMMAND service. It
+  doesn't use a login shell, so no profile output mixes into the file. Exit 0 gives the text; a non-zero exit means
+  the file isn't there (`null`, e.g. no `id_rsa`). If Termux itself can't run the command (e.g.
+  `allow-external-apps` is off) the read throws with Termux's own error message, so that case is not mistaken for a
+  missing file. Nothing is copied or kept: `~/.ssh/config`, the identity files and `~/.ssh/known_hosts` are read
+  again on every connect.
+- **Threads.** The read blocks until Termux answers (10 s limit). Termux's answer arrives on the main thread, so
+  the read refuses to run there. `SshLogins.resolve` and the known-hosts check already run on the SSH worker
+  thread, so nothing had to move.
+- **No agent.** The agent's socket (`SSH_AUTH_SOCK`) lives in Termux's private folder, which Ideate can't reach, so
+  `hasAgent` is always false and only the identity files are used.
+- **Passphrase keys.** A key with a passphrase can't be used silently: Ideate asks for the passphrase each time
+  it connects, as it does on the desktop. It isn't saved for OPEN_SSH hosts.
+- **Known hosts.** `~/.ssh/known_hosts` from Termux also counts as trusted, read only, like the desktop's. If
+  Termux can't be read for it, the failure is logged and ignored, so hosts that don't use `~/.ssh` still connect.
+- **Timing.** Every read prints a line to the log, e.g. `Termux read ~/.ssh/config: 140 ms`, to measure how
+  much the RUN_COMMAND round trip costs on the phone.
+- **Needs.** Termux installed, Ideate holding Termux's RUN_COMMAND permission, and `allow-external-apps = true` in
+  `~/.termux/termux.properties` (the same as for starting the backend). The radio button is checked each time the
+  New connection dialog opens, so granting the permission while the app runs is enough.

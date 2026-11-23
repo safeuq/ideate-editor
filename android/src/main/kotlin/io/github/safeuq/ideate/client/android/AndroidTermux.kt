@@ -61,7 +61,7 @@ class AndroidTermux(private val context: Context, private val askPermission: () 
               bundle.getInt("err", Activity.RESULT_OK) != Activity.RESULT_OK ->
                 kotlin.Result.failure(
                   IllegalStateException(
-                    "Termux couldn't run intellij-backend: ${bundle.getString("errmsg")}",
+                    "Termux couldn't run the command: ${bundle.getString("errmsg")}",
                   ),
                 )
               else ->
@@ -115,6 +115,14 @@ class AndroidTermux(private val context: Context, private val askPermission: () 
         },
       )
     }
+
+  /**
+   * Runs `cat -- <path>` in Termux's shell without a login shell, so no profile output mixes into
+   * the file's text. [onResult] gets the exit code (non-zero: no such file, or not readable) and
+   * the text, on the main thread.
+   */
+  fun cat(path: String, onResult: (kotlin.Result<Termux.Result>) -> Unit) =
+    run(listOf("-c", "cat -- \"\$1\"", "sh", path), SHELL, onResult)
 
   companion object {
     const val PACKAGE = "com.termux"
