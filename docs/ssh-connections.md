@@ -693,3 +693,27 @@ agent" on the desktop) now shows the public key of `~/.ssh` under its radio butt
   may still log in.
 - **Tests.** `OpenSshPublicKeyTest` covers the file order, the blank file, the missing and the
   failed states with a fake `OpenSshFiles`. Not tested on a phone.
+
+## Addendum (2026-11-23): Ideate starts Termux's ssh-agent when it isn't running
+
+After the phone restarts, or after Android stops Termux, ssh-agent and ssh-agent-bridge are gone,
+but `~/.ssh/agent-bridge` still holds the old port and token. Nothing in Termux starts them again by
+itself. So when Ideate's "Termux's ~/.ssh" log-in finds no agent, it starts it:
+
+| What Ideate sees | What it does |
+|---|---|
+| bridge answers `0x00` | uses the agent |
+| connection refused (also after reading `~/.ssh/agent-bridge` again), or no such file | runs `intellij-backend ssh-agent start` through RUN_COMMAND, then connects again with the new file |
+| bridge answers `A` (it runs, ssh-agent doesn't) | the same |
+| bridge answers `T` twice | fails with "Termux's agent bridge rejected Ideate's token" |
+| `ssh-agent start` fails (e.g. ssh-agent-bridge not installed) | reads the key files instead, and doesn't run `start` again until Ideate restarts |
+
+`start` has no terminal when Ideate runs it, so it loads only keys without a passphrase. A key with
+a passphrase still needs one `ssh-add` in Termux after each restart (the command `start` prints).
+Ideate logs `Termux: intellij-backend ssh-agent start took N ms`, or why it failed.
+
+Checked on the S24+: with ssh-agent and the bridge killed (`kill -9`, so the old `~/.ssh/agent-bridge`
+stayed), opening the SSH page logged `Termux read ~/.ssh/agent-bridge: 95 ms`, `Termux:
+intellij-backend ssh-agent start took 1538 ms`, `Termux read ~/.ssh/agent-bridge: 95 ms`, `Termux
+agent bridge: connected in 99 ms`, `SSH log-in with Agent succeeded`; afterwards the agent held the
+one key.
