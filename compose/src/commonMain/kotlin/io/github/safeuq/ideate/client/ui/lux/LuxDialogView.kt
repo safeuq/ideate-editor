@@ -1,6 +1,7 @@
 package io.github.safeuq.ideate.client.ui.lux
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -95,6 +96,7 @@ import io.github.safeuq.ideate.client.ui.component.SplitPane
 import io.github.safeuq.ideate.client.ui.console.ConsoleEditor
 import io.github.safeuq.ideate.client.ui.dialog.DialogLook
 import io.github.safeuq.ideate.client.ui.dialog.dialogFrame
+import io.github.safeuq.ideate.client.ui.theme.IslandsDark
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 import kotlin.math.min
@@ -788,12 +790,21 @@ fun LuxPaneView(
             )
           },
           second = {
-            for (local in panel.locals.filterIsInstance<PanelBuildTree>()) PanelLocalView(
-              local,
-              state,
-              session,
-              Modifier.fillMaxSize(),
-            )
+            // The line between console and tree, as IntelliJ's OnePixelSplitter draws inside a tool
+            // window: 1 px in the tool window's border colour.
+            Column(Modifier.fillMaxSize()) {
+              Box(
+                Modifier.fillMaxWidth()
+                  .height(with(LocalDensity.current) { 1.toDp() })
+                  .background(IslandsDark.toolWindowBorder),
+              )
+              for (local in panel.locals.filterIsInstance<PanelBuildTree>()) PanelLocalView(
+                local,
+                state,
+                session,
+                Modifier.fillMaxWidth().weight(1f),
+              )
+            }
           },
         )
       }

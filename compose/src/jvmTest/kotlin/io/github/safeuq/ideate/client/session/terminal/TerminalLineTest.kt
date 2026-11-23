@@ -39,7 +39,9 @@ class TerminalLineTest {
     val plain = BeTerminalEntryStyle(null, null, 0)
     val rows =
       terminalLines(
-        BeTerminalLine(listOf(BeTerminalLineEntry("abc", plain), BeTerminalLineEntry("defg", plain))),
+        BeTerminalLine(
+          listOf(BeTerminalLineEntry("abc", plain), BeTerminalLineEntry("defg", plain)),
+        ),
         columns = 3,
       )
 

@@ -180,7 +180,9 @@ internal class TerminalTab(
     var cursorY = state.cursorY
     val screen =
       state.screenLines.flatMapIndexed { index, line ->
-        terminalLines(line, columns).also { rows -> if (index < state.cursorY - 1) cursorY += rows.size - 1 }
+        terminalLines(line, columns).also { rows ->
+          if (index < state.cursorY - 1) cursorY += rows.size - 1
+        }
       }
     val overflow = (screen.size - terminal.size.rows).coerceAtLeast(0)
     buffer.lock()
