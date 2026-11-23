@@ -677,3 +677,7 @@ smoke.iml               a JAVA_MODULE with <sourceFolder url="file://$MODULE_DIR
 ```
 
 Without `smoke.iml` and `modules.xml` the run opens an "Edit Configuration" dialog instead (spec 8.3).
+
+## Addendum (2026-11-23): keyboard bar keys show when they are pressed
+
+A key on the keyboard bar now shows the toolbar button's pressed background (`ActionButton.pressedBackground`, `IconButtonLook.pressedBackground`) while a finger or the mouse holds it, as `IconButton` already did, so a touch shows which key it landed on. The keys still use `detectTapGestures` (not `clickable`) so they never take the focus from the terminal; its `onPress` sets the pressed state and `tryAwaitRelease()` clears it. A sticky key that is on (⌃ ⌥ ⌘) keeps the same background, as before. Checked on the Pixel 3a emulator: holding ↑ highlights it, releasing clears it.

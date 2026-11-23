@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,10 +95,13 @@ private fun KeyButton(
   onTap: () -> Unit,
   icon: @Composable () -> Unit,
 ) {
+  // Held down: the toolbar button's pressed background (ActionButton.pressedBackground), as
+  // IconButton shows it, so a finger sees which key it is on.
+  var pressed by remember { mutableStateOf(false) }
   Box(
     Modifier.size(24.dp)
       .background(
-        if (selected) IconButtonLook.pressedBackground else Color.Transparent,
+        if (selected || pressed) IconButtonLook.pressedBackground else Color.Transparent,
         IconButtonLook.shape,
       )
       .border(1.dp, IslandsDark.controlBorder, IconButtonLook.shape)
@@ -106,7 +110,17 @@ private fun KeyButton(
         role = Role.Button
         this.selected = selected
       }
-      .pointerInput(onTap) { detectTapGestures { onTap() } },
+      .pointerInput(onTap) {
+        detectTapGestures(
+          onPress = {
+            pressed = true
+            tryAwaitRelease()
+            pressed = false
+          },
+        ) {
+          onTap()
+        }
+      },
     contentAlignment = Alignment.Center,
   ) {
     icon()
