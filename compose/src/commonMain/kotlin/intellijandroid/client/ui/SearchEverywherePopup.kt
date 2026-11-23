@@ -425,18 +425,42 @@ private object Looks {
  * Double Shift, timed as IntelliJ's `ModifierKeyDoubleClickHandler` times it: press, release,
  * press, release, each within 300 ms of the one before, and no other key between. Example: Shift
  * down at 0, up at 80, down at 200, up at 260 → true at 260; with the second press at 450 → false.
+ * Also as there, a Shift event less than 100 ms after another key doesn't count: typing `$$` gives
+ * Shift down, 4 down at +2 ms, 4 up, Shift up at +5 ms, and so on.
  */
 internal class DoubleShift {
   /** 0: nothing yet; 1: pressed; 2: released; 3: pressed again. */
   private var step = 0
   private var last = 0L
+  /** When the last key other than Shift came, until a Shift event counts again. */
+  private var otherKeyTime: Long? = null
+  private var seenBeforeSoftKeyboard = false
 
-  /** One key event at [time] ms; true when it completes a double Shift. */
-  fun onKey(shift: Boolean, down: Boolean, time: Long): Boolean {
+  /**
+   * One key event at [time] ms; true when it completes a double Shift. [beforeSoftKeyboard]: the
+   * event comes from the platform's pre-keyboard stage (Android). Once one has, only those count:
+   * the later delivery repeats them, and more Shift events arrive there too (most likely the
+   * keyboard app's own), which made a real double Shift fail some of the time.
+   */
+  fun onKey(
+    shift: Boolean,
+    down: Boolean,
+    time: Long,
+    beforeSoftKeyboard: Boolean = false,
+  ): Boolean {
+    if (beforeSoftKeyboard) seenBeforeSoftKeyboard = true
+    else if (seenBeforeSoftKeyboard) return false
     if (!shift) {
+      step = 0
+      otherKeyTime = time
+      return false
+    }
+    val otherKey = otherKeyTime
+    if (otherKey != null && time - otherKey < OTHER_KEY_MS) {
       step = 0
       return false
     }
+    otherKeyTime = null
     if (step > 0 && time - last > DOUBLE_SHIFT_MS) step = 0
     last = time
     step =
@@ -455,3 +479,4 @@ internal class DoubleShift {
 }
 
 private const val DOUBLE_SHIFT_MS = 300
+private const val OTHER_KEY_MS = 100

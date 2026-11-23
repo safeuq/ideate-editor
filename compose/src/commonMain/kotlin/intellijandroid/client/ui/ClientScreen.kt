@@ -58,6 +58,7 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreInterceptKeyBeforeSoftKeyboard
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -146,19 +147,33 @@ fun ClientScreen(
   var gradientCenter by remember { mutableFloatStateOf(Float.NaN) }
   val projectColor = state.projectName?.let(::projectGradientColor)
   val doubleShift = remember { DoubleShift() }
+  // Called by both key modifiers below; true when the event opens Search Everywhere.
+  val onDoubleShiftKey =
+    onDoubleShiftKey@{ event: androidx.compose.ui.input.key.KeyEvent, beforeSoftKeyboard: Boolean ->
+      val search = session.searchEverywhere ?: return@onDoubleShiftKey false
+      if (state.search != null) return@onDoubleShiftKey false
+      val shift = event.key == Key.ShiftLeft || event.key == Key.ShiftRight
+      val down = event.type == KeyEventType.KeyDown
+      if (!doubleShift.onKey(shift, down, System.currentTimeMillis(), beforeSoftKeyboard))
+        return@onDoubleShiftKey false
+      search.open(SearchTab.FILES)
+      true
+    }
   // Search Everywhere's earlier searches, per tab, for as long as this screen lives.
   val searchHistories = remember { mutableMapOf<SearchTab, SearchHistory>() }
   BoxWithConstraints(
     Modifier.fillMaxSize()
+      // On Android, while the editor or the terminal takes text, a key goes to the keyboard app
+      // before onPreviewKeyEvent: the keyboard app keeps `4` of a typed `$` (and commits "$") but
+      // passes its Shift on, so two `$` looked like a double Shift. This sees every key first.
+      .onPreInterceptKeyBeforeSoftKeyboard { event ->
+        onDoubleShiftKey(event, true)
+      }
       .onPreviewKeyEvent { event ->
+        if (onDoubleShiftKey(event, false)) return@onPreviewKeyEvent true
         val search = session.searchEverywhere ?: return@onPreviewKeyEvent false
         if (state.search != null) return@onPreviewKeyEvent false
-        val shift = event.key == Key.ShiftLeft || event.key == Key.ShiftRight
         val down = event.type == KeyEventType.KeyDown
-        if (doubleShift.onKey(shift, down, System.currentTimeMillis())) {
-          search.open(SearchTab.FILES)
-          return@onPreviewKeyEvent true
-        }
         // IntelliJ's Go to Class / File / Symbol: ⌘O, ⇧⌘O, ⌥⌘O (Ctrl+N, Ctrl+Shift+N,
         // Ctrl+Alt+Shift+N elsewhere).
         val command = if (IS_MAC) event.isMetaPressed else event.isCtrlPressed

@@ -583,12 +583,31 @@ withKernel(middleware) {                                   // withTransactor { w
      recent files there).
    - `ui/SearchEverywherePopup.kt`: see intellij-look.md section 21. Opened by the magnifier at the right end of
      the main toolbar, double ⇧ (`ModifierKeyDoubleClickHandler`'s timing: four Shift events, each within 300 ms
-     of the one before, no other key between), and ⌘O / ⇧⌘O / ⌥⌘O (Ctrl+N, Ctrl+Shift+N, Ctrl+Alt+Shift+N) for
+     of the one before, no other key between, none less than 100 ms after another key), and ⌘O / ⇧⌘O / ⌥⌘O (Ctrl+N, Ctrl+Shift+N, Ctrl+Alt+Shift+N) for
      Classes, Files and Symbols. All, Actions and Text say "not supported yet".
    - Checked on the desktop and the Pixel 3a emulator: "Main" → `Main.java` (Files), `Main` (Classes), `Main` and
      `main(String[])` (Symbols); Enter or a tap on `.gitignore` opened it and closed the popup; Escape closes.
    - Not confirmed: double ⇧. The automation tool's lone Shift press does not arrive as a key event, so it is
      covered by `DoubleShiftTest` only.
+   - **Fixed 2026-11-23: typed characters no longer count as a double ⇧ on Android** (pending 42). On the S24,
+     `adb shell input text 'echo $0 $$'` in the Terminal opened Search Everywhere. Each `$` is Shift down, `4`
+     down and up, Shift up, a few ms apart. While the editor or the Terminal takes text, Android hands every key
+     to the keyboard app before the view (`ViewRootImpl`'s IME stage). The keyboard app kept the `4` and
+     committed "$" as text, but passed the Shift on, so `onPreviewKeyEvent` saw Shift down/up twice with nothing
+     between. Android's input log (`dumpsys input`, RecentQueue) showed the 4 events of `input keyevent
+     SHIFT_LEFT SHIFT_LEFT` 15, 6 and 4 ms apart.
+     - `ClientScreen` also feeds `DoubleShift` from `Modifier.onPreInterceptKeyBeforeSoftKeyboard`, which sees
+       every key before the keyboard app. Once an event has come that way, `DoubleShift` ignores the ones from
+       `onPreviewKeyEvent`. That path repeats the same keys. A first build that skipped only an event object it had
+       already counted still missed some real double ⇧ in the editor (open in 2 of 6 tries), so something else
+       also arrives there; most likely the keyboard app's own Shift events (`InputConnection.sendKeyEvent`), not
+       proven. With only the pre-keyboard events counted it opened every time.
+     - Desktop Compose never calls that hook (`FocusOwnerImpl.dispatchInterceptedSoftKeyboardEvent` has no
+       desktop caller in CMP 1.10.3), so the desktop counts keys from `onPreviewKeyEvent` as before.
+     - Also as in `ModifierKeyDoubleClickHandler`: a Shift event less than 100 ms after another key doesn't count.
+     - Checked on the S24 (xtool on the phone backend), second build. Editor: `$$$$` typed, no popup; double ⇧
+       opened it 4 of 4 times. Terminal: `echo $0 $$`, no popup; double ⇧ opened it 3 of 3 times. Desktop: not
+       run, see above.
    - **Fixed 2026-11-19: the caret lands on the chosen symbol.** Before, the editor stayed at line 1 (another
      file) or where it was (the same file). The backend runs IntelliJ's own navigation (`itemSelected` →
      `OpenFileDescriptor.navigateIn`) and the caret move does arrive: a `backendPatches` patch with one
