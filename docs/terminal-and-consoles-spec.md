@@ -799,8 +799,12 @@ backend had no `SHELL` (an SSH login has `SHELL=/data/data/com.termux/files/usr/
   `~/.termux/shell` and `-l` reads the profile, as an SSH login does. Checked on the phone with an empty
   environment: `SHELL=…/zsh`, login shell, `IDEA_JDK` from `~/.zshenv`, `status --json` output unchanged.
   `status` and `link` still run directly, so nothing a profile prints reaches the parsed output.
-- Not fixed: the libraries. The launcher passes `-Djna.boot.library.path=…/plugins/jna-plugin/lib/jna/aarch64`
-  and `-Dpty4j.preferred.native.folder=…/plugins/pty4j-plugin/lib/pty4j` after the user's VM options, so they
-  can't be redirected; Android builds have to replace the files in place. JNA 5.19.1 (native interface 7.0.4)
+- Not fixed: the libraries. The install script (which installs the patched JBR, IntelliJ and its libraries;
+  nobody updates the backend's IntelliJ on their own) ships Bionic builds as the default files, in place of the
+  glibc ones, with no backup and no extra VM options. The launcher's own
+  `-Djna.boot.library.path=…/plugins/jna-plugin/lib/jna/aarch64` and
+  `-Dpty4j.preferred.native.folder=…/plugins/pty4j-plugin/lib/pty4j` already point at them:
+  `<idea>/plugins/jna-plugin/lib/jna/aarch64/libjnidispatch.so` and
+  `<idea>/plugins/pty4j-plugin/lib/pty4j/linux/aarch64/libpty.so`. JNA 5.19.1 (native interface 7.0.4)
   publishes `dist/android-aarch64.jar`, a Bionic build reporting 7.0.4. `libpty.so` (only `exec_pty`, from
   pty4j's `exec_pty.c` and `openpty.c`) has to be built with Termux's clang.
