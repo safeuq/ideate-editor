@@ -189,7 +189,10 @@ fun toolWindowButtons(windows: List<BackendToolWindow>): ToolWindowButtons {
 enum class ScreenLayout {
   /** Phone or tablet held upright: side pages, the editor or the bottom windows in the middle. */
   PORTRAIT,
-  /** Desktop, tablet held sideways: bars on both sides, one side pane, the bottom area. */
+  /**
+   * Desktop, tablet held sideways: bars on both sides; the left pane, the editor and the right pane
+   * side by side, with the bottom area under all three, as IntelliJ's default layout.
+   */
   WIDE,
   /** Phone held sideways: one bar on the left, the editor and at most one tool window. */
   COMPACT,
@@ -211,8 +214,8 @@ fun screenLayout(widthDp: Float, heightDp: Float) =
 /**
  * The open tool window of each [Place], at most one, as on IntelliJ's stripes. Opening another
  * window of the same place replaces it. The layout adds its own rule:
- * - [ScreenLayout.WIDE]: one side pane at a time; opening a left window closes the right ones and
- *   the other way round. The bottom area is open or closed on its own.
+ * - [ScreenLayout.WIDE]: no more; both side panes and the bottom area can be open together, each
+ *   opened or closed on its own.
  * - [ScreenLayout.COMPACT]: one tool window at a time.
  * - [ScreenLayout.PORTRAIT]: no more; the screen shows one page at a time anyway.
  */
@@ -240,13 +243,8 @@ class ToolWindowState {
     open[window.place] = window
     last[window.place] = window
     when (layout) {
-      ScreenLayout.WIDE ->
-        when (window.place.side) {
-          Side.LEFT -> closeSide(Side.RIGHT)
-          Side.RIGHT -> closeSide(Side.LEFT)
-          Side.BOTTOM -> Unit
-        }
       ScreenLayout.COMPACT -> open.keys.filter { it != window.place }.forEach(open::remove)
+      ScreenLayout.WIDE,
       ScreenLayout.PORTRAIT -> Unit
     }
   }
@@ -277,13 +275,11 @@ class ToolWindowState {
   fun canShow(side: Side) =
     Place.entries.any { it.side == side && (open[it] != null || last[it] != null) }
 
-  /**
-   * After a rotation: drops what the new [layout] can't show (the right side, then all but one).
-   */
+  /** After a rotation: drops what the new [layout] can't show (all but one window in compact). */
   fun fit(layout: ScreenLayout) {
     when (layout) {
-      ScreenLayout.WIDE -> if (openOn(Side.LEFT).isNotEmpty()) closeSide(Side.RIGHT)
       ScreenLayout.COMPACT -> Place.entries.filter { it in open }.drop(1).forEach(open::remove)
+      ScreenLayout.WIDE,
       ScreenLayout.PORTRAIT -> Unit
     }
   }

@@ -535,42 +535,50 @@ fun ClientScreen(
               top = listOf(Place.LEFT_TOP, Place.LEFT_BOTTOM),
               foot = listOf(Place.BOTTOM_LEFT),
             )
-            // The editor, with the bottom area under it when a bottom window is open.
+            // Left pane | editor | right pane, with the bottom area under all three, as IntelliJ's
+            // default layout. Both sides open: left | (editor | right), so a drag on one border
+            // leaves the other pane's width as it is (weights are of the whole width).
             @Composable
-            fun Center(modifier: Modifier) {
-              if (windows.openOn(Side.BOTTOM).isEmpty()) Editor(modifier)
+            fun Panes(modifier: Modifier) {
+              val left = windows.openOn(Side.LEFT).isNotEmpty()
+              val right = windows.openOn(Side.RIGHT).isNotEmpty()
+              @Composable
+              fun EditorAndRight(modifier: Modifier) {
+                // Of the room right of the left pane (the whole width when there is no left pane).
+                val rest = if (left) 1f - weights.left else 1f
+                if (!right) Editor(modifier)
+                else
+                  SplitPane(
+                    stacked = false,
+                    proportion = ((rest - weights.right) / rest),
+                    onProportion = { weights = weights.copy(right = rest * (1f - it)) },
+                    modifier,
+                    first = { Editor(Modifier.fillMaxSize()) },
+                    second = { Area(Side.RIGHT, stacked = true, Modifier.fillMaxSize()) },
+                  )
+              }
+              if (!left) EditorAndRight(modifier)
               else
-                SplitPane(
-                  stacked = true,
-                  proportion = 1f - weights.bottom,
-                  onProportion = { weights = weights.copy(bottom = 1f - it) },
-                  modifier,
-                  first = { Editor(Modifier.fillMaxSize()) },
-                  second = { Area(Side.BOTTOM, stacked = false, Modifier.fillMaxSize()) },
-                )
-            }
-            val main = Modifier.weight(1f).fillMaxHeight()
-            when {
-              windows.openOn(Side.LEFT).isNotEmpty() ->
                 SplitPane(
                   stacked = false,
                   proportion = weights.left,
                   onProportion = { weights = weights.copy(left = it) },
-                  main,
+                  modifier,
                   first = { Area(Side.LEFT, stacked = true, Modifier.fillMaxSize()) },
-                  second = { Center(Modifier.fillMaxSize()) },
+                  second = { EditorAndRight(Modifier.fillMaxSize()) },
                 )
-              windows.openOn(Side.RIGHT).isNotEmpty() ->
-                SplitPane(
-                  stacked = false,
-                  proportion = 1f - weights.right,
-                  onProportion = { weights = weights.copy(right = 1f - it) },
-                  main,
-                  first = { Center(Modifier.fillMaxSize()) },
-                  second = { Area(Side.RIGHT, stacked = true, Modifier.fillMaxSize()) },
-                )
-              else -> Center(main)
             }
+            val main = Modifier.weight(1f).fillMaxHeight()
+            if (windows.openOn(Side.BOTTOM).isEmpty()) Panes(main)
+            else
+              SplitPane(
+                stacked = true,
+                proportion = 1f - weights.bottom,
+                onProportion = { weights = weights.copy(bottom = 1f - it) },
+                main,
+                first = { Panes(Modifier.fillMaxSize()) },
+                second = { Area(Side.BOTTOM, stacked = false, Modifier.fillMaxSize()) },
+              )
             ToolWindowBar(
               buttons,
               shown,

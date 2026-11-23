@@ -231,3 +231,17 @@ portrait (`adb shell wm density 240`) with Project and Structure side by side un
 - `adb shell settings put system user_rotation 1` (with `accelerometer_rotation` 0) turns the emulator sideways.
 - `adb shell input motionevent DOWN|MOVE|UP x y` holds a drag open for a screenshot (the split's pill).
 - `adb shell input swipe 200 1200 900 1200 200` is a 700-px swipe right in 200 ms.
+
+## Addendum (2026-11-23): both side panes and a full-width bottom area in the wide layout
+
+User request: in `ScreenLayout.WIDE` (desktop, tablet held sideways) match IntelliJ's default layout.
+
+- **Both side panes can be open together.** Opening a left window no longer closes the right ones, or the other way round; `ToolWindowState.open` and `fit` keep every window in WIDE. PORTRAIT and COMPACT are unchanged.
+- **The bottom area spans the full width** between the two bars, under the left pane, the editor and the right pane. Before, it sat under the editor only. `PaneWeights.bottom` is now a share of the whole pane area's height.
+
+```
+[left bar] [ left pane | editor | right pane ]  [right bar]
+           [ bottom area: bottom left | bottom right ]
+```
+
+- With both sides open the splits nest as left | (editor | right). `weights.left` and `weights.right` are both shares of the whole width, so dragging one border leaves the other pane's width as it is (the inner editor share is `(1 - left - right) / (1 - left)`). Each split is the existing `SplitPane`, so its gap, border and least size are unchanged.

@@ -22,7 +22,7 @@ data class PaneWeights(
   val left: Float = DEFAULT_WEIGHT,
   /** Right pane's width, of the window's. */
   val right: Float = DEFAULT_WEIGHT,
-  /** Bottom area's height under the editor, of the editor column's (desktop, tablet sideways). */
+  /** Bottom area's height under the panes, of the window area's (desktop, tablet sideways). */
   val bottom: Float = DEFAULT_WEIGHT,
   /** Left top's share of the left side when it is split (left bottom gets the rest). */
   val leftSplit: Float = DEFAULT_SIDE_WEIGHT,

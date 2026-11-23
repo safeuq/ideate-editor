@@ -40,13 +40,15 @@ class ToolWindowButtonsTest {
     val terminal = ToolWindow("Terminal", "Terminal", null, Place.BOTTOM_LEFT)
     fun ids(state: ToolWindowState) = Place.entries.mapNotNull { state.open[it]?.id }
 
-    // Desktop: one side pane, split; the bottom area on its own.
+    // Desktop: both side panes and the bottom area stay open together.
     val wide = ToolWindowState()
     wide.open(ToolWindow.STRUCTURE, ScreenLayout.WIDE)
     wide.open(terminal, ScreenLayout.WIDE)
     assertEquals(listOf("Project", "Structure", "Terminal"), ids(wide))
     wide.open(database, ScreenLayout.WIDE)
-    assertEquals(listOf("Terminal", "Database"), ids(wide))
+    assertEquals(listOf("Project", "Structure", "Terminal", "Database"), ids(wide))
+    wide.fit(ScreenLayout.WIDE)
+    assertEquals(listOf("Project", "Structure", "Terminal", "Database"), ids(wide))
 
     // Phone sideways: one tool window.
     val compact = ToolWindowState()
