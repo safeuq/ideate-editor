@@ -12,8 +12,10 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.moveTo
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -427,14 +429,22 @@ class RunTabsLiveTest {
       val row =
         onAllNodesWithText("Build gradle-smoke", substring = true).fetchSemanticsNodes().first()
       println("[bounds] console ${console.boundsInRoot} row ${row.boundsInRoot}")
-      assertEquals(65, panel()!!.width)
+      assertEquals(73, panel()!!.width)
       assertTrue(console.boundsInRoot.bottom <= row.boundsInRoot.top, "console above the tree")
-      // The eye button (16, 157) opens its menu; its second item is at about (60, 216).
+      // The toolbars are two rows of cells cut out of the panel, each with a name.
+      for (name in
+        listOf("Rerun", "Stop", "Pin", "Filter", "Soft-Wrap", "Scroll to the End", "Clear All")) {
+        println(
+          "[cell] $name ${onNodeWithContentDescription(name).fetchSemanticsNode().boundsInRoot}",
+        )
+      }
+      // The Filter button opens its menu; its second item is Show Successful Steps.
       val rowsBefore = rowCount()
-      onRoot().performMouseInput { click(Offset(16f, 157f)) }
+      onNodeWithContentDescription("Filter").performClick()
       Thread.sleep(2_000)
       shot("build-portrait-2-menu")
-      onRoot().performMouseInput { click(Offset(60f, 216f)) }
+      // The menu opens under the button; its second item, Show Successful Steps, is at (180, 653).
+      onRoot().performMouseInput { click(Offset(180f, 653f)) }
       waitUntil(timeoutMillis = 20_000) { rowCount() > rowsBefore }
       Thread.sleep(1_500)
       println("[rows] $rowsBefore -> ${rowCount()}")
@@ -454,5 +464,34 @@ class RunTabsLiveTest {
         }
       }
       shot("build-portrait-4-step")
+      // The console's buttons: Soft-Wrap wraps the long lines, Scroll to the End and Clear All
+      // empty the console shown.
+      onNodeWithContentDescription("Soft-Wrap").performClick()
+      Thread.sleep(1_500)
+      shot("build-portrait-5-soft-wrap")
+      onNodeWithContentDescription("Scroll to the End").performClick()
+      Thread.sleep(1_000)
+      shot("build-portrait-6-scroll-end")
+      onNodeWithContentDescription("Clear All").performClick()
+      // It empties the whole build's console (the selected step keeps its own), so look at the
+      // build's console again: the row at the top.
+      Thread.sleep(1_000)
+      onAllNodesWithText("Build gradle-smoke", substring = true).onFirst().performClick()
+      waitUntil(timeoutMillis = 20_000) { consoleTexts().all { it.isBlank() } }
+      shot("build-portrait-7-cleared")
+      // Rerun starts a new build: a console with text again.
+      onNodeWithContentDescription("Rerun").performClick()
+      waitUntil(timeoutMillis = 40_000) { consoleTexts().any { it.contains("Execution finished") } }
+      shot("build-portrait-8-rerun")
+      // Each hover is sent to the panel at the cell's own place: the backend hovers that button.
+      for (name in
+        listOf("Rerun", "Stop", "Pin", "Filter", "Soft-Wrap", "Scroll to the End", "Clear All")) {
+        onNodeWithContentDescription(name).performMouseInput { moveTo(center) }
+        // (the pointer's Enter reaches the cell on the next frame)
+        waitForIdle()
+        Thread.sleep(1_000)
+        shot("build-portrait-hover-" + name.lowercase().replace(" ", "-"))
+      }
+      onRoot().performMouseInput { moveTo(Offset(300f, 500f)) }
     }
 }

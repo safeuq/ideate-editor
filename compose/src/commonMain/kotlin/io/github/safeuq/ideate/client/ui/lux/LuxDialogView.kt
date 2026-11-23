@@ -1,14 +1,11 @@
 package io.github.safeuq.ideate.client.ui.lux
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.IntState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -96,7 +94,6 @@ import io.github.safeuq.ideate.client.ui.component.SplitPane
 import io.github.safeuq.ideate.client.ui.console.ConsoleEditor
 import io.github.safeuq.ideate.client.ui.dialog.DialogLook
 import io.github.safeuq.ideate.client.ui.dialog.dialogFrame
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 import kotlin.math.min
@@ -244,26 +241,24 @@ private fun closeWindow(send: (LxEvent) -> Unit) {
   sendKey(send, KEY_ESCAPE, '\u001b', 0)
 }
 
+/** [dialog]'s bitmap and a counter that changes whenever a batch of draw operations was painted. */
+internal class LuxFrame(val bitmap: ImageBitmap, private val paintedCount: IntState) {
+  val painted: Int
+    get() = paintedCount.intValue
+}
+
 /**
- * [dialog]'s content: the backend's draw operations replayed onto a bitmap, and input sent back.
+ * The backend's draw operations for [dialog], replayed onto a bitmap of the panel's size; null
+ * until the session has its images. [LuxSurface] shows it whole, the stacked Build window cuts the
+ * toolbar buttons out of it ([LuxCell]).
  */
 @Composable
-internal fun LuxSurface(
+internal fun rememberLuxFrame(
   dialog: LuxDialog,
   session: ClientSession,
-  fit: Float,
-  send: (LxEvent) -> Unit,
-  softKeyboard: Boolean,
-  /** A pane, not a window: finger drags scroll, and it doesn't take the focus when it appears. */
-  pane: Boolean = false,
-  /**
-   * Called when the surface starts over on an empty bitmap of a new size. The backend then repaints
-   * only what moved, so a pane asks it for a whole frame here, as JetBrains Client's
-   * `LuxFrontendPanelAdapter.forceHostToRepaint` does.
-   */
-  onNewBitmap: (() -> Unit)? = null,
-) {
-  val images = session.luxImages ?: return
+  onNewBitmap: (() -> Unit)?,
+): LuxFrame? {
+  val images = session.luxImages ?: return null
   val density = LocalDensity.current
   val fonts = LocalClientFonts.current
   val fontResolver = LocalFontFamilyResolver.current
@@ -284,7 +279,7 @@ internal fun LuxSurface(
       }
     }
   SideEffect { previous = bitmap }
-  var painted by remember { mutableIntStateOf(0) }
+  val painted = remember { mutableIntStateOf(0) }
   LaunchedEffect(bitmap) { onNewBitmap?.invoke() }
   LaunchedEffect(dialog.version, bitmap) {
     val canvas = GraphicsCanvas(bitmap)
@@ -292,8 +287,33 @@ internal fun LuxSurface(
       val batch = dialog.nextBatch() ?: break
       painter.paint(canvas, density.density, batch)
     }
-    painted++
+    painted.intValue++
   }
+  return LuxFrame(bitmap, painted)
+}
+
+/**
+ * [dialog]'s content: the backend's draw operations replayed onto a bitmap, and input sent back.
+ */
+@Composable
+internal fun LuxSurface(
+  dialog: LuxDialog,
+  session: ClientSession,
+  fit: Float,
+  send: (LxEvent) -> Unit,
+  softKeyboard: Boolean,
+  /** A pane, not a window: finger drags scroll, and it doesn't take the focus when it appears. */
+  pane: Boolean = false,
+  /**
+   * Called when the surface starts over on an empty bitmap of a new size. The backend then repaints
+   * only what moved, so a pane asks it for a whole frame here, as JetBrains Client's
+   * `LuxFrontendPanelAdapter.forceHostToRepaint` does.
+   */
+  onNewBitmap: (() -> Unit)? = null,
+) {
+  val frame = rememberLuxFrame(dialog, session, onNewBitmap) ?: return
+  val painted = frame.painted
+  val bitmap = frame.bitmap
   LuxContent(dialog, bitmap, painted, fit, send, softKeyboard, pane)
 }
 
@@ -336,18 +356,22 @@ private fun LuxContent(
  * canvas that [LuxContent] rebuilds when the soft keyboard comes or goes, so a gesture survives the
  * rebuild: e.g. a finger pressing a checkbox while a text field had the focus, then panning.
  */
-private fun Modifier.luxPointer(
+internal fun Modifier.luxPointer(
   dialog: LuxDialog,
   fit: Float,
   send: (LxEvent) -> Unit,
-  focus: FocusRequester,
+  focus: FocusRequester?,
   /**
    * A finger's drag scrolls what is under it (wheel events), for a panel with nothing around it to
    * pan, e.g. the welcome project's recent projects list. Off for dialogs: the dialog pans.
    */
   dragScrolls: Boolean = false,
+  /**
+   * Where the pointer's top-left corner is in the panel, in backend pixels: a cell cut out of it.
+   */
+  origin: IntOffset = IntOffset.Zero,
 ): Modifier =
-  pointerInput(dialog.id, fit, dragScrolls) {
+  pointerInput(dialog.id, fit, dragScrolls, origin) {
     val toBackend = 1f / (density * fit)
     var lastPress = 0L
     var lastPressAt = Offset.Zero
@@ -364,8 +388,8 @@ private fun Modifier.luxPointer(
         // touch slop.
         val event = awaitPointerEvent(PointerEventPass.Final)
         val change = event.changes.firstOrNull() ?: continue
-        val x = (change.position.x * toBackend).roundToInt()
-        val y = (change.position.y * toBackend).roundToInt()
+        val x = origin.x + (change.position.x * toBackend).roundToInt()
+        val y = origin.y + (change.position.y * toBackend).roundToInt()
         val touch = change.type == PointerType.Touch
         // xAbs/yAbs: the point on the screen the backend was told about.
         // AWT's MouseWheelEvent: WHEEL_UNIT_SCROLL (0), 3 lines a notch, rotation +1 = down.
@@ -453,7 +477,7 @@ private fun Modifier.luxPointer(
             mouse(LxMouseEventType.Exited, 0, 0)
           }
           PointerEventType.Press -> {
-            runCatching { focus.requestFocus() }
+            if (focus != null) runCatching { focus.requestFocus() }
             panned = false
             // A finger has no hover: enter the window and move to the point first, as a mouse
             // would. Swing ignores a press in a window the pointer never entered, and
@@ -760,56 +784,56 @@ fun LuxPaneView(
         }
     },
   ) {
-    val surface =
-      @Composable {
-        LuxSurface(
-          panel,
-          session,
-          1f,
-          send,
-          softKeyboard = true,
-          pane = true,
-          onNewBitmap = onRepaint,
-        )
-      }
     if (stacked) {
-      Row(Modifier.fillMaxSize()) {
-        Box(Modifier.width(BUILD_STRIPS_WIDTH.dp).fillMaxHeight()) { surface() }
-        // The console on top, the tree below it, a border between that drags.
-        SplitPane(
-          stacked = true,
-          proportion = consoleShare,
-          onProportion = { consoleShare = it },
-          modifier = Modifier.weight(1f).fillMaxHeight(),
-          first = {
-            for (local in panel.locals.filterIsInstance<PanelConsole>()) PanelLocalView(
-              local,
-              state,
-              session,
-              Modifier.fillMaxSize(),
-            )
-          },
-          second = {
-            // The line between console and tree, as IntelliJ's OnePixelSplitter draws inside a tool
-            // window: 1 px in the tool window's border colour.
-            Column(Modifier.fillMaxSize()) {
-              Box(
-                Modifier.fillMaxWidth()
-                  .height(with(LocalDensity.current) { 1.toDp() })
-                  .background(IslandsDark.toolWindowBorder),
-              )
-              for (local in panel.locals.filterIsInstance<PanelBuildTree>()) PanelLocalView(
+      // The panel is only its two toolbar strips; the buttons are cut out of its bitmap and drawn
+      // in a row above the console and one above the tree.
+      val frame = rememberLuxFrame(panel, session, onRepaint)
+      val anchor = { panelX: Int, panelY: Int ->
+        if (area.height > 0) onResize(panelX, panelY, BUILD_STRIPS_WIDTH, area.height)
+      }
+      SplitPane(
+        stacked = true,
+        proportion = consoleShare,
+        onProportion = { consoleShare = it },
+        modifier = Modifier.fillMaxSize(),
+        first = {
+          Column(Modifier.fillMaxSize()) {
+            if (frame != null) BuildToolbarRow(panel, frame, CONSOLE_TOOLBAR_CELLS, send, anchor)
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+              for (local in panel.locals.filterIsInstance<PanelConsole>()) PanelLocalView(
                 local,
                 state,
                 session,
-                Modifier.fillMaxWidth().weight(1f),
+                Modifier.fillMaxSize(),
               )
             }
-          },
-        )
-      }
+          }
+        },
+        second = {
+          // The line between console and tree, as IntelliJ's OnePixelSplitter draws inside a tool
+          // window: 1 px in the tool window's border colour.
+          Column(Modifier.fillMaxSize()) {
+            PixelLine()
+            if (frame != null) BuildToolbarRow(panel, frame, BUILD_TOOLBAR_CELLS, send, anchor)
+            for (local in panel.locals.filterIsInstance<PanelBuildTree>()) PanelLocalView(
+              local,
+              state,
+              session,
+              Modifier.fillMaxWidth().weight(1f),
+            )
+          }
+        },
+      )
     } else {
-      surface()
+      LuxSurface(
+        panel,
+        session,
+        1f,
+        send,
+        softKeyboard = true,
+        pane = true,
+        onNewBitmap = onRepaint,
+      )
       // The controls the client draws itself (spec 7.2), at the bounds the backend laid out.
       for (local in panel.locals) {
         PanelLocalView(
@@ -828,19 +852,22 @@ fun LuxPaneView(
  * Phone upright (`ScreenLayout.PORTRAIT` and narrower than 600 dp; a tablet upright keeps the
  * backend's layout), Build window with a tree: Ideate lays the window out, the console on top and
  * the tree below it, instead of the backend's tree-left, console-right. The Lux panel is then only
- * its two toolbar strips ([BUILD_STRIPS_WIDTH]) and the controls' `bounds` are ignored.
+ * its two toolbar strips ([BUILD_STRIPS_WIDTH]), not shown as a column: each toolbar is a
+ * horizontal row above its part ([BuildToolbarRow]). The controls' `bounds` are ignored.
  */
 internal fun stackedBuild(portrait: Boolean, windowId: String, locals: List<PanelLocal>) =
   portrait && windowId == "Build" && locals.any { it is PanelBuildTree }
 
 /**
- * The width of the two toolbar strips the backend draws in the Build panel, in dp, seen on the Mac
- * backend (spec 2026-11-23): the left one (Rerun, Stop, Pin, Filter) 33 with its divider, the
- * console's (Soft-Wrap, Scroll to the End, Clear All) 32 at the panel's right edge. A panel of this
- * width draws both side by side. ponytail: fixed numbers from one backend; read them from the
- * locals' bounds if a theme or scale changes them.
+ * The width the backend is told for the Build panel in the stacked layout, in dp, seen on the Mac
+ * backend (spec 2026-11-23): the left toolbar strip (Rerun, Stop, Pin, Filter) 33 with its divider,
+ * the tree's least width 8, the console's strip (Soft-Wrap, Scroll to the End, Clear All) 32 at the
+ * panel's right edge. At 65 (33 + 32) the tree's border and the console's own area cover the left 9
+ * dp of the console's strip, so its buttons were cut; at 73 they are whole. The panel is not shown:
+ * [BuildToolbarRow] draws the buttons from its bitmap. ponytail: fixed numbers from one backend;
+ * read them from the locals' bounds if a theme or scale changes them.
  */
-internal const val BUILD_STRIPS_WIDTH = 65
+internal const val BUILD_STRIPS_WIDTH = 73
 
 /** The console's share of the stacked Build window; the tree gets the rest (about a third). */
 internal const val BUILD_CONSOLE_SHARE = 0.67f

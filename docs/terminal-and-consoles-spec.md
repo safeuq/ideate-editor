@@ -908,7 +908,7 @@ with a Build tree. Everything else (desktop, tablet or phone sideways, the Run w
  +------+----------------------------------+
 ```
 
-- Ideate tells the backend the panel is 65 dp wide (`BUILD_STRIPS_WIDTH` = 33 + 32) and as tall as the pane, taken
+- Ideate tells the backend the panel is 65 dp wide (`BUILD_STRIPS_WIDTH` = 33 + 32; 73 since "Toolbars as rows") and as tall as the pane, taken
   from the whole pane (`positionInWindow` and size), not `boundsInWindow`, so a page slide doesn't resize it.
 - The strips are the panel's own drawing at the left; the console and tree fill a `SplitPane` (stacked) beside it,
   with the console's share starting at 0.67. The border drags as every other split does; the share is kept while
@@ -917,8 +917,77 @@ with a Build tree. Everything else (desktop, tablet or phone sideways, the Run w
 - Checked on the desktop at a 411 × 891 window (`RunTabsLiveTest.buildPortrait`): panel 65 × 764, console above
   the tree, the eye menu opens, Show Successful Steps adds the task rows (2 to 8 rows), selecting `:app:testClasses`
   shows that step's console. `StackedBuildTest` covers the choice of layout.
-- **Not done:** the strips' widths are fixed numbers from one backend and theme; the console's strip sits beside
-  the left one instead of at the console's edge.
+- **Superseded below:** the strips are no longer shown as a column; see "Toolbars as rows".
+
+### Toolbars as rows (cell geometry, the remap, popups) [Seen run, desktop 411 x 891, Mac backend, dark theme]
+
+The two toolbars are now horizontal rows: the console's above the console, the Build tree's above the tree, each
+with a 1 px line in `IslandsDark.toolWindowBorder` under it, and the existing line between console and tree.
+
+```
+[ Soft-Wrap  Scroll to the End  Clear All ]
+-------------------------------------------   1 px
+[ console                                 ]
+============ drag split, 1 px line ========
+[ Rerun  Stop  Pin  Filter ]
+-------------------------------------------   1 px
+[ Build tree                              ]
+```
+
+The buttons are still drawn by the backend (BuildView builds their actions in code, so they are not registered
+action groups). Ideate keeps the Lux panel, receives its bitmap, and does not show it. `BuildToolbarRow` cuts each
+button's 22 x 22 dp cell out of the bitmap and draws the cells in a row. Code: `BuildToolbarCells.kt`.
+
+**Panel width is now 73, not 65.** At 65 (33 + 32) the backend gives the tree its least width, 8, and the tree's
+border sits at x = 41, with the console's own area to its right. Both are painted over the console strip, so a
+Soft-Wrap, Scroll to the End or Clear All cell lost its left 9 dp: a vertical border line ran through every cell and
+the hover frame was cut on the left. With 33 + 8 + 32 = 73 the console's strip starts at x = 41, clear of the tree.
+Measured at 73 by hovering each button (the backend draws a 22 x 22 rounded frame, seen whole inside the cell):
+
+| Button | Strip | Cell x | Cell y (top) | Icon (16 x 16) centre |
+|---|---|---|---|---|
+| Rerun | left | 5 | 4 | 16, 15 |
+| Stop | left | 5 | 30 | 16, 41 |
+| Pin | left | 5 | 56 | 16, 67 |
+| Filter (eye) | left | 5 | 82 | 16, 93 |
+| Soft-Wrap | console's | 46 | 4 | 57, 15 |
+| Scroll to the End | console's | 46 | 30 | 57, 41 |
+| Clear All | console's | 46 | 56 | 57, 67 |
+
+Every cell is 22 dp square, a button every 26 dp from 4 dp under the panel's top. (At 65 the same buttons were 8 dp
+further left, x 38; their icons are the same.) `ponytail:` fixed numbers from one backend and theme; read the places
+from the backend, or find the frames in the bitmap, if a theme or scale moves them.
+
+**Row look.** The row is IntelliJ's horizontal toolbar as `ToolWindowToolbar` (Gradle) has it: 7 dp at the sides, 5 dp
+above and below a 22 dp button (row 32 dp, icons centred, 8 dp above and below). The gap is 4 dp, the backend's own
+26 dp pitch. A 16 dp icon sits 3 dp inside its cell, so the first icon is 10 dp from the row's edge and the icons are
+10 dp apart. The 1 px lines are 1 physical pixel, as the line between console and tree.
+
+**The remap.** Each cell takes the existing pointer path (`luxPointer`, the one a whole panel uses) with `origin` set
+to the cell's top left in the strip: the event point is the cell's origin plus the point inside the cell, and
+`xAbs`/`yAbs` are the panel's place plus that. Hover (Entered, Moved, Exited), press, release and click, a touch's
+Entered and two Moved before its press, all work as in the panel. Example: a press 11 dp right and 11 dp down inside
+the Pin cell is sent at panel point (16, 67). `BuildToolbarCellsTest` checks the cells and this mapping.
+
+**Popups.** Seen: the backend places a button's menu and its tooltip from the panel's place on the screen plus the
+button's place in the panel, so with the panel at the pane's top left they opened at the old strip position, e.g. the
+Filter menu near the top of the window while the Filter button is at the bottom. All seven buttons sit in one vertical strip, but the two rows sit at
+different heights, so no single panel place suits every cell. A cell therefore moves the panel when the pointer enters
+or presses it: it tells the backend (the existing `resizeBackendPanel`, same size) the panel's top left is the cell's
+screen place minus the cell's place in the panel (`BuildCell.panelOrigin`). Seen after that: the Pin Tab tooltip and
+Soft-Wrap's tooltip open right under their buttons, and the Filter menu (Show Warnings, Show Successful Steps) opens
+under the eye just below it, its left edge 4 dp right of the button's. Show Successful Steps changed the rows from 2 to 8.
+
+**Checked** (`RunTabsLiveTest.buildPortrait`, 411 x 891): the panel is 73 x 764; Filter opens its menu and Show
+Successful Steps adds rows; selecting a step switches the console; Soft-Wrap toggles (its button shows selected);
+Scroll to the End works; Clear All empties the build's console (the trash button goes faint, and the build's console
+is blank when its row is selected again; the selected step keeps its own console); Rerun starts a new build. Hover
+frames were seen on Rerun, Pin, Filter, Soft-Wrap, Scroll to the End and Clear All; Stop is disabled and shows none.
+
+**Known, not changed.** In the test the next hover after a tooltip was showing is sometimes not drawn (for example
+Scroll to the End right after Soft-Wrap's tooltip). The events sent are right (an Entered at the cell's own point
+and an Exited from the old cell); the first mouse event after a tooltip seems to close it in the backend. The old
+strip had the same events.
 
 Only on a phone: the stacked layout needs `ScreenLayout.PORTRAIT` and a window narrower than 600 dp
 (Android's tablet line, as in `screenLayout`); a tablet upright keeps the backend's layout. Checked on

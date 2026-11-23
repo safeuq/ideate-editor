@@ -33,7 +33,9 @@ class StackedBuildTest {
 
   @Test
   fun stripsAreBothToolbarColumns() {
-    // Left strip 33 (32 and its divider) plus the console's 32, as probed on the Mac backend.
-    assertEquals(33 + 32, BUILD_STRIPS_WIDTH)
+    // Left strip 33 (32 and its divider), the tree's 8 (its least width), the console's strip 32:
+    // the
+    // console's strip then sits clear of the tree's border (spec 2026-11-23, "Cell geometry").
+    assertEquals(33 + 8 + 32, BUILD_STRIPS_WIDTH)
   }
 }
