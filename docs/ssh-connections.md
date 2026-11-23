@@ -618,3 +618,52 @@ Tested on the S24+ (Android SDK 37), both ends in real app processes:
 So the agent can only be reached through RUN_COMMAND, one call per agent message (list keys, then
 sign). That keeps the key in Termux and lets `ssh-add` unlock a passphrase key once, but it
 doesn't save time over reading the key file.
+
+## Addendum (2026-11-23): Termux's ssh-agent through the localhost bridge
+
+The abstract-socket attempt above failed because Android blocks one app from connecting to another
+app's Unix socket. Localhost TCP between apps works, so Termux runs `ssh-agent-bridge`: it
+listens on `127.0.0.1`, wants a secret token, and relays to Termux's ssh-agent socket. The bridge
+itself is documented in the intellij-backend-android repo, `docs/ssh-agent-bridge.md`. In Termux you
+need `intellij-backend ssh-agent start` and `ssh-add` once.
+
+Protocol (fixed):
+
+| Step | Example |
+|---|---|
+| Termux file `~/.ssh/agent-bridge` (`/data/data/com.termux/files/home/.ssh/agent-bridge`), one line `<port> <token>` | `5980 3f9a…c21e` (the token is 64 lowercase hex characters) |
+| Ideate connects to `127.0.0.1:<port>` and sends the token and a newline | `3f9a…c21e\n` |
+| The bridge answers one byte | `0x00` ok, then the stream is the raw ssh-agent protocol; `T` token rejected; `A` bridge can't reach the agent |
+| End of stream or connection refused | the bridge isn't running |
+
+Ideate side (`TermuxAgentBridge` and `TermuxAgentConnection` in `ssh/TermuxAgentBridge.kt`, plain
+`java.net`, 2 s connect timeout, 5 s to answer the token):
+
+- **Token cache.** The file is read once through Termux's `cat` and the port and token are kept in
+  memory for the app process, so a login costs no RUN_COMMAND call. If the kept token is rejected
+  (`T`) or the connection is refused, the cache is dropped, the file is read once more and the
+  connection is tried once more. A second `T` is an error. A missing file means no agent. The
+  token is never logged.
+- **Errors.** `T`: "Termux's agent bridge rejected Ideate's token". `A`: "Termux's agent bridge
+  can't reach ssh-agent (run `intellij-backend ssh-agent start`)". An agent error doesn't stop the
+  login: the identity files are tried next, and the agent's message is added to the final error if
+  they fail too.
+- **Order and lazy key files.** For OPEN_SSH the order is still the agent first, then the identity
+  files. `OpenSshFiles.hasAgent` became `OpenSshFiles.agent(): AgentProxy?` (the desktop returns
+  `AgentProxy.fromEnvironment()` when `SSH_AUTH_SOCK` exists, as before; Android connects through
+  the bridge). `SshLogins.resolve` now returns `SshLogin.Agent(connect)` and
+  `SshLogin.IdentityFiles(load)`; the connector tries each in turn with its own `client.auth` call
+  and reads the key files (one Termux call each) only if the agent isn't there or didn't log in.
+  `~/.ssh/config` and `known_hosts` are still read up front. When nothing works the error is a
+  `UserAuthException` ("No ssh-agent key and no usable key"), so the host shows the authenticate
+  phase instead of `MissingSecret`.
+- **Logs.** `Termux agent bridge: connected in N ms` (next to the existing `Termux read …: N ms`)
+  and `SSH log-in with Agent succeeded` or `… IdentityFiles succeeded`.
+- **Build.** `desktop` and `android` now depend on `com.hierynomus:sshj` themselves, because
+  `OpenSshFiles.agent()` returns an SSHJ type.
+
+Tests (`TermuxAgentBridgeTest`, `SshSetupTest`): a fake bridge on an ephemeral port checks the token
+line and answers `0x00`, `T` or `A`; after `0x00` it answers a request for identities so
+`AgentProxy(connection).identities` works. Also covered: the one re-read and retry, no file, nothing
+listening, a malformed file, and that resolving a login reads only `~/.ssh/config` and not the
+identity files. Not tested on a phone.

@@ -3,6 +3,7 @@ package io.github.safeuq.ideate.client.ssh
 import com.hierynomus.sshj.userauth.agent.AgentProxy
 import com.hierynomus.sshj.userauth.agent.AuthAgent
 import java.io.Closeable
+import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.security.PublicKey
@@ -15,6 +16,7 @@ import net.schmizz.sshj.common.IOUtils
 import net.schmizz.sshj.common.SecurityUtils
 import net.schmizz.sshj.connection.channel.direct.Parameters
 import net.schmizz.sshj.transport.verification.HostKeyVerifier
+import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.sshj.userauth.method.AuthPassword
 import net.schmizz.sshj.userauth.method.AuthPublickey
 import net.schmizz.sshj.userauth.password.PasswordUtils
@@ -31,10 +33,16 @@ sealed interface SshLogin {
   data class PrivateKey(val privateKey: String, val passphrase: String? = null) : SshLogin
 
   /**
-   * The keys in the user's ssh-agent (`SSH_AUTH_SOCK`), like Gateway's OPEN_SSH mode. Desktop only:
-   * Android has no agent.
+   * The keys in an ssh-agent, like Gateway's OPEN_SSH mode. [connect] gives the agent (null when
+   * there is none) and is called only when this login is tried.
    */
-  data object Agent : SshLogin
+  data class Agent(val connect: () -> AgentProxy?) : SshLogin
+
+  /**
+   * OPEN_SSH mode's identity files, read by [load] only when this login is tried: on Android each
+   * read is a Termux call, and the agent usually logs in first. Unreadable keys are skipped.
+   */
+  data class IdentityFiles(val load: () -> List<PrivateKey>) : SshLogin
 }
 
 /**
@@ -171,34 +179,69 @@ private constructor(private val client: SSHClient, val host: String, val port: I
         client.transport.timeoutMs = HOST_KEY_ANSWER_MILLIS
         client.connect(host, port)
         client.transport.timeoutMs = TRANSPORT_TIMEOUT_MILLIS
-        val methods = logins.flatMap { login ->
-          when (login) {
-            is SshLogin.Password ->
-              listOf(AuthPassword(PasswordUtils.createOneOff(login.password.toCharArray())))
-            is SshLogin.PrivateKey -> {
-              val loaded = runCatching {
-                AuthPublickey(
-                  client.loadKeys(
-                    login.privateKey,
-                    null,
-                    login.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) },
-                  ),
-                )
-              }
-              // One of several candidates (OpenSSH mode's identity files): an unreadable key is
-              // skipped, as OpenSSH does. The only one: its error is the answer.
-              if (logins.size == 1) listOf(loaded.getOrThrow())
-              else listOfNotNull(loaded.getOrNull())
+        var agentFailure: IOException? = null
+        var authFailure: UserAuthException? = null
+        for (login in logins) {
+          // The agent connection used by this login, closed once it is done: through Termux's
+          // bridge
+          // each open connection keeps a process running there.
+          var agent: AgentProxy? = null
+          val methods =
+            when (login) {
+              is SshLogin.Password ->
+                listOf(AuthPassword(PasswordUtils.createOneOff(login.password.toCharArray())))
+              is SshLogin.PrivateKey ->
+                // The only login: its error is the answer. Otherwise a bad key is skipped.
+                if (logins.size == 1) listOf(authKey(client, login).getOrThrow())
+                else listOfNotNull(authKey(client, login).getOrNull())
+              is SshLogin.IdentityFiles ->
+                login.load().mapNotNull { authKey(client, it).getOrNull() }
+              is SshLogin.Agent ->
+                try {
+                  login
+                    .connect()
+                    ?.also { agent = it }
+                    ?.let { AuthAgent.fromIdentities(it) }
+                    .orEmpty()
+                } catch (failure: IOException) {
+                  // Try the identity files too; the failure is reported if they don't log in.
+                  println("SSH agent unusable: ${failure.message}")
+                  agentFailure = failure
+                  emptyList()
+                }
             }
-            SshLogin.Agent -> AuthAgent.fromIdentities(AgentProxy.fromEnvironment())
+          if (methods.isEmpty()) {
+            agent?.let { runCatching { it.close() } }
+            continue
+          }
+          try {
+            client.auth(user, methods)
+            println("SSH log-in with ${login.javaClass.simpleName} succeeded")
+            return SshSession(client, host, port)
+          } catch (failure: UserAuthException) {
+            authFailure = failure
+          } finally {
+            agent?.let { runCatching { it.close() } }
           }
         }
-        client.auth(user, methods)
+        val agentProblem = agentFailure?.let { "; ssh-agent: ${it.message}" }.orEmpty()
+        throw UserAuthException(
+          (authFailure?.message ?: "No ssh-agent key and no usable key") + agentProblem,
+        )
       } catch (failure: Exception) {
         client.close()
         throw failure
       }
-      return SshSession(client, host, port)
+    }
+
+    private fun authKey(client: SSHClient, login: SshLogin.PrivateKey) = runCatching {
+      AuthPublickey(
+        client.loadKeys(
+          login.privateKey,
+          null,
+          login.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) },
+        ),
+      )
     }
 
     /**

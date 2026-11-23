@@ -1,23 +1,28 @@
 package io.github.safeuq.ideate.client.android
 
 import android.os.Looper
+import com.hierynomus.sshj.userauth.agent.AgentProxy
 import io.github.safeuq.ideate.client.connect.Termux
 import io.github.safeuq.ideate.client.ssh.OpenSshFiles
+import io.github.safeuq.ideate.client.ssh.TermuxAgentBridge
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Termux's `~/.ssh` for OPEN_SSH hosts. This app can't read Termux's private files, so every read
- * runs `cat` in Termux (docs/ssh-connections.md, "Termux's ~/.ssh on Android"). Nothing is kept:
- * each connect reads the files again.
+ * runs `cat` in Termux (docs/ssh-connections.md, "Termux's ~/.ssh on Android"). The files are read
+ * again on each connect; only the agent bridge's port and token are kept.
  *
- * There is no agent: its socket would be in Termux's private folder, out of this app's reach.
+ * The agent is Termux's ssh-agent, reached through `ssh-agent-bridge` on localhost TCP, because its
+ * Unix socket is out of this app's reach.
  */
 class AndroidOpenSshFiles(private val termux: AndroidTermux) : OpenSshFiles {
   override val home = "/data/data/com.termux/files/home"
 
-  override val hasAgent = false
+  private val bridge = TermuxAgentBridge { read("$home/.ssh/agent-bridge") }
+
+  override fun agent(): AgentProxy? = bridge.connect()?.let { AgentProxy(it) }
 
   /**
    * Blocks until Termux answers. Termux's answer arrives on the main thread, so waiting there would

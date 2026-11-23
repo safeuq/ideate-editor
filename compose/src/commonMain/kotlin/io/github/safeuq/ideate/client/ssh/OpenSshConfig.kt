@@ -1,5 +1,7 @@
 package io.github.safeuq.ideate.client.ssh
 
+import com.hierynomus.sshj.userauth.agent.AgentProxy
+
 /** What `~/.ssh/config` says about one host alias; nulls where it says nothing. */
 data class OpenSshHost(
   val hostName: String?,
@@ -79,8 +81,12 @@ interface OpenSshFiles {
   /** E.g. `/Users/dev`. */
   val home: String
 
-  /** Whether `SSH_AUTH_SOCK` points at an agent. */
-  val hasAgent: Boolean
+  /**
+   * A connection to the user's ssh-agent, or null when there is none (the desktop's
+   * `SSH_AUTH_SOCK`, or Termux's agent through the bridge). Throws when an agent is there but can't
+   * be used. May block, so not for the main thread.
+   */
+  fun agent(): AgentProxy?
 
   /**
    * A file's text, or null when it doesn't exist. Throws when the file can't be looked up at all.
@@ -146,7 +152,9 @@ object SshLogins {
           }
         val config =
           OpenSshConfig.resolve(files.read("${files.home}/.ssh/config").orEmpty(), entry.host)
-        val keys =
+        // The identity files are read only when the agent didn't log in (on Android each read
+        // is a Termux call).
+        val identityFiles = SshLogin.IdentityFiles {
           config.identityFiles
             .ifEmpty { DEFAULT_IDENTITIES }
             .mapNotNull { path ->
@@ -154,15 +162,13 @@ object SshLogins {
                 SshLogin.PrivateKey(it, typed)
               }
             }
-        val logins = listOfNotNull(SshLogin.Agent.takeIf { files.hasAgent }) + keys
-        if (logins.isEmpty())
-          throw MissingSecret(entry, "a key: no agent and no identity file in ~/.ssh")
+        }
         ResolvedLogin(
           config.hostName ?: entry.host,
           // A port typed for the host wins, like `ssh -p`; the default 22 lets the config decide.
           if (entry.port == 22) config.port ?: 22 else entry.port,
           entry.user.ifBlank { config.user.orEmpty() },
-          logins,
+          listOf(SshLogin.Agent(files::agent), identityFiles),
         )
       }
     }

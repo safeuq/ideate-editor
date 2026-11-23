@@ -14,6 +14,7 @@ val fleetJars: List<String> by rootProject.extra
 
 dependencies {
   implementation(project(":compose"))
+  implementation("com.hierynomus:sshj:0.41.2")
   implementation(files(protocolJars.map { "$jetbrainsClientLib/$it" }))
   // JetBrains Runtime's API (com.jetbrains.JBR): the macOS title bar (MacTitleBar.kt). The same jar
   // IntelliJ ships; it calls into the runtime and reports "not supported" on other Java runtimes.

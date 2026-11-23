@@ -1,5 +1,6 @@
 package io.github.safeuq.ideate.client.desktop
 
+import com.hierynomus.sshj.userauth.agent.AgentProxy
 import io.github.safeuq.ideate.client.ssh.OpenSshFiles
 import io.github.safeuq.ideate.client.ssh.SecretStore
 import java.io.File
@@ -40,8 +41,10 @@ class FileSecretStore(private val folder: File) : SecretStore {
 object DesktopOpenSshFiles : OpenSshFiles {
   override val home: String = System.getProperty("user.home")
 
-  override val hasAgent: Boolean
-    get() = System.getenv("SSH_AUTH_SOCK")?.let { File(it).exists() } == true
+  override fun agent(): AgentProxy? =
+    if (System.getenv("SSH_AUTH_SOCK")?.let { File(it).exists() } == true)
+      AgentProxy.fromEnvironment()
+    else null
 
   override fun read(path: String): String? = File(path).takeIf { it.isFile }?.readText()
 

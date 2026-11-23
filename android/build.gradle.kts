@@ -298,6 +298,7 @@ androidComponents {
 dependencies {
   // The connection, session and UI code, shared with the desktop client.
   implementation(project(":compose"))
+  implementation("com.hierynomus:sshj:0.41.2")
   implementation(
     files(
       (protocolJars + fleetJars).map { name ->

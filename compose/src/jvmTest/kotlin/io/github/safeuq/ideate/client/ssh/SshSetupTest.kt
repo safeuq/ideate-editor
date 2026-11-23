@@ -1,5 +1,6 @@
 package io.github.safeuq.ideate.client.ssh
 
+import com.hierynomus.sshj.userauth.agent.AgentProxy
 import io.github.safeuq.ideate.client.connect.StoredText
 import io.github.safeuq.ideate.client.connect.defaultLoginMethod
 import java.security.KeyPairGenerator
@@ -141,30 +142,46 @@ class SshSetupTest {
     assertEquals(LoginMethod.GENERATED_KEY, defaultLoginMethod(false, openSshIsDefault = true))
   }
 
+  private class FakeFiles(private val agentAvailable: Boolean = true) : OpenSshFiles {
+    val reads = mutableListOf<String>()
+    override val home = "/Users/dev"
+
+    override fun agent(): AgentProxy? =
+      if (agentAvailable) error("not connected in this test") else null
+
+    override fun read(path: String): String? {
+      reads += path
+      return mapOf(
+        "/Users/dev/.ssh/config" to
+          "Host phone\n  HostName 192.168.0.107\n  Port 8022\n  User u0_a404\n",
+        "/Users/dev/.ssh/id_ed25519" to "KEY",
+      )[path]
+    }
+  }
+
   @Test
   fun openSshModeUsesTheConfigTheAgentAndTheIdentityFiles() {
-    val files =
-      object : OpenSshFiles {
-        override val home = "/Users/dev"
-        override val hasAgent = true
-
-        override fun read(path: String) =
-          mapOf(
-            "/Users/dev/.ssh/config" to
-              "Host phone\n  HostName 192.168.0.107\n  Port 8022\n  User u0_a404\n",
-            "/Users/dev/.ssh/id_ed25519" to "KEY",
-          )[path]
-      }
+    val files = FakeFiles()
     val entry = SshHostEntry("1", "phone", 22, "", LoginMethod.OPEN_SSH)
     val resolved = SshLogins.resolve(entry, MemorySecrets(), files, "Mac")
+    assertEquals("192.168.0.107", resolved.host)
+    assertEquals(8022, resolved.port)
+    assertEquals("u0_a404", resolved.user)
+    assertTrue(resolved.logins[0] is SshLogin.Agent)
+    // The identity files are read only when that login is tried.
+    assertEquals(listOf("/Users/dev/.ssh/config"), files.reads)
     assertEquals(
-      ResolvedLogin(
-        "192.168.0.107",
-        8022,
-        "u0_a404",
-        listOf(SshLogin.Agent, SshLogin.PrivateKey("KEY")),
+      listOf(SshLogin.PrivateKey("KEY")),
+      (resolved.logins[1] as SshLogin.IdentityFiles).load(),
+    )
+    assertEquals(
+      listOf(
+        "/Users/dev/.ssh/config",
+        "/Users/dev/.ssh/id_ed25519",
+        "/Users/dev/.ssh/id_ecdsa",
+        "/Users/dev/.ssh/id_rsa",
       ),
-      resolved,
+      files.reads,
     )
     // A port typed for the host wins over the config's.
     assertEquals(
