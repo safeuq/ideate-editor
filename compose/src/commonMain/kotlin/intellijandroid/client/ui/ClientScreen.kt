@@ -458,6 +458,8 @@ fun ClientScreen(
           if (editorCovered) ToolbarBack(pointsRight = page == Page.LEFT, onClick = ::backToEditor)
           else null,
       )
+      // A docked soft keyboard reserves space at the bottom; a floating one reserves none.
+      val keyboardDocked = WindowInsets.ime.getBottom(LocalDensity.current) > 0
       when (layout) {
         ScreenLayout.PORTRAIT -> {
           // Only the window the drag started on: Project over Structure each scroll on their own.
@@ -503,7 +505,10 @@ fun ClientScreen(
             },
             modifier = Modifier.weight(1f).fillMaxWidth(),
           )
-          ToolWindowBar(buttons, shown, ::barClick, vertical = false, Modifier.fillMaxWidth())
+          // A docked keyboard leaves little height, so the bar and the status bar give way to the
+          // keyboard bar; a floating keyboard has no bottom inset and changes nothing.
+          if (!keyboardDocked)
+            ToolWindowBar(buttons, shown, ::barClick, vertical = false, Modifier.fillMaxWidth())
         }
         ScreenLayout.WIDE ->
           Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -595,22 +600,22 @@ fun ClientScreen(
       }
       // The keyboard bar (docs/feature-parity-plan.md section 1): extra keys under the tool window
       // bar while the soft keyboard is open. For now only a focused terminal has keys to show.
-      if (WindowInsets.ime.getBottom(LocalDensity.current) > 0)
-        terminalFocus.focused?.let { TerminalKeyBar(it) }
+      if (keyboardDocked) terminalFocus.focused?.let { TerminalKeyBar(it) }
       // IntelliJ's status bar: breadcrumbs, the info text or the newest task, the backend's
       // widgets.
-      StatusBar(
-        state,
-        session,
-        // The last log line is a desktop debugging aid; a phone shows only notices and failures,
-        // so Position stays in view.
-        info =
-          notice
-            ?: state.failure
-            ?: if (layout == ScreenLayout.PORTRAIT) "" else state.log.lastOrNull().orEmpty(),
-        infoIsError = notice == null && state.failure != null,
-        narrow = layout == ScreenLayout.PORTRAIT,
-      )
+      if (!(keyboardDocked && layout == ScreenLayout.PORTRAIT))
+        StatusBar(
+          state,
+          session,
+          // The last log line is a desktop debugging aid; a phone shows only notices and failures,
+          // so Position stays in view.
+          info =
+            notice
+              ?: state.failure
+              ?: if (layout == ScreenLayout.PORTRAIT) "" else state.log.lastOrNull().orEmpty(),
+          infoIsError = notice == null && state.failure != null,
+          narrow = layout == ScreenLayout.PORTRAIT,
+        )
     }
     // Over everything: the backend's BeControl popups (New ▸ File's name).
     intellijandroid.client.ui.popup.BackendPopups(state.backendPopups, session)

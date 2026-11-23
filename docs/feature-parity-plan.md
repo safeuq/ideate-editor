@@ -108,6 +108,14 @@ Steps 1 to 4 are built.
   **Addendum 2026-11-21:** the bar now exists (`ui/terminal/TerminalKeyBar.kt`, terminal plan phase 4) with the
   terminal's keys only (Esc, Ctrl, Tab, arrows). It sits between the tool window bar and the status bar, and shows
   while `WindowInsets.ime` has a bottom inset and a terminal has focus. Undo and Redo buttons still to add.
+  **Addendum 2026-11-23:** (1) In the portrait layout, while the keyboard is docked (`WindowInsets.ime` bottom inset
+  > 0; a floating keyboard has none), the tool window bar and the status bar are hidden so the keyboard bar sits
+  right above the keyboard. Other layouts are unchanged. (2) Each key has a 1 dp border (`Component.borderColor` =
+  control-border, on the toolbar button's 4 dp corners). (3) Two more sticky keys after Ctrl: Alt (`⌥`,
+  `MacKeymapUtil.OPTION`) and Meta (`⌘`, `MacKeymapUtil.COMMAND`; Super or Win off a Mac). A typed character gets an
+  Esc prefix (`\eb`, as JediTerm and xterm send Alt+key); a key like an arrow gets `ALT_DOWN_MASK` /
+  `META_DOWN_MASK`, which `TerminalKeyEncoder` encodes (Alt+Up = `\e[1;3A`). The sticky Ctrl, Alt and Meta all go
+  off after the next key.
 - **Checked** on the emulator against the Mac backend: typed `hello`, Undo removed it, the enabled states
   followed (Undo greyed, Redo enabled), Redo brought it back and hardware Ctrl+Z removed it again (through the
   ⋮ menu that has since been removed).

@@ -1,5 +1,6 @@
 package intellijandroid.client.session.terminal
 
+import com.jediterm.core.input.InputEvent
 import com.jediterm.core.input.KeyEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -40,5 +41,25 @@ class TerminalKeyInputTest {
     input.toggleCtrl()
     input.key(KeyEvent.VK_UP)
     assertFalse(input.ctrl)
+  }
+
+  @Test
+  fun altThenBSendsEscThenBAndGoesOff() {
+    input.toggleAlt()
+    input.type('b')
+    assertEquals(listOf("\u001bb"), sent)
+    assertFalse(input.alt)
+  }
+
+  @Test
+  fun stickyModifiersJoinAKeyAsAwtBitsAndGoOff() {
+    input.toggleAlt()
+    input.toggleMeta()
+    input.key(KeyEvent.VK_UP)
+    assertEquals(
+      listOf("key ${KeyEvent.VK_UP}/${InputEvent.ALT_DOWN_MASK or InputEvent.META_DOWN_MASK}"),
+      sent,
+    )
+    assertFalse(input.alt || input.meta)
   }
 }

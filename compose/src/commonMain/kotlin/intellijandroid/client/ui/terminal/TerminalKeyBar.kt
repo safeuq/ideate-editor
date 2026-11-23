@@ -2,6 +2,7 @@ package intellijandroid.client.ui.terminal
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,9 +47,10 @@ class TerminalFocus {
 /**
  * The keyboard bar (docs/feature-parity-plan.md section 1): an extra bar below the tool window bar,
  * shown while the soft keyboard is open. With a terminal focused it holds the keys a soft keyboard
- * doesn't have, each one an icon: Esc, Ctrl (stays on until the next key), Tab and the four arrows.
- * The glyphs are the ones IntelliJ shows for these keys in macOS shortcuts (`MacKeymapUtil`); the
- * arrows are IntelliJ's chevron icons.
+ * doesn't have, each one an icon: Esc, Ctrl, Alt and Meta (each stays on until the next key), Tab
+ * and the four arrows. The glyphs (⌥ and ⌘ are `MacKeymapUtil.OPTION` and `COMMAND`) are the ones
+ * IntelliJ shows for these keys in macOS shortcuts (`MacKeymapUtil`); the arrows are IntelliJ's
+ * chevron icons.
  *
  * The buttons take taps without taking focus, so the terminal keeps it (and the soft keyboard stays
  * open).
@@ -66,6 +68,8 @@ fun TerminalKeyBar(keys: TerminalKeyInput, modifier: Modifier = Modifier) {
   ) {
     GlyphKey("⎋", "Esc") { keys.key(KeyEvent.VK_ESCAPE) }
     GlyphKey("⌃", "Ctrl", selected = keys.ctrl) { keys.toggleCtrl() }
+    GlyphKey("⌥", "Alt", selected = keys.alt) { keys.toggleAlt() }
+    GlyphKey("⌘", "Meta", selected = keys.meta) { keys.toggleMeta() }
     GlyphKey("⇥", "Tab") { keys.key(KeyEvent.VK_TAB) }
     ArrowKey("expui/general/chevronLeft.svg", "Left", KeyEvent.VK_LEFT, keys)
     ArrowKey("expui/general/chevronUp.svg", "Up", KeyEvent.VK_UP, keys)
@@ -76,7 +80,11 @@ fun TerminalKeyBar(keys: TerminalKeyInput, modifier: Modifier = Modifier) {
 
 private val KEY_BAR_HEIGHT = 32.dp
 
-/** A toolbar icon button (24 dp, 16 dp icon) that reacts to taps but can't take focus. */
+/**
+ * A toolbar icon button (24 dp, 16 dp icon) that reacts to taps but can't take focus, with a key
+ * cap's border: `Component.borderColor` (control-border) on the toolbar button's own 4 dp corners,
+ * the colours IntelliJ gives an outlined control (`Button.startBorderColor`).
+ */
 @Composable
 private fun KeyButton(
   description: String,
@@ -90,6 +98,7 @@ private fun KeyButton(
         if (selected) IconButtonLook.pressedBackground else Color.Transparent,
         IconButtonLook.shape,
       )
+      .border(1.dp, IslandsDark.controlBorder, IconButtonLook.shape)
       .semantics {
         contentDescription = description
         role = Role.Button

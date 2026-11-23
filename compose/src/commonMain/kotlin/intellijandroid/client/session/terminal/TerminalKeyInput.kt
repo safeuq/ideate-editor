@@ -3,6 +3,7 @@ package intellijandroid.client.session.terminal
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.jediterm.core.input.InputEvent
 
 /**
  * Turns what the user types into what the shell gets. One per terminal view; the keyboard bar's
@@ -17,32 +18,64 @@ class TerminalKeyInput(
 ) {
   /**
    * The Ctrl key of the keyboard bar is on: the next key is sent as Ctrl+that key, then it goes
-   * off.
+   * off. [alt] (Option) and [meta] (⌘, Super or Win) work the same way.
    */
   var ctrl by mutableStateOf(false)
+    private set
+
+  var alt by mutableStateOf(false)
+    private set
+
+  var meta by mutableStateOf(false)
     private set
 
   fun toggleCtrl() {
     ctrl = !ctrl
   }
 
-  /** A typed character: with Ctrl on, `c` is sent as 0x03 (Ctrl+C). */
-  fun type(character: Char) {
-    val withCtrl = if (ctrl) controlCharacter(character) else null
-    ctrl = false
-    sendText((withCtrl ?: character).toString())
+  fun toggleAlt() {
+    alt = !alt
   }
 
-  /** A key that has no character: arrows, Enter, Backspace, Tab, Escape, F-keys. */
+  fun toggleMeta() {
+    meta = !meta
+  }
+
+  /**
+   * A typed character: with Ctrl on, `c` is sent as 0x03 (Ctrl+C). With Alt or Meta on, Esc goes
+   * first (`\eb`, readline's "back a word"), which is how JediTerm and xterm send Alt+key.
+   */
+  fun type(character: Char) {
+    val withCtrl = if (ctrl) controlCharacter(character) else null
+    val prefix = if (alt || meta) "\u001b" else ""
+    clearModifiers()
+    sendText(prefix + (withCtrl ?: character))
+  }
+
+  /**
+   * A key that has no character: arrows, Enter, Backspace, Tab, Escape, F-keys. The sticky keys
+   * join [modifiers] as AWT bits, which JediTerm's `TerminalKeyEncoder` turns into `\e[1;3A`
+   * (Alt+Up) and the like.
+   */
   fun key(keyCode: Int, modifiers: Int = 0) {
-    ctrl = false
-    sendKey(keyCode, modifiers)
+    val stickyModifiers =
+      (if (ctrl) InputEvent.CTRL_DOWN_MASK else 0) or
+        (if (alt) InputEvent.ALT_DOWN_MASK else 0) or
+        (if (meta) InputEvent.META_DOWN_MASK else 0)
+    clearModifiers()
+    sendKey(keyCode, modifiers or stickyModifiers)
   }
 
   /** Text from the soft keyboard, e.g. a pasted clip or a whole word. */
   fun text(text: String) {
-    ctrl = false
+    clearModifiers()
     sendText(text)
+  }
+
+  private fun clearModifiers() {
+    ctrl = false
+    alt = false
+    meta = false
   }
 
   companion object {
