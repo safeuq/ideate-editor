@@ -63,6 +63,8 @@ new session's editor for that file is editable, so nothing typed goes to a docum
 failures never carry over. The old state is dropped once every panel has switched, or after 10 s at most. If the connection drops, the screen keeps showing what it showed last (a dropped session clears its own state), also
 when the new session breaks while filling in. Pane weights are kept across the swap. Only reconnects inside the running app are covered, not a restart.
 
+The Project tree's open folders and selected row are node ids that the new session doesn't know, so `ConnectController` passes their file paths to the new `ClientSession` (`expandedPaths`, `selectedPath`), which opens and selects those rows as they arrive; the tree switches only once it shows every row the old one showed. A terminal tab of the new session starts at the size the backend already has for it, so its restored screen isn't laid out at 80 × 24 first. Open (2026-11-23): the restored terminal screen comes back top-aligned with long lines cut instead of wrapped, so it doesn't look exactly as before.
+
 **No keep-alive on purpose.** IDEate follows the normal Doze rules: with the screen off the connection may drop,
 and it is reconnected when the app comes back. A foreground service would keep the network on in Doze (tried
 2026-11-17: forced deep Doze on the emulator for a minute, and about 20 minutes locked on the phone, with no drop).

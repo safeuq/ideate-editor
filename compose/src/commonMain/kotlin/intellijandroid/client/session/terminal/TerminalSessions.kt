@@ -52,7 +52,9 @@ internal class TerminalSessions(
           scheduler,
           ticker,
           publish = { state -> change { tabs -> replace(tabs, state) } },
-          initialSize = lastSize,
+          // A session from before a reconnect has the size its screen was laid out at: start there,
+          // so the restored screen doesn't reflow.
+          initialSize = session.size.valueOrNull?.let { TermSize(it.width, it.height) } ?: lastSize,
         )
       tabs[id] = tab
       sessions[id] = session

@@ -69,4 +69,18 @@ class HandOverTest {
     val editorsReady = SessionState(editors = listOf(editor("/a", true)))
     assertTrue(handOver(previous, editorsReady, allSwitched).done)
   }
+
+  private fun node(id: Int, parentId: Int?, path: String) =
+    TreeNode(id, parentId, emptyList(), emptyList(), true, true, path, id)
+
+  @Test
+  fun treeSwitchesOnlyOnceItShowsEveryOldRow() {
+    // Old session: /p open, showing /p/src. The new session's ids differ.
+    val old = ProjectTree(mapOf(1 to node(1, null, "/p"), 2 to node(2, 1, "/p/src")), setOf(1))
+    val withOld = previous.copy(tree = old)
+    val rootOnly = ProjectTree(mapOf(7 to node(7, null, "/p")))
+    assertEquals(old, handOver(withOld, SessionState(tree = rootOnly), emptySet()).shown.tree)
+    val reopened = ProjectTree(rootOnly.nodes + (8 to node(8, 7, "/p/src")), setOf(7))
+    assertEquals(reopened, handOver(withOld, SessionState(tree = reopened), emptySet()).shown.tree)
+  }
 }

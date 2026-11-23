@@ -7,60 +7,66 @@ package intellijandroid.client.session
 data class HandOverResult(val shown: SessionState, val switched: Set<String>, val done: Boolean)
 
 /**
- * One panel of the screen: when [filled] says the new session has sent it, [carry] stops using the
- * old one.
+ * One panel of the screen: when [filled] says the new session (first argument) has sent it, [carry]
+ * stops using the old one (second argument).
  */
 private class PanelField(
   val name: String,
-  val filled: (SessionState) -> Boolean,
+  val filled: (SessionState, SessionState) -> Boolean,
   val carry: (SessionState, SessionState) -> SessionState,
 )
 
 private val panelFields =
   listOf(
-    PanelField("projectName", { it.projectName != null }) { old, new ->
+    PanelField("projectName", { new, _ -> new.projectName != null }) { old, new ->
       new.copy(projectName = old.projectName)
     },
-    PanelField("tree", { it.tree.nodes.isNotEmpty() }) { old, new -> new.copy(tree = old.tree) },
-    PanelField("tabIcons", { it.tabIcons.isNotEmpty() }) { old, new ->
+    PanelField("tree", { new, old -> new.tree.shows(old.tree) }) { old, new ->
+      new.copy(tree = old.tree)
+    },
+    PanelField("tabIcons", { new, _ -> new.tabIcons.isNotEmpty() }) { old, new ->
       new.copy(tabIcons = old.tabIcons)
     },
-    PanelField("selectedEditor", { it.selectedEditor != null }) { old, new ->
+    PanelField("selectedEditor", { new, _ -> new.selectedEditor != null }) { old, new ->
       new.copy(selectedEditor = old.selectedEditor)
     },
-    PanelField("consoles", { it.consoles.isNotEmpty() }) { old, new ->
+    PanelField("consoles", { new, _ -> new.consoles.isNotEmpty() }) { old, new ->
       new.copy(consoles = old.consoles)
     },
-    PanelField("buildTrees", { it.buildTrees.isNotEmpty() }) { old, new ->
+    PanelField("buildTrees", { new, _ -> new.buildTrees.isNotEmpty() }) { old, new ->
       new.copy(buildTrees = old.buildTrees)
     },
-    PanelField("scheme", { it.scheme != null }) { old, new -> new.copy(scheme = old.scheme) },
-    PanelField("structure", { it.structure.nodes.isNotEmpty() }) { old, new ->
+    PanelField("scheme", { new, _ -> new.scheme != null }) { old, new ->
+      new.copy(scheme = old.scheme)
+    },
+    PanelField("structure", { new, _ -> new.structure.nodes.isNotEmpty() }) { old, new ->
       new.copy(structure = old.structure)
     },
-    PanelField("toolWindows", { it.toolWindows.isNotEmpty() }) { old, new ->
+    PanelField("toolWindows", { new, _ -> new.toolWindows.isNotEmpty() }) { old, new ->
       new.copy(toolWindows = old.toolWindows)
     },
-    PanelField("projectViews", { it.projectViews.options.isNotEmpty() }) { old, new ->
+    PanelField("projectViews", { new, _ -> new.projectViews.options.isNotEmpty() }) { old, new ->
       new.copy(projectViews = old.projectViews)
     },
-    PanelField("backendViews", { it.backendViews.isNotEmpty() }) { old, new ->
+    PanelField("backendViews", { new, _ -> new.backendViews.isNotEmpty() }) { old, new ->
       new.copy(backendViews = old.backendViews)
     },
-    PanelField("statusWidgets", { it.statusWidgets.isNotEmpty() }) { old, new ->
+    PanelField("statusWidgets", { new, _ -> new.statusWidgets.isNotEmpty() }) { old, new ->
       new.copy(statusWidgets = old.statusWidgets)
     },
-    PanelField("breadcrumbs", { it.breadcrumbs.isNotEmpty() }) { old, new ->
+    PanelField("breadcrumbs", { new, _ -> new.breadcrumbs.isNotEmpty() }) { old, new ->
       new.copy(breadcrumbs = old.breadcrumbs)
     },
-    PanelField("tasks", { it.tasks.isNotEmpty() }) { old, new -> new.copy(tasks = old.tasks) },
-    PanelField("terminals", { it.terminals.isNotEmpty() }) { old, new ->
+    PanelField("tasks", { new, _ -> new.tasks.isNotEmpty() }) { old, new ->
+      new.copy(tasks = old.tasks)
+    },
+    PanelField("terminals", { new, _ -> new.terminals.isNotEmpty() }) { old, new ->
       new.copy(terminals = old.terminals)
     },
-    PanelField("terminalsReady", { it.terminalsReady }) { old, new ->
+    PanelField("terminalsReady", { new, _ -> new.terminalsReady }) { old, new ->
       new.copy(terminalsReady = old.terminalsReady)
     },
-    PanelField("searchAvailable", { it.searchAvailable }) { old, new ->
+    PanelField("searchAvailable", { new, _ -> new.searchAvailable }) { old, new ->
       new.copy(searchAvailable = old.searchAvailable)
     },
   )
@@ -79,7 +85,7 @@ fun handOver(previous: SessionState, current: SessionState, switched: Set<String
   val nowSwitched = switched.toMutableSet()
   var shown = current
   for (field in panelFields) {
-    if (field.name in nowSwitched || field.filled(current)) nowSwitched += field.name
+    if (field.name in nowSwitched || field.filled(current, previous)) nowSwitched += field.name
     else shown = field.carry(previous, shown)
   }
   val currentEditors = current.editors.associateBy { it.path }
@@ -92,4 +98,14 @@ fun handOver(previous: SessionState, current: SessionState, switched: Set<String
   shown = shown.copy(editors = carried + current.editors.filter { it.path !in carriedPaths })
   val done = editorsDone && nowSwitched.size == panelFields.size
   return HandOverResult(shown, nowSwitched, done)
+}
+
+/**
+ * Whether this tree shows every row [old] showed (by file path), so it can replace it without rows
+ * disappearing: the reconnected session opens the same folders again as their rows arrive.
+ */
+private fun ProjectTree.shows(old: ProjectTree): Boolean {
+  if (nodes.isEmpty()) return false
+  val visible = visibleRows().mapNotNull { (node, _) -> node.path }.toSet()
+  return old.visibleRows().all { (node, _) -> node.path == null || node.path in visible }
 }

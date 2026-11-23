@@ -83,12 +83,13 @@ class ConnectController(
   }
 
   var session by mutableStateOf<ClientSession?>(null)
+    private set
 
   /**
    * The old session's last state after a reconnect, which the screen shows while the new session
    * catches up (`handOver`); null when not handing over.
    */
-  var handOverFrom by mutableStateOf<SessionState?>(null)
+  internal var handOverFrom by mutableStateOf<SessionState?>(null)
 
   /**
    * What the screen last showed for a session that still had its connection, so a new session that
@@ -490,6 +491,7 @@ class ConnectController(
       )
     current.identity = identity
     attempt = current
+    val shownTree = shownBeforeReconnect()?.tree
     val accepted = CompletableDeferred<Boolean>()
     val candidate =
       ClientSession(
@@ -498,6 +500,11 @@ class ConnectController(
         certificate,
         openEditors.slot(current.editorsKey),
         current.project,
+        expandedPaths =
+          shownTree
+            ?.let { tree -> tree.expanded.mapNotNull { tree.nodes[it]?.path }.toSet() }
+            .orEmpty(),
+        selectedPath = shownTree?.let { tree -> tree.selected?.let { tree.nodes[it]?.path } },
       ) { acceptedCertificate ->
         val encoded = acceptedCertificate.encode()
         main.launch {
@@ -522,11 +529,15 @@ class ConnectController(
       candidate.stop()
       return false
     }
-    handOverFrom = lastShown?.takeIf { it.first === session }?.second ?: session?.state?.value
+    handOverFrom = shownBeforeReconnect()
     session?.stop()
     session = candidate
     return true
   }
+
+  /** What the screen shows of the session being replaced. */
+  private fun shownBeforeReconnect(): SessionState? =
+    lastShown?.takeIf { it.first === session }?.second ?: session?.state?.value
 
   private fun keyOf(current: Attempt) =
     if (current.kind == ConnectionKind.TERMUX) "termux:${current.project}"

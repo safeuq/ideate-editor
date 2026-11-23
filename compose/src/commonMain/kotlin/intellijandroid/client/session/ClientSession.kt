@@ -152,6 +152,13 @@ class ClientSession(
    */
   private val project: String? = null,
   /**
+   * After a reconnect, the Project tree rows that were open, by file path: each opens again when
+   * its row arrives, so the tree looks as it did. Empty: only the project root opens.
+   */
+  private val expandedPaths: Set<String> = emptySet(),
+  /** After a reconnect, the path of the row that was selected; it is selected again. */
+  private val selectedPath: String? = null,
+  /**
    * Called on the connect thread once the backend has accepted the connection, with the identity it
    * accepted.
    */
@@ -1375,6 +1382,9 @@ class ClientSession(
           )
         }
         if (node.parentId in expandingAll && node.hasChildren) expandAll(id)
+        if (node.path != null && node.path in expandedPaths && node.hasChildren) expand(id)
+        if (node.path != null && node.path == selectedPath)
+          mutableState.update { it.copy(tree = it.tree.copy(selected = id)) }
         // IntelliJ opens with the project root expanded.
         if (
           node.parentId == null &&
