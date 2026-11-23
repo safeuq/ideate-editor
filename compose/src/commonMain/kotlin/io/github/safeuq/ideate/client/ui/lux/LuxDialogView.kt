@@ -94,6 +94,7 @@ import io.github.safeuq.ideate.client.ui.component.SplitPane
 import io.github.safeuq.ideate.client.ui.console.ConsoleEditor
 import io.github.safeuq.ideate.client.ui.dialog.DialogLook
 import io.github.safeuq.ideate.client.ui.dialog.dialogFrame
+import io.github.safeuq.ideate.client.ui.theme.IslandsDark
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 import kotlin.math.min
@@ -796,6 +797,10 @@ fun LuxPaneView(
         proportion = consoleShare,
         onProportion = { consoleShare = it },
         modifier = Modifier.fillMaxSize(),
+        // The line between console and tree is the border itself, as IntelliJ's OnePixelSplitter
+        // inside a tool window: 1 px in the tool window's border colour.
+        gap = with(LocalDensity.current) { 1.toDp() },
+        gapColor = IslandsDark.toolWindowBorder,
         first = {
           Column(Modifier.fillMaxSize()) {
             if (frame != null) BuildToolbarRow(panel, frame, CONSOLE_TOOLBAR_CELLS, send, anchor)
@@ -810,10 +815,7 @@ fun LuxPaneView(
           }
         },
         second = {
-          // The line between console and tree, as IntelliJ's OnePixelSplitter draws inside a tool
-          // window: 1 px in the tool window's border colour.
           Column(Modifier.fillMaxSize()) {
-            PixelLine()
             if (frame != null) BuildToolbarRow(panel, frame, BUILD_TOOLBAR_CELLS, send, anchor)
             for (local in panel.locals.filterIsInstance<PanelBuildTree>()) PanelLocalView(
               local,

@@ -29,6 +29,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerType
@@ -63,6 +64,11 @@ val LocalResizePointers = staticCompositionLocalOf {
  * - A finger pressing the border shows a pill on it and widens the gap to [SplitLook.touchGap]
  *   around it; a mouse's drag does neither.
  * - Each pane keeps at least [SplitLook.leastPane]; a split too small for that doesn't move.
+ *
+ * [gap] is the room between the panes, the island gap by default; [gapColor] paints it, e.g. a 1 px
+ * line in a tool window's border colour, as IntelliJ's `OnePixelSplitter`. The border takes presses
+ * over at least [SplitLook.touchGap] however thin the gap, and a finger's drag widens the painted
+ * gap to show the pill on it.
  */
 @Composable
 fun SplitPane(
@@ -70,11 +76,12 @@ fun SplitPane(
   proportion: Float,
   onProportion: (Float) -> Unit,
   modifier: Modifier = Modifier,
+  gap: Dp = IslandsDark.islandGap,
+  gapColor: Color = Color.Unspecified,
   first: @Composable () -> Unit,
   second: @Composable () -> Unit,
 ) {
   BoxWithConstraints(modifier) {
-    val gap = IslandsDark.islandGap
     val room = (if (stacked) maxHeight else maxWidth) - gap
     val firstSize = room * shownProportion(proportion, room.value, SplitLook.leastPane.value)
     // While a finger drags, the gap widens to SplitLook.touchGap so the pill has room around it;
@@ -100,6 +107,10 @@ fun SplitPane(
     }
     Border(
       stacked,
+      gap,
+      // Painted on the border, over the panes, so a pane drawing past its edge can't hide it.
+      line = gapColor,
+      lineThickness = gap + extra,
       firstSize,
       room,
       onProportion,
@@ -115,9 +126,9 @@ object SplitLook {
   val leastPane = 60.dp
 
   /**
-   * How far past the island gap the border takes presses, on each side: 4 dp, so 12 dp in all in
-   * compact. IntelliJ's mouse zone is 6 px around a 1 px divider (`ide.splitter.mouseZone`); a
-   * finger needs more.
+   * How far past the gap the border takes presses, on each side, at least: 4 dp, so 12 dp in all
+   * over the compact island gap; a thinner gap gets more, up to [touchGap] in all. IntelliJ's mouse
+   * zone is 6 px around a 1 px divider (`ide.splitter.mouseZone`); a finger needs more.
    */
   val grabMargin = 4.dp
 
@@ -156,12 +167,16 @@ internal fun draggedProportion(startFirst: Float, delta: Float, room: Float, lea
 private const val DEFAULT_WEIGHT = 0.33f // WindowInfoImpl.DEFAULT_WEIGHT
 
 /**
- * The draggable border over the gap after [firstSize] (the first pane's size with the plain gap).
- * [pill] shows while a finger drags; [onTouchDrag] reports when one starts and ends.
+ * The draggable border over the [gap] after [firstSize] (the first pane's size with the plain gap).
+ * [line], when given, paints the gap ([lineThickness], wider while a finger drags). [pill] shows
+ * while a finger drags; [onTouchDrag] reports when one starts and ends.
  */
 @Composable
 private fun Border(
   stacked: Boolean,
+  gap: Dp,
+  line: Color,
+  lineThickness: Dp,
   firstSize: Dp,
   room: Dp,
   onProportion: (Float) -> Unit,
@@ -170,8 +185,8 @@ private fun Border(
 ) {
   val density = LocalDensity.current
   val pointers = LocalResizePointers.current
-  val margin = SplitLook.grabMargin
-  val thickness = IslandsDark.islandGap + margin * 2
+  val margin = maxOf(SplitLook.grabMargin, (SplitLook.touchGap - gap) / 2)
+  val thickness = gap + margin * 2
   val currentFirst by rememberUpdatedState(firstSize)
   val currentRoom by rememberUpdatedState(room)
   val report by rememberUpdatedState(onProportion)
@@ -216,6 +231,13 @@ private fun Border(
       },
     contentAlignment = Alignment.Center,
   ) {
+    if (line.isSpecified) {
+      Box(
+        (if (stacked) Modifier.fillMaxWidth().height(lineThickness)
+          else Modifier.fillMaxHeight().width(lineThickness))
+          .background(line),
+      )
+    }
     if (pill) {
       Box(
         Modifier.size(
