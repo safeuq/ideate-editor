@@ -853,6 +853,7 @@ fun EditorView(
       state = listState,
       modifier =
         Modifier.fillMaxSize()
+          .touchPan(listState, scroll)
           .scrollable(scroll.scrollable, Orientation.Horizontal, reverseDirection = true)
           .background(Color(background))
           .drawWithContent {

@@ -176,6 +176,7 @@ fun ProjectTreeView(
     modifier =
       modifier
         .onSizeChanged { viewportWidth = it.width.toFloat() }
+        .touchPan(listState, scroll)
         .scrollable(scroll.scrollable, Orientation.Horizontal, reverseDirection = true)
         .focusRequester(focusRequester)
         .onFocusChanged { focused = it.hasFocus }

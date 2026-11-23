@@ -245,3 +245,31 @@ User request: in `ScreenLayout.WIDE` (desktop, tablet held sideways) match Intel
 ```
 
 - With both sides open the splits nest as left | (editor | right). `weights.left` and `weights.right` are both shares of the whole width, so dragging one border leaves the other pane's width as it is (the inner editor share is `(1 - left - right) / (1 - left)`). Each split is the existing `SplitPane`, so its gap, border and least size are unchanged.
+
+## Addendum (2026-11-24): a touch drag scrolls both ways at once
+
+User request: the console only scrolled straight up-and-down or straight sideways; a diagonal drag should move both ways together.
+
+**Cause.** The editor and console (`EditorView`) and the trees (`ProjectTreeView`, used by Project and Structure) each had two one-axis scrollers: the `LazyColumn`'s own vertical one and our `.scrollable(scroll.scrollable, Orientation.Horizontal)`. Each waits until the finger has moved past the touch slop along its own axis, then takes the whole gesture, so a drag could only ever go one way.
+
+**Change.** `Modifier.touchPan(lines, sideways)` (SidewaysScroll.kt) handles touch drags itself in the initial pass and feeds both scrollers. `pannedAxes` decides the axes once, when the drag passes the slop:
+
+| Travelled at the slop (x, y px) | Moves |
+|---|---|
+| (30, 4), (-30, 15) | sideways only |
+| (4, -30), (0, 9) | up and down only |
+| (20, 15), (-12, -20) | both |
+
+- **Axis rule:** one axis must have moved at least `ONE_AXIS_RATIO` = 2 times the other (about 27° either side). The page swiper uses the same constant for "mostly sideways".
+- **Scrolling and fling:** each axis scrolls inside its own `scroll(MutatePriority.UserInput)`, so a new drag stops a fling and `isScrollInProgress` is true while dragging (tap-to-stop and the console's follow-the-end still read it). The fling uses `ScrollableDefaults.flingBehavior()` on each moving axis.
+- **Mouse and trackpad:** the existing scrollers still handle these.
+- **Page swiper:** a drag the pager consumed first (sideways at an edge) is left alone.
+
+Checked on the emulator (Pixel 3a, Wide.java at 123 lines × about 330 columns):
+- A 45° drag moved 7 lines and about 360 px together.
+- A drag of (40, -500) moved only lines.
+- A drag of (500, 40) moved only sideways.
+- A right swipe with the text at its left edge still opened the Project page.
+- A tap still selected a tree row.
+
+**Pitfall:** read `positionChange()` before `consume()`, because a consumed change reports zero. The first build had them the other way round and moved only by the fling.

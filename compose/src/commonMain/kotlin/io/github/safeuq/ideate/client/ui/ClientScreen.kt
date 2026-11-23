@@ -894,7 +894,7 @@ private fun SwipePager(
                   if (travelled.getDistance() < viewConfiguration.touchSlop) continue
                   // Mostly sideways: a swipe. Anything else belongs to the content (scrolling,
                   // taps).
-                  if (abs(travelled.x) < 2 * abs(travelled.y)) return@awaitEachGesture
+                  if (abs(travelled.x) < ONE_AXIS_RATIO * abs(travelled.y)) return@awaitEachGesture
                   // A sideways swipe scrolls the page's content (editor text, tool window tree)
                   // unless it is already at that edge. Decided once here, so one swipe never turns
                   // from scrolling into switching.
