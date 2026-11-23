@@ -119,8 +119,9 @@ class TerminalLiveTest {
    * after each whether that process is alive (the backend runs on this machine).
    */
   private fun whatClosedDoes(session: ClientSession) {
+    val before = tabs().map { it.id }.toSet()
     session.openTerminal()
-    val id = waitFor("a second terminal tab") { tabs().firstOrNull { it.id != "SessionId#1" }?.id }
+    val id = waitFor("a second terminal tab") { tabs().firstOrNull { it.id !in before }?.id }
     settle(id)
     session.terminalText(id, "echo pid=\$\$\r")
     val pid =

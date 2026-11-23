@@ -837,3 +837,23 @@ Cause: `TerminalSessions.open` numbered tabs `SessionId#1`, `#2`, … from a cou
 JetBrains Client doesn't hit this: `ThinClientTerminalHost.getOrCreate` keys a new session `<ClientId.localId.value><n>` (concatenated with nothing between), and the client id is new for each connection. Only an id passed in as `SessionId#<id>` (a session the backend already has) keeps that prefix, which it strips.
 
 Fix (2026-11-23): `open` takes the first `SessionId#<n>` from the counter on that isn't in the map (`TerminalSessions.freeSessionId`, tested in `TerminalSessionsTest`). Checked on the Mac: with the restored `SessionId#1` open, `+` added `SessionId#2` with a working shell, and the restored tab stayed.
+
+## Addendum (2026-11-23): the blank "Local" tab after `exit` in a restored tab
+
+The fix above (a new tab skips ids still in the map) wasn't enough. Checked on the S24+:
+
+| Step | Log |
+|---|---|
+| Ideate restarts with one tab open | `Terminal SessionId#1 added (Host)` |
+| `exit` in that tab | `Terminal SessionId#1 removed` |
+| the Terminal window is hidden and shown again (no tabs, so it opens one) | `Terminal SessionId#1 added (Client)`: blank "Local" tab, no shell after 30 s |
+| `+` | `Terminal SessionId#2 added (Client)`: a working shell |
+
+`SessionId#1` was no longer in the map, so it counted as free, but the backend starts no shell for an
+id it has had before. Ids are now `SessionId#<run>-<n>`, e.g. `SessionId#mhxk2v1c-1`, where `<run>` is
+the app run's start time in base 36, so no id is ever used twice for a backend. JetBrains Client does
+the same with `<its client id><n>`.
+
+Checked on the S24+ after the change: Ideate restarted with `SessionId#1` and `SessionId#2` restored,
+`exit` in both, the Terminal hidden and shown: `Terminal SessionId#mwtayb5s-1 added (Client)` with a
+working shell; `+` then gave `SessionId#mwtayb5s-2`, also working.

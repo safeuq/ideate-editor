@@ -30,6 +30,9 @@ internal class TerminalSessions(
   private val sessions = ConcurrentHashMap<String, RdTerminalSession>()
   private var counter = 0
 
+  /** Makes this run's ids differ from every earlier run's: see [sessionId]. */
+  private val run = java.lang.Long.toString(System.currentTimeMillis(), 36)
+
   // Draws the screens of all tabs, one thread for all of them.
   private val ticker = Executors.newSingleThreadScheduledExecutor { task ->
     Thread(task, "terminal-publish").apply { isDaemon = true }
@@ -75,8 +78,7 @@ internal class TerminalSessions(
   /** Opens a tab and returns its id. */
   fun open(): String {
     val terminalModel = checkNotNull(model) { "Terminal sessions aren't bound to a project yet" }
-    val id = freeSessionId(counter + 1) { terminalModel.sessions.containsKey(it) }
-    counter = id.removePrefix(SESSION_ID_PREFIX).toInt()
+    val id = sessionId(run, ++counter)
     terminalModel.sessions[id] = newClientSession(lastSize)
     return id
   }
@@ -95,18 +97,15 @@ internal class TerminalSessions(
   fun tab(id: String): TerminalTab? = tabs[id]
 
   companion object {
-    private const val SESSION_ID_PREFIX = "SessionId#"
-
     /**
-     * The first `SessionId#<n>` from [from] on that isn't [taken]. The counter starts at 1 again
-     * when the app starts again, while sessions from before (`origin = Host` now) are still in the
-     * map under their old ids. Putting a new session under one of them replaced it: its tab went,
-     * and the backend started no shell for the new one, which stayed blank as "Local" (seen on the
-     * S24 2026-11-23). JetBrains Client avoids this with `<its client id><n>`
-     * (`ThinClientTerminalHost.getOrCreate`).
+     * `SessionId#<run>-<n>`, e.g. `SessionId#mhxk2v1c-1`: [run] is the app run's start time, so an
+     * id is never used twice for this backend. The backend starts no shell for an id it has had
+     * before, and the new tab stays blank as "Local" (seen on the S24 2026-11-23): first when a new
+     * tab took the id of a session restored from before a restart (`SessionId#1`, counter back at
+     * 1), then when a tab took the id of a restored session that `exit` had closed. JetBrains
+     * Client does the same with `<its client id><n>` (`ThinClientTerminalHost.getOrCreate`).
      */
-    internal fun freeSessionId(from: Int, taken: (String) -> Boolean): String =
-      generateSequence(from) { it + 1 }.map { "$SESSION_ID_PREFIX$it" }.first { !taken(it) }
+    internal fun sessionId(run: String, number: Int) = "SessionId#$run-$number"
 
     /**
      * A session the client starts (spec 3.4): the size and `outputConnected` are set before the
