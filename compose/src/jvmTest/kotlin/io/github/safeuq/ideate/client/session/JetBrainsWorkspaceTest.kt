@@ -106,6 +106,33 @@ class JetBrainsWorkspaceTest {
   }
 
   @Test
+  fun keepsTheScrollUnlessGivenOne() {
+    val workspace = JetBrainsWorkspace(emptyList(), rootWithSample())
+    val tabs = checkNotNull(workspace.read(projectId))
+    // Unknown (null) keeps the stored 273; a reported value replaces it.
+    workspace.save(projectId, tabs.map { it.copy(relativeCaretPosition = null) })
+    assertEquals(273, checkNotNull(workspace.read(projectId))[3].relativeCaretPosition)
+    workspace.save(
+      projectId,
+      tabs.mapIndexed { index, tab ->
+        if (index == 3) tab.copy(relativeCaretPosition = 306) else tab
+      },
+    )
+    assertEquals(306, checkNotNull(workspace.read(projectId))[3].relativeCaretPosition)
+  }
+
+  @Test
+  fun anchorIsTheSelectionEndThatIsNotTheCaret() {
+    val start = TextPosition(2, 1)
+    val end = TextPosition(4, 0)
+    // The caret at the end of the selection: the anchor is its start, and the other way round.
+    assertEquals(start, WorkspaceCaret(end, start, end).anchorPosition())
+    assertEquals(end, WorkspaceCaret(start, start, end).anchorPosition())
+    // No selection: the anchor is the caret.
+    assertEquals(start, WorkspaceCaret(start, start, start).anchorPosition())
+  }
+
+  @Test
   fun createsTheProjectFolderAndItsId() {
     val root = newRoot()
     val workspace = JetBrainsWorkspace(emptyList(), root)

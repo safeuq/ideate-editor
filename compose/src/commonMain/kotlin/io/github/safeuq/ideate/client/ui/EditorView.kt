@@ -165,6 +165,8 @@ class EditorActions(
   val chooseUsage: (Int) -> Unit = {},
   /** A click outside the usages popup. */
   val closeUsages: () -> Unit = {},
+  /** Where the caret line's top is: this file's path and dp below the view's top. */
+  val caretFromTop: (String, Int) -> Unit = { _, _ -> },
 )
 
 @Composable
@@ -355,7 +357,31 @@ fun EditorView(
     val height = snapshotFlow { listState.layoutInfo.viewportSize.height }.first { it > 0 }
     val lineHeight =
       listState.layoutInfo.visibleItemsInfo.firstOrNull()?.size ?: return@LaunchedEffect
-    listState.scrollToItem(maxOf(0, lines.lineOf(caret) - height / lineHeight / 2))
+    val fromTop = file.caretFromTop
+    if (fromTop == null) {
+      listState.scrollToItem(maxOf(0, lines.lineOf(caret) - height / lineHeight / 2))
+    } else {
+      // The saved place: the caret line's top this far below the view's top.
+      val top =
+        maxOf(0, lines.lineOf(caret) * lineHeight - (fromTop * density.density).roundToInt())
+      listState.scrollToItem(top / lineHeight, top % lineHeight)
+    }
+  }
+
+  // Tell the session where the caret line is, to save it with the tab (IntelliJ's
+  // `relative-caret-position`). It can be above or below the view.
+  LaunchedEffect(file.path, lines) {
+    snapshotFlow {
+      val lineHeight =
+        listState.layoutInfo.visibleItemsInfo.firstOrNull()?.size ?: return@snapshotFlow null
+      val caretTop =
+        (lines.lineOf(currentFile.caret) - listState.firstVisibleItemIndex) * lineHeight -
+          listState.firstVisibleItemScrollOffset
+      (caretTop / density.density).roundToInt()
+    }
+      .collect { fromTop ->
+        if (fromTop != null && !isConsole) actions.caretFromTop(file.path, fromTop)
+      }
   }
 
   // Keep the caret's line on screen: after typing or arrows past an edge, and when the view gets

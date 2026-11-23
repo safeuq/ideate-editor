@@ -974,6 +974,7 @@ private fun EditorIsland(
             session::usagesKey,
             session::chooseUsage,
             session::closeUsages,
+            session::caretFromTop,
           )
         }
       EditorView(

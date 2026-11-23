@@ -27,6 +27,12 @@ data class WorkspaceCaret(
 )
 
 /**
+ * The end of the selection that stays put when the caret moves; the caret when nothing is selected.
+ */
+fun WorkspaceCaret.anchorPosition(): TextPosition =
+  if (position == selectionEnd) selectionStart else selectionEnd
+
+/**
  * One editor tab, as IntelliJ's `FileEntry` has it. [path] is the backend's path, e.g.
  * `/Users/me/smoke/src/demo/Main.java`, kept as `cwm:///Users/me/smoke/src/demo/Main.java`. [caret]
  * null: unknown, so a stored tab keeps its stored caret.
@@ -37,8 +43,11 @@ data class WorkspaceTab(
   val caret: WorkspaceCaret? = null,
   val pinned: Boolean = false,
   val preview: Boolean = false,
-  /** The caret's pixels below the editor's top; only written for a tab with no stored entry. */
-  val relativeCaretPosition: Int = 0,
+  /**
+   * The caret line's top, in pixels below the editor's top (`relative-caret-position`, e.g. 306);
+   * null: unknown, so a stored tab keeps its stored value.
+   */
+  val relativeCaretPosition: Int? = null,
 )
 
 /**
@@ -135,7 +144,7 @@ class JetBrainsWorkspace(private val productRoots: List<File>, private val ownRo
         },
       pinned = file.getAttribute("pinned") == "true",
       preview = entry.getAttribute("preview") == "true",
-      relativeCaretPosition = state?.int("relative-caret-position") ?: 0,
+      relativeCaretPosition = state?.getAttribute("relative-caret-position")?.toIntOrNull(),
     )
   }
 
@@ -148,12 +157,8 @@ class JetBrainsWorkspace(private val productRoots: List<File>, private val ownRo
     val caret = tab.caret
     if (provider != null && caret != null) {
       val state =
-        provider.children("state").firstOrNull()
-          ?: provider.append(document.createElement("state")).also { state ->
-            if (tab.relativeCaretPosition != 0) {
-              state.setAttribute("relative-caret-position", "${tab.relativeCaretPosition}")
-            }
-          }
+        provider.children("state").firstOrNull() ?: provider.append(document.createElement("state"))
+      tab.relativeCaretPosition?.let { state.putInt("relative-caret-position", it) }
       val element =
         state.children("caret").firstOrNull() ?: state.append(document.createElement("caret"))
       // IntelliJ leaves out an attribute that is 0.

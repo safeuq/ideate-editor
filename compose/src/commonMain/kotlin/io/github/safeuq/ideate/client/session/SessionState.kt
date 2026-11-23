@@ -154,6 +154,11 @@ data class EditorFile(
    * `OpenFileDescriptor.navigateIn` (`scrollToCaret(ScrollType.CENTER)`).
    */
   val caretToShow: Int = 0,
+  /**
+   * For the [caretToShow] of a caret put back: dp from the view's top to the caret line's top, as
+   * saved (`relative-caret-position`). Null for navigation, which centres the line.
+   */
+  val caretFromTop: Int? = null,
   /** Undo may do something (true while the backend's undo stack is unknown). */
   val canUndo: Boolean = false,
   /** Redo has something: right after an undo, until the next edit. */

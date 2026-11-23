@@ -258,9 +258,15 @@ class ClientSession(
   private val reopening = mutableSetOf<String>()
   /**
    * Saved carets of reopened files, put back once each file's edit session is ready: the caret
-   * offset in the file's text.
+   * offset and the selection's other end (equal when nothing is selected) in the file's text.
    */
-  private val caretsToRestore = mutableMapOf<String, (String) -> Int>()
+  private val caretsToRestore = mutableMapOf<String, (String) -> Pair<Int, Int>>()
+  /** Saved scroll of those files: dp from the view's top to the caret line's top. */
+  private val scrollsToRestore = mutableMapOf<String, Int>()
+  /** A restored caret's scroll with the [EditorFile.caretToShow] it belongs to. */
+  private val scrollsRestored = mutableMapOf<String, Pair<Int, Int>>()
+  /** Where each shown editor's caret line is, as the view reported it (dp below its top). */
+  private val caretsFromTop = mutableMapOf<String, Int>()
   /** How often each file's caret was put back, for [EditorFile.caretToShow]. */
   private val caretsRestored = mutableMapOf<String, Int>()
   private var saveScheduled = false
@@ -1459,11 +1465,14 @@ class ClientSession(
     for (tab in tabs.orEmpty()) {
       val caret = tab.caret
       if (caret != null && tab.path in files) {
-        caretsToRestore[tab.path] = { text -> offsetOf(text, caret.position) }
+        caretsToRestore[tab.path] = { text ->
+          offsetOf(text, caret.position) to offsetOf(text, caret.anchorPosition())
+        }
+        tab.relativeCaretPosition?.let { scrollsToRestore[tab.path] = it }
       }
     }
     for ((path, offset) in older?.carets.orEmpty()) {
-      if (path in files) caretsToRestore[path] = { offset }
+      if (path in files) caretsToRestore[path] = { offset to offset }
     }
     for (path in files) openFile(path, select = path == selected && initialFile == null)
   }
@@ -1480,7 +1489,14 @@ class ClientSession(
     val tabs =
       tabOrder
         .filter { it in compositeIds }
-        .map { path -> WorkspaceTab(path, current = path == selected, caret = caretOf(path)) }
+        .map { path ->
+          WorkspaceTab(
+            path,
+            current = path == selected,
+            caret = caretOf(path),
+            relativeCaretPosition = caretsFromTop[path],
+          )
+        }
     slot.saveTabs(id, tabs)
   }
 
@@ -1532,7 +1548,21 @@ class ClientSession(
     if (!session.isReady || session.caretModelVersion < 0) return
     val offsetIn = caretsToRestore.remove(path) ?: return
     caretsRestored[path] = (caretsRestored[path] ?: 0) + 1
-    session.moveCaret(offsetIn(session.text))
+    scrollsToRestore.remove(path)?.let { fromTop ->
+      scrollsRestored[path] = caretsRestored.getValue(path) + session.backendCaretMoves to fromTop
+    }
+    val (caretOffset, anchorOffset) = offsetIn(session.text)
+    session.moveCaret(caretOffset, anchorOffset)
+  }
+
+  /**
+   * The view's report of where [path]'s caret line is, [fromTop] dp below its top. Not kept while
+   * the saved caret is still being put back: the view is not at the saved place yet.
+   */
+  fun caretFromTop(path: String, fromTop: Int) = onRd {
+    if (path in caretsToRestore || caretsFromTop[path] == fromTop) return@onRd
+    caretsFromTop[path] = fromTop
+    saveEditorsSoon()
   }
 
   /** [path]'s open request ended, opened or not. */
@@ -1839,6 +1869,7 @@ class ClientSession(
         .map { StickyRange(it.start, it.end) }
         .distinct()
         .sortedBy { it.start }
+    val caretToShow = (caretsRestored[pathOf(documentId)] ?: 0) + (session?.backendCaretMoves ?: 0)
     val file =
       EditorFile(
         pathOf(documentId),
@@ -1851,7 +1882,9 @@ class ClientSession(
         selectionStart = session?.selectionStart ?: 0,
         selectionEnd = session?.selectionEnd ?: 0,
         editable = session != null,
-        caretToShow = (caretsRestored[pathOf(documentId)] ?: 0) + (session?.backendCaretMoves ?: 0),
+        caretToShow = caretToShow,
+        caretFromTop =
+          scrollsRestored[pathOf(documentId)]?.takeIf { it.first == caretToShow }?.second,
         canUndo = session?.canUndo == true,
         canRedo = session?.canRedo == true,
       )
