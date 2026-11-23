@@ -1,6 +1,7 @@
 package intellijandroid.client.android
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -37,6 +38,17 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     edgeToEdge()
     super.onCreate(savedInstanceState)
+    // The launcher icon, when the task was started some other way (`adb shell am start -n`): its
+    // intent doesn't match the task's first one, so Android stacks a second connections window
+    // over the editor, with a controller of its own. Close it: the editor below shows again.
+    if (
+      !isTaskRoot &&
+        intent.action == Intent.ACTION_MAIN &&
+        intent.hasCategory(Intent.CATEGORY_LAUNCHER)
+    ) {
+      finish()
+      return
+    }
     window.isNavigationBarContrastEnforced = false
     // Lux dialogs' images (ui/lux/LuxImages.kt).
     pngDecoder = PngDecoder { bytes ->
@@ -101,6 +113,8 @@ class MainActivity : ComponentActivity() {
 
   // Closing the connections window ends the session, as quitting the desktop app does.
   override fun onDestroy() {
+    // A second window closed at once in onCreate has no controller.
+    if (!::controller.isInitialized) return super.onDestroy()
     controller.close()
     if (IdeateProcess.controller === controller) IdeateProcess.controller = null
     super.onDestroy()

@@ -44,6 +44,8 @@ adb shell "am start -S -n intellijandroid.client.android/.MainActivity --es join
 
 The client's log (connection steps, errors) goes to logcat under `System.out`: `adb logcat -s System.out`.
 
+The launcher icon brings the app back as it was. Android matches the icon's intent (`act=MAIN cat=LAUNCHER`) against the one that started the task; a task started another way (`adb shell am start -n …/.MainActivity`) doesn't match, and Android used to stack a second connections window, with a second `ConnectController`, over the editor (2026-11-23). `MainActivity` now closes itself at once when it isn't the task's root and was started by the launcher intent, so the editor below shows.
+
 ## Screen off and reconnecting
 
 **Why the connection dropped with the screen off.** With the screen off the activity stops and the app is only
