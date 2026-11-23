@@ -35,6 +35,7 @@ import intellijandroid.client.ui.component.TextField
 import intellijandroid.client.ui.dialog.DialogAction
 import intellijandroid.client.ui.dialog.DialogWrapper
 import intellijandroid.client.ui.dialog.MessageDialog
+import intellijandroid.client.ui.dialog.MessageKind
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -50,6 +51,8 @@ import kotlinx.coroutines.delay
 @Composable
 internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectStyles) {
   var search by remember { mutableStateOf("") }
+  // The host whose error popup is open, from a tap on its "Host unreachable".
+  var shownError by remember { mutableStateOf<SshHostView?>(null) }
   // Gateway's polling while the page shows: every 10 s, unreachable hosts every 30 s.
   LaunchedEffect(Unit) {
     actions.poll(true)
@@ -65,7 +68,6 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
   }
   SearchRow(search, { search = it }, styles)
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-    state.message?.let { Notice(it, styles, color = IslandsDark.text) }
     if (state.hosts.isEmpty()) {
       Notice("Work with a project on a machine reachable using SSH", styles)
       Box(Modifier.padding(horizontal = Gateway.contentInset)) {
@@ -110,9 +112,15 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
         status = status,
         statusColor = color,
         onStatusClick =
-          if (host.phase == SshHostView.Phase.AUTHENTICATE)
-            ({ actions.authenticateHost(host.entry) })
-          else null,
+          when {
+            host.phase == SshHostView.Phase.AUTHENTICATE -> ({
+                actions.authenticateHost(host.entry)
+              })
+            host.phase == SshHostView.Phase.UNREACHABLE && host.error != null -> ({
+                shownError = host
+              })
+            else -> null
+          },
       )
       val projects =
         host.projects.filter {
@@ -135,7 +143,13 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
           styles,
         )
       }
-      host.error?.takeIf { host.phase != SshHostView.Phase.READY }?.let { Notice(it, styles) }
+    }
+  }
+  shownError?.let { host ->
+    MessageDialogOk(
+      ConnectMessage(host.error.orEmpty(), MessageKind.ERROR, title = host.entry.name),
+    ) {
+      shownError = null
     }
   }
 }
@@ -165,6 +179,7 @@ internal fun SshOverlays(state: SshPageState, actions: SshActions, fonts: Client
     null -> Unit
   }
   state.progress?.let { StartProgress(it.title, it.detail, fonts, actions.cancelProgress) }
+  state.message?.let { message -> MessageDialogOk(message, actions.dismissMessage) }
   // Last, so it is above the Connect to SSH dialog that is waiting for the answer.
   state.question?.let { question -> QuestionDialog(question, actions) }
 }

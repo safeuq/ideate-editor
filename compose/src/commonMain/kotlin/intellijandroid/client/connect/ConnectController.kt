@@ -23,6 +23,7 @@ import intellijandroid.client.ui.ClientScreen
 import intellijandroid.client.ui.LocalBackHandler
 import intellijandroid.client.ui.LocalTitleBarArea
 import intellijandroid.client.ui.TitleBarSpacer
+import intellijandroid.client.ui.dialog.MessageKind
 import intellijandroid.client.ui.theme.ClientFonts
 import intellijandroid.client.ui.theme.IslandsDark
 import kotlin.concurrent.thread
@@ -87,14 +88,26 @@ class ConnectController(
 
   private var link by mutableStateOf(lastLink.read().orEmpty())
   private var file by mutableStateOf(lastFile.read().orEmpty())
-  private val messageState = mutableStateOf<String?>(null)
-  /** The last error or hint; setting one ends the [opening] popup. */
-  private var message: String?
+  private val messageState = mutableStateOf<ConnectMessage?>(null)
+  /** The last message, shown as a popup; setting one ends the [opening] popup. */
+  private var message: ConnectMessage?
     get() = messageState.value
     set(value) {
       messageState.value = value
       if (value != null) opening = null
     }
+
+  private fun inform(text: String) {
+    message = ConnectMessage(text, MessageKind.INFORMATION)
+  }
+
+  private fun warn(text: String) {
+    message = ConnectMessage(text, MessageKind.WARNING)
+  }
+
+  private fun fail(text: String) {
+    message = ConnectMessage(text, MessageKind.ERROR)
+  }
 
   /**
    * Opening a project on this phone: one popup from the first `status --json` until the session
@@ -194,6 +207,7 @@ class ConnectController(
       refresh = ::refresh,
       answerQuestion = { question?.onConfirm?.invoke() },
       cancelQuestion = { question = null },
+      dismissMessage = { message = null },
       cancelStart = ::cancelStart,
       ssh = sshController?.actions,
     )
@@ -243,7 +257,7 @@ class ConnectController(
     pending = null
     session?.stop()
     session = null
-    message = "Disconnected. The backend keeps running; tap it under History to reconnect."
+    inform("Disconnected. The backend keeps running; tap it under History to reconnect.")
   }
 
   /**
@@ -274,9 +288,8 @@ class ConnectController(
         }
       return
     }
-    message =
-      if (accepted) "Connection lost: $lost. Tap it under History to reconnect."
-      else "Couldn't connect: $lost"
+    if (accepted) warn("Connection lost: $lost. Tap it under History to reconnect.")
+    else fail("Couldn't connect: $lost")
   }
 
   /**
@@ -312,14 +325,15 @@ class ConnectController(
       JoinLink.parse(text)
     }
       .getOrElse { failure ->
-        message = failure.message
+        fail(failure.message ?: failure.toString())
         return
       }
     val certificate = identity?.let { encoded ->
       runCatching { ClientCertificate.decode(encoded) }
         .getOrElse { failure ->
-          message =
-            "The saved client identity can't be read (${failure.message}). Remove the entry and paste the link again."
+          fail(
+            "The saved client identity can't be read (${failure.message}). Remove the entry and paste the link again.",
+          )
           return
         }
     }
@@ -412,7 +426,7 @@ class ConnectController(
     val certificate = runCatching { ClientCertificate.decode(identity) }.getOrNull()
     if (certificate == null) {
       session = null
-      message = "Connection lost: $reason. Tap it under History to reconnect."
+      warn("Connection lost: $reason. Tap it under History to reconnect.")
       return
     }
     reconnectJob?.cancel()
@@ -438,8 +452,9 @@ class ConnectController(
       }
       reconnecting = null
       session = null
-      message =
-        "Connection lost: $reason. Reconnecting didn't work for 2 minutes; tap it under History to try again."
+      warn(
+        "Connection lost: $reason. Reconnecting didn't work for 2 minutes; tap it under History to try again.",
+      )
     }
   }
 
@@ -534,10 +549,11 @@ class ConnectController(
       else -> {
         page = ConnectPage.LINK
         link = "tcp://${backend.host}:${backend.port}#"
-        message =
+        inform(
           "Paste the join link of the backend on port ${backend.port}. " +
             if (termux != null) "In Termux, `intellij-backend link` prints it."
-            else "remote-dev-server.sh prints it when it starts."
+            else "remote-dev-server.sh prints it when it starts.",
+        )
       }
     }
   }
@@ -574,12 +590,13 @@ class ConnectController(
           val status = parseStatus(output.stdout)
           when {
             output.exitCode != 0 || status == null ->
-              message =
-                "intellij-backend status failed (exit ${output.exitCode}): ${output.stderr.ifBlank { output.stdout }}"
+              fail(
+                "intellij-backend status failed (exit ${output.exitCode}): ${output.stderr.ifBlank { output.stdout }}",
+              )
             // Like Gateway: opening a project whose backend isn't running starts it.
             !status.flag("running") ->
               if (project != null) startInTermux(project, takingOver, resumeTried)
-              else message = "No backend is running in Termux. Tap New Project to start one."
+              else inform("No backend is running in Termux. Tap New Project to start one.")
             // After `start` the project is open, whatever its path looks like here: no second
             // `start`, which would loop.
             project != null && !started && openProject(status, project, started) == null ->
@@ -588,13 +605,12 @@ class ConnectController(
               val shown =
                 project?.let { openProject(status, it, started) }
                   ?: openProjects(status).firstOrNull()
-              if (shown == null)
-                message = "intellij-backend status names no project: ${output.stdout}"
+              if (shown == null) fail("intellij-backend status names no project: ${output.stdout}")
               else joinTermux(status, shown, takingOver, resumeTried)
             }
           }
         },
-        onFailure = { failure -> message = failure.message },
+        onFailure = { failure -> fail(failure.message ?: failure.toString()) },
       )
     }
   }
@@ -703,15 +719,16 @@ class ConnectController(
           when (output.exitCode) {
             0 -> termuxStatus(project, takingOver, resumeTried, started = true)
             Termux.EXIT_SETTINGS_IN_USE ->
-              message =
+              fail(
                 output.stderr.trim().ifEmpty {
                   "Another IntelliJ in Termux is using the same settings. Stop it first (intellij-backend stop)."
-                }
+                },
+              )
             else ->
-              message = "intellij-backend start failed (exit ${output.exitCode}): ${output.stderr}"
+              fail("intellij-backend start failed (exit ${output.exitCode}): ${output.stderr}")
           }
         },
-        onFailure = { failure -> message = failure.message },
+        onFailure = { failure -> fail(failure.message ?: failure.toString()) },
       )
     }
   }
@@ -725,9 +742,9 @@ class ConnectController(
       result.fold(
         onSuccess = { output ->
           if (output.exitCode != 0)
-            message = "intellij-backend stop failed (exit ${output.exitCode}): ${output.stderr}"
+            fail("intellij-backend stop failed (exit ${output.exitCode}): ${output.stderr}")
         },
-        onFailure = { failure -> message = failure.message },
+        onFailure = { failure -> fail(failure.message ?: failure.toString()) },
       )
       refresh()
     }
@@ -747,14 +764,13 @@ class ConnectController(
     starting = null
     requireTermux().run(listOf("stop")) { result ->
       stopping = null
-      message =
-        result.fold(
-          onSuccess = { output ->
-            if (output.exitCode == 0) "Start cancelled; the backend is stopped."
-            else "intellij-backend stop failed (exit ${output.exitCode}): ${output.stderr}"
-          },
-          onFailure = { failure -> failure.message },
-        )
+      result.fold(
+        onSuccess = { output ->
+          if (output.exitCode == 0) inform("Start cancelled; the backend is stopped.")
+          else fail("intellij-backend stop failed (exit ${output.exitCode}): ${output.stderr}")
+        },
+        onFailure = { failure -> fail(failure.message ?: failure.toString()) },
+      )
     }
   }
 
@@ -809,8 +825,9 @@ class ConnectController(
           val status = parseStatus(output.stdout)
           when {
             output.exitCode != 0 || status == null ->
-              message =
-                "intellij-backend status failed (exit ${output.exitCode}): ${output.stderr.ifBlank { output.stdout }}"
+              fail(
+                "intellij-backend status failed (exit ${output.exitCode}): ${output.stderr.ifBlank { output.stdout }}",
+              )
             status.flag("running") -> {
               val port = status.getValue("port").jsonPrimitive.int
               val joinLink = status.getValue("joinLink").jsonPrimitive.content
@@ -828,7 +845,7 @@ class ConnectController(
             else -> localBackends = localBackends.filter { it.joinLink == null }
           }
         },
-        onFailure = { failure -> message = failure.message },
+        onFailure = { failure -> fail(failure.message ?: failure.toString()) },
       )
     }
   }

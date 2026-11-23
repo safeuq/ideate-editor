@@ -72,10 +72,13 @@ data class ConnectScreenState(
    * Null where there is no Termux (the desktop): the first page then lists open local ports only.
    */
   val termux: TermuxAccess?,
-  /** Work in progress, e.g. "Asking Termux for the backend's link…"; taps are ignored meanwhile. */
+  /**
+   * Work in progress, e.g. "Asking Termux for the backend's link…", shown in the progress popup;
+   * taps are ignored meanwhile.
+   */
   val busy: String?,
-  /** The last error or hint. */
-  val message: String?,
+  /** The last error or hint, shown as a message dialog until dismissed. */
+  val message: ConnectMessage?,
   /** A yes/no question, e.g. "Take over?" when Termux's backend has another client. */
   val question: Question?,
   /** A project on this phone is being opened: one popup for the whole wait. */
@@ -106,6 +109,13 @@ enum class TermuxAccess {
   READY,
 }
 
+/** A message for the connect screen's message dialog, e.g. `Couldn't connect: …` as an error. */
+data class ConnectMessage(
+  val text: String,
+  val kind: MessageKind,
+  val title: String = "IDE Backend",
+)
+
 class Question(
   val text: String,
   val confirm: String,
@@ -132,6 +142,8 @@ class ConnectActions(
   val refresh: () -> Unit,
   val answerQuestion: () -> Unit,
   val cancelQuestion: () -> Unit,
+  /** OK, Escape or a click outside the message dialog: clears [ConnectScreenState.message]. */
+  val dismissMessage: () -> Unit,
   val cancelStart: () -> Unit,
   val ssh: SshActions? = null,
 )
@@ -211,9 +223,29 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
       onCancel = null,
     )
   }
+  if (state.opening == null) {
+    state.busy?.let { busy ->
+      StartProgress("Connecting to IDE Backend", busy, fonts, onCancel = null)
+    }
+  }
+  state.message?.let { message -> MessageDialogOk(message, actions.dismissMessage) }
   state.question?.let { question -> BackendQuestionDialog(question, actions) }
   actions.ssh?.let { ssh -> SshOverlays(state.ssh, ssh, fonts) }
 }
+
+/**
+ * [message] in IntelliJ's message dialog with one OK button; OK, Escape or a click outside close
+ * it.
+ */
+@Composable
+internal fun MessageDialogOk(message: ConnectMessage, onDismiss: () -> Unit) =
+  MessageDialog(
+    title = message.title,
+    message = message.text,
+    kind = message.kind,
+    actions = listOf(DialogAction("OK", onClick = onDismiss)),
+    onCancel = onDismiss,
+  )
 
 /**
  * "Take over?" (another client has the backend) and "Take back", in IntelliJ's message dialog like
@@ -353,6 +385,8 @@ private fun PhonePage(
   onNewProject: () -> Unit,
 ) {
   var search by remember { mutableStateOf("") }
+  // Shown once each time the page opens or the access changes, not on every recomposition.
+  var termuxDismissed by remember(state.termux) { mutableStateOf(false) }
   val termuxReady = state.termux == TermuxAccess.READY
   Header(
     if (state.termux != null) "Recent Termux Projects" else "Backends on ${state.device}",
@@ -362,19 +396,33 @@ private fun PhonePage(
   }
   SearchRow(search, { search = it }, styles)
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-    Notices(state, actions, styles)
     when (state.termux) {
       TermuxAccess.NOT_INSTALLED ->
-        Notice(
-          "Termux isn't installed. Use Link to connect to a backend on another machine.",
-          styles,
-        )
-      TermuxAccess.NO_PERMISSION -> {
-        Notice("This app needs permission to run intellij-backend in Termux.", styles)
-        Box(Modifier.padding(horizontal = Gateway.contentInset)) {
-          OutlinedButton("Allow", onClick = actions.allowTermux)
-        }
-      }
+        if (!termuxDismissed)
+          MessageDialogOk(
+            ConnectMessage(
+              "Termux isn't installed. Use Link to connect to a backend on another machine.",
+              MessageKind.WARNING,
+            ),
+          ) {
+            termuxDismissed = true
+          }
+      TermuxAccess.NO_PERMISSION ->
+        if (!termuxDismissed)
+          MessageDialog(
+            title = "IDE Backend",
+            message = "This app needs permission to run intellij-backend in Termux.",
+            kind = MessageKind.WARNING,
+            actions =
+              listOf(
+                DialogAction("Allow") {
+                  termuxDismissed = true
+                  actions.allowTermux()
+                },
+                DialogAction("Cancel") { termuxDismissed = true },
+              ),
+            onCancel = { termuxDismissed = true },
+          )
       TermuxAccess.READY,
       null -> Unit
     }
@@ -473,7 +521,6 @@ private fun LinkPage(state: ConnectScreenState, actions: ConnectActions, styles:
       TextField(state.file, actions.fileChanged)
       OutlinedButton("Connect", onClick = actions.connectLink)
     }
-    Notices(state, actions, styles)
     // Grouped by address, like Gateway groups by user@host; LINK names are `<project> ·
     // <host>:<port>`.
     state.history
@@ -498,15 +545,6 @@ private fun LinkPage(state: ConnectScreenState, actions: ConnectActions, styles:
         }
       }
   }
-}
-
-/**
- * Busy text and the last message, under the header. A question is a dialog: BackendQuestionDialog.
- */
-@Composable
-private fun Notices(state: ConnectScreenState, actions: ConnectActions, styles: ConnectStyles) {
-  if (state.opening == null) state.busy?.let { Notice(it, styles) }
-  state.message?.let { Notice(it, styles, color = IslandsDark.text) }
 }
 
 @Composable

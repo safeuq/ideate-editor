@@ -51,7 +51,7 @@ the SSH message dialog (32b2677) and step 1, so they have moved a little since.
 | FolderChooser `ToolbarIcon` (toggle) | connect/FolderChooser.kt:173 | `ActionButton` for a `ToggleAction` | ToggleableIconActionButton.kt |
 | `TabCloseButton` | ui/ClientScreen.kt:526 | `InplaceButton` (`IC/platform/platform-api/src/com/intellij/ui/InplaceButton.java`): the icon swaps on hover, no background, so not an `ActionButton`; stays as it is | none |
 | `Header` | connect/ConnectScreen.kt:477 | welcome screen title row (`IC/platform/platform-impl/src/com/intellij/openapi/wm/impl/welcomeScreen/ProjectsTabFactory.kt`) | none |
-| `Notice` | connect/ConnectScreen.kt:469 | `ComponentPanelBuilder` comment text / `JBLabel` with `UIUtil.ComponentStyle.SMALL` | Text.kt (InfoText.kt) |
+| `Notice` | connect/ConnectScreen.kt | `ComponentPanelBuilder` comment text / `JBLabel` with `UIUtil.ComponentStyle.SMALL`. Since 2026-11-23 only for empty lists (`StatusText`-like) and fixed hints; errors, warnings and hints of the connect pages go to `MessageDialog` (`ConnectMessage` with Information/Warning/Error), work in progress to `StartProgress` | Text.kt (InfoText.kt) |
 | `Gateway` look object | connect/ConnectScreen.kt:788 | Gateway welcome window (measured) | none |
 | `ProjectMenu` (⋮ menu on a project) | connect/ConnectScreen.kt:656 | a popup menu: same as the context menu | Menu.kt |
 | `MenuPanel`, `MenuRow`, `Separator` | ui/ContextMenu.kt:214, :284, :349 | `IdeaPopupMenuUI` / `ListPopupImpl` + `PopupListElementRenderer` (`IC/platform/platform-impl/src/com/intellij/ui/popup/list/`) | Menu.kt, PopupContainer.kt |

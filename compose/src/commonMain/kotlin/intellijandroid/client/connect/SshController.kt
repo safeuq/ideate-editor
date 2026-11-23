@@ -120,7 +120,8 @@ data class SshPageState(
   val progress: SshProgress? = null,
   /** Host key questions, worded like IntelliJ's SshBundle. */
   val question: Question? = null,
-  val message: String? = null,
+  /** The last message, shown as a popup. */
+  val message: ConnectMessage? = null,
   val offersOpenSsh: Boolean = false,
 )
 
@@ -145,6 +146,7 @@ class SshActions(
   val answerQuestion: () -> Unit,
   val cancelQuestion: () -> Unit,
   val cancelProgress: () -> Unit,
+  val dismissMessage: () -> Unit,
 )
 
 /**
@@ -200,8 +202,13 @@ class SshController(
       cancelQuestion = { answer(false) },
       cancelProgress = {
         openRun++
-        state = state.copy(progress = null, message = "Cancelled")
+        state =
+          state.copy(
+            progress = null,
+            message = ConnectMessage("Cancelled", MessageKind.INFORMATION),
+          )
       },
+      dismissMessage = { state = state.copy(message = null) },
     )
 
   init {
@@ -315,7 +322,14 @@ class SshController(
       }
       main.launch {
         result.exceptionOrNull()?.let {
-          state = state.copy(message = "Couldn't remove ${project.projectPath}: ${it.message}")
+          state =
+            state.copy(
+              message =
+                ConnectMessage(
+                  "Couldn't remove ${project.projectPath}: ${it.message}",
+                  MessageKind.ERROR,
+                ),
+            )
         }
         refreshHost(entry, forceReconnect = false)
       }
@@ -646,7 +660,10 @@ class SshController(
           // null: the user kept the other client's session.
           onSuccess = { local -> local?.let { connect(it, projectPath, entry.name) } },
           onFailure = { failure ->
-            state = state.copy(message = "${entry.name}: ${failure.message}")
+            state =
+              state.copy(
+                message = ConnectMessage("${entry.name}: ${failure.message}", MessageKind.ERROR),
+              )
           },
         )
       }
