@@ -31,3 +31,11 @@ val LocalBackHandler =
   }
 
 val LocalEditorTextInput = staticCompositionLocalOf<(EditorTextTarget) -> Modifier> { { Modifier } }
+
+/**
+ * Asks the platform to turn the screen sideways while composed with `needed` true, and to put it
+ * back once no caller needs it (Android: landscape either way round; a phone without landscape, a
+ * split screen, or a screen already sideways is left as it is). Used by a backend dialog that would
+ * be cut off on a portrait phone. Desktop: nothing.
+ */
+val LocalLandscapeRequest = staticCompositionLocalOf<@Composable (needed: Boolean) -> Unit> { {} }

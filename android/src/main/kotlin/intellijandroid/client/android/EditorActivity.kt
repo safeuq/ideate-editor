@@ -1,6 +1,11 @@
 package intellijandroid.client.android
 
 import android.app.Activity
+import androidx.compose.runtime.DisposableEffect
+import androidx.activity.compose.LocalActivity
+import android.content.res.Configuration
+import android.content.pm.PackageManager
+import android.content.pm.ActivityInfo
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -20,6 +25,7 @@ import intellijandroid.client.ui.IconProvider
 import intellijandroid.client.ui.LocalBackHandler
 import intellijandroid.client.ui.LocalEditorTextInput
 import intellijandroid.client.ui.LocalIcons
+import intellijandroid.client.ui.LocalLandscapeRequest
 import intellijandroid.client.ui.LocalTitleBarArea
 import intellijandroid.client.ui.component.LocalResizePointers
 import intellijandroid.client.ui.component.ResizePointers
@@ -126,6 +132,7 @@ internal fun IdeateWindow(
     LocalIcons provides icons,
     LocalEditorTextInput provides ::editorTextInput,
     LocalBackHandler provides { enabled, onBack -> BackHandler(enabled, onBack) },
+    LocalLandscapeRequest provides { needed -> LandscapeRequest(needed) },
     LocalTitleBarArea provides rememberCaptionBar(),
     // A mouse over a split's border (component/SplitPane.kt).
     LocalResizePointers provides
@@ -135,3 +142,35 @@ internal fun IdeateWindow(
       ),
     content = content,
   )
+
+/**
+ * [LocalLandscapeRequest] on Android: the first request saves the activity's orientation and asks
+ * for landscape (either way round, by the sensor); when the last one leaves, the saved orientation
+ * comes back. Example: portrait phone, "Trust and Open Project" opens → landscape; the dialog
+ * closes → portrait again. Nothing happens on a device without landscape, in a split screen (Android
+ * ignores the request there), or when the screen is already sideways.
+ */
+@Composable
+private fun LandscapeRequest(needed: Boolean) {
+  val activity = LocalActivity.current ?: return
+  DisposableEffect(activity, needed) {
+    if (!needed || !activity.canTurnSideways()) return@DisposableEffect onDispose {}
+    if (landscapeRequests++ == 0) {
+      orientationBeforeLandscape = activity.requestedOrientation
+      activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    }
+    onDispose {
+      if (--landscapeRequests == 0) activity.requestedOrientation = orientationBeforeLandscape
+    }
+  }
+}
+
+private fun Activity.canTurnSideways(): Boolean =
+  landscapeRequests > 0 ||
+    (packageManager.hasSystemFeature(PackageManager.FEATURE_SCREEN_LANDSCAPE) &&
+      !isInMultiWindowMode &&
+      resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
+
+// ponytail: one count for the app; only the editor window shows backend dialogs.
+private var landscapeRequests = 0
+private var orientationBeforeLandscape = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED

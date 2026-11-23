@@ -630,3 +630,16 @@ popup but a backend list popup (`BackendPopups`).
 **Dialogs opened before any client connects stay wide.** Example: "Trust and Open Project", which remote-dev-server shows when it opens the project at startup. With no client, the backend's screen is `HeadlessDummyGraphicsEnvironment`'s fixed 1024 × 768 (there is no setting for it). The dialog was packed there with a minimum of 637 × 201. `MyDialog.validate` caps the minimum again only when the root pane's own minimum changes (`myLastMinimumSize`), and a new screen doesn't change it. So the client can't shrink it (checked on the Pixel 3a emulator: preferred 637 × 201, minimum 637 × 201). IDEate draws it at 637 dp, scaled to 0.75 and pannable (`dialogFit`), as before.
 
 ponytail: the screen is reported once per connection; a rotation is not re-sent.
+
+## Addendum (2026-11-23): a dialog that is cut off turns the phone sideways
+
+For a dialog the client can't shrink (the startup trust dialog above), IDEate now turns the screen to landscape while the dialog is open and turns it back when it closes.
+
+| Dialog on a 393 × 785 dp phone | Width | At the least scale (0.75) | Room on the short side (393 − 16) | Turns? |
+|---|---|---|---|---|
+| Rename | 358 dp | 269 dp | 377 dp | no |
+| Trust and Open Project | 637 dp | 478 dp | 377 dp | yes; fits whole in landscape (769 dp) |
+
+- `LuxDialogWindow` (not popups) calls `LocalLandscapeRequest.current(clipped(shortSide − 16, width))`. The test uses the screen's short side, so the answer stays the same after turning and the screen doesn't go back and forth.
+- Android (`EditorActivity.kt`, `LandscapeRequest`): the first request saves `requestedOrientation` and sets `SCREEN_ORIENTATION_SENSOR_LANDSCAPE`; when the last request leaves (the dialog closes), the saved value comes back. It does nothing on a device without `FEATURE_SCREEN_LANDSCAPE`, in a split screen (`isInMultiWindowMode`: Android ignores the request there), or when the screen is already landscape. The activities handle orientation changes themselves (`configChanges`), so turning keeps the session. Desktop: nothing.
+- Checked on the Pixel 3a emulator with auto-rotate off: the trust dialog for a new folder turned the screen; all three buttons showed (Trust Project had been entirely off screen in portrait); Trust Project closed it and the screen went back to portrait.

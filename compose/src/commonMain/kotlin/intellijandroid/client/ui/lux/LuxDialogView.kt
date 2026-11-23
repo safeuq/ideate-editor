@@ -1,5 +1,6 @@
 package intellijandroid.client.ui.lux
 
+import intellijandroid.client.ui.LocalLandscapeRequest
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
@@ -163,6 +164,12 @@ private fun LuxDialogWindow(dialog: LuxDialog, session: ClientSession, popups: L
     BoxWithConstraints {
       val room = maxWidth.value - 16f
       val fit = dialogFit(room, dialog.width)
+      // Sideways while the dialog would be cut off on the screen's short side, so turning doesn't
+      // change the answer. Example on a 393 dp wide phone: "Trust and Open Project" (637 dp, 478 dp
+      // at the least scale) turns it; Rename (358 dp) doesn't.
+      LocalLandscapeRequest.current(
+        !dialog.popup && clipped(min(maxWidth.value, maxHeight.value) - 16f, dialog.width),
+      )
       // As wide as the backend laid the dialog out; the title row mustn't widen it.
       Column(Modifier.width(min(dialog.width * fit, room).dp).dialogFrame()) {
         if (!dialog.popup && !dialog.undecorated)
@@ -192,6 +199,9 @@ private fun LuxDialogWindow(dialog: LuxDialog, session: ClientSession, popups: L
  */
 internal fun dialogFit(room: Float, dialogWidth: Int): Float =
   if (dialogWidth == 0) 1f else (room / dialogWidth).coerceIn(LEAST_FIT, 1f)
+
+/** Whether a dialog [dialogWidth] dp wide is cut off in [room] dp even at [LEAST_FIT]. */
+internal fun clipped(room: Float, dialogWidth: Int): Boolean = dialogWidth * LEAST_FIT > room
 
 /** About 10 dp text from IntelliJ's 13: still readable. */
 internal const val LEAST_FIT = 0.75f
