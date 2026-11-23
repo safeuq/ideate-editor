@@ -808,3 +808,9 @@ backend had no `SHELL` (an SSH login has `SHELL=/data/data/com.termux/files/usr/
   `<idea>/plugins/pty4j-plugin/lib/pty4j/linux/aarch64/libpty.so`. JNA 5.19.1 (native interface 7.0.4)
   publishes `dist/android-aarch64.jar`, a Bionic build reporting 7.0.4. `libpty.so` (only `exec_pty`, from
   pty4j's `exec_pty.c` and `openpty.c`) has to be built with Termux's clang.
+
+## Addendum (2026-11-23): letters vanishing while typing
+
+Typing `echo` on the phone showed `e  o`: JediTerm's buffer and the screen snapshot both held `echo`, but the canvas painted some letters invisible until the screen was redrawn (e.g. by closing the keyboard).
+
+Cause: Compose's `TextMeasurer` caches layouts by text and the attributes that change the layout; color is not one of them. `drawText(measurer, "c", topLeft, style)` therefore reused the layout of `"c"` last measured under the cursor, painted in the field background color. `TerminalView` now measures first and passes the color at draw time (`drawText(layoutResult, color = …)`), for both the text runs and the character under the cursor.

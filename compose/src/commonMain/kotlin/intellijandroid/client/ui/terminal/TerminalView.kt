@@ -462,7 +462,14 @@ private fun DrawScope.drawScreen(
           fontStyle = if (run.italic) FontStyle.Italic else null,
           textDecoration = if (run.underline) TextDecoration.Underline else null,
         )
-      drawText(measurer, run.text, Offset(leftInset + run.column * metrics.cellWidth, y), style)
+      // The color goes in at draw time: the measurer's cache returns the layout of the same text in
+      // an earlier color (color doesn't change the layout), e.g. a letter last measured under the
+      // cursor in the background color, which then stays invisible.
+      drawText(
+        measurer.measure(run.text, style),
+        color = style.color,
+        topLeft = Offset(leftInset + run.column * metrics.cellWidth, y),
+      )
     }
   }
 
@@ -496,13 +503,12 @@ private fun DrawScope.drawScreen(
         val character = under.text[cursor.column - under.column].toString()
         if (character.isNotBlank())
           drawText(
-            measurer,
-            character,
-            Offset(x, y),
-            baseStyle.copy(
-              color = fieldBackground,
-              fontWeight = if (under.bold) FontWeight.Bold else null,
+            measurer.measure(
+              character,
+              baseStyle.copy(fontWeight = if (under.bold) FontWeight.Bold else null),
             ),
+            color = fieldBackground,
+            topLeft = Offset(x, y),
           )
       }
     }
