@@ -434,6 +434,9 @@ fun EditorView(
     scroll.x = scroll.x.coerceIn(0f, scroll.max)
   }
   LaunchedEffect(file.path) { scroll.x = 0f }
+  // Once the editor is gone (its last tab closed), nothing is left to scroll: the phone's page
+  // swiper, which asks this scroll before it turns a page, must not keep the old line's room.
+  DisposableEffect(scroll) { onDispose { scroll.fit(0f, 0f) } }
   LaunchedEffect(caret, viewport.width, focused) {
     if (isConsole || !focused || viewport.width == 0) return@LaunchedEffect
     val caretX = (caret - lines.starts[caretLine]) * metrics.charWidth

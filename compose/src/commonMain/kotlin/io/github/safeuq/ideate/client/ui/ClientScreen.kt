@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -1078,6 +1079,13 @@ private fun EditorTabs(state: SessionState, session: ClientSession, tabRow: TabR
   // one line, and the ▾ (TabListAction) listing the tabs that don't fully show.
   val scroll = rememberScrollState()
   tabRow.scroll = scroll
+  // Once the row is gone (the last tab closed), the page swiper must not ask the old row.
+  DisposableEffect(tabRow) {
+    onDispose {
+      tabRow.scroll = null
+      tabRow.bounds = Rect.Zero
+    }
+  }
   // Each tab's left edge and width in the scrolling row, in px.
   val placed = remember { mutableStateMapOf<String, Pair<Int, Int>>() }
   var viewport by remember { mutableIntStateOf(0) }
