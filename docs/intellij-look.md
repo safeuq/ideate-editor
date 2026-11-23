@@ -884,3 +884,27 @@ Checked: `PopupWindowTest` opens real windows and reads the screen with `Robot`:
 
 A popup composed in a window's very first frame isn't tested; the test opens its popup after the window shows,
 as menus open.
+
+## 25. Full screen keeps the window's buttons (2026-11-23)
+
+The user asked for IntelliJ's full screen on macOS: the window's buttons stay where they are, and no title bar
+slides down when the pointer reaches the top of the screen. Before this change, macOS hid the buttons in full
+screen and slid its own title bar down at the top edge, and section 15's table gave the buttons no room
+("0 in full screen").
+
+IntelliJ does it with two JetBrains Runtime properties, set by `MacFullScreenControlsManager` (found by
+disassembling `intellij.platform.ide.impl.jar` from JetBrains Client 263.7307.200):
+
+| Property | IntelliJ's value | Ideate's value |
+|---|---|---|
+| `apple.awt.newFullScreenControls` | registry key of the same name, default `true` (in `util-8.jar`'s registry properties) | `true` |
+| `apple.awt.newFullScreenControls.background` | `JBColor.namedColor("MainWindow.FullScreeControl.Background", 0x7A7B80 light / 0x57595C dark)` | `0x57595C` (Islands Dark doesn't set the key) |
+
+JBR reads them when a window enters full screen (`libawt_lwawt.dylib`: `setWindowFullScreenControls`,
+`updateFullScreenButtons`), so `useMacFullScreenControls()` in `desktop/MacTitleBar.kt` sets them once from
+`main`, before any window opens. IntelliJ also calls `updateFullScreenButtons` / `updateColors` on the window
+delegate through Objective-C when the setting or theme changes at run time; Ideate has neither, so it doesn't.
+`rememberMacTitleBar` now keeps `bar.leftInset` in full screen as well.
+
+Checked on the Mac (2026-11-23, connect window): in full screen the close and full-screen buttons stay at the
+toolbar's left; minimize is gone, as in IntelliJ, because macOS can't minimize a full-screen window.

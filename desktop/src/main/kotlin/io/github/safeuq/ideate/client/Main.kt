@@ -23,6 +23,7 @@ import io.github.safeuq.ideate.client.desktop.DesktopResources
 import io.github.safeuq.ideate.client.desktop.FileSecretStore
 import io.github.safeuq.ideate.client.desktop.IdeateLocals
 import io.github.safeuq.ideate.client.desktop.Snapshots
+import io.github.safeuq.ideate.client.desktop.useMacFullScreenControls
 import io.github.safeuq.ideate.client.session.JetBrainsWorkspace
 import io.github.safeuq.ideate.client.session.OpenEditors
 import io.github.safeuq.ideate.client.ssh.RemoteHosts
@@ -62,6 +63,7 @@ fun main(arguments: Array<String>) {
         "System property jetbrains.client.lib is not set (the Gradle run task sets it)"
       },
     )
+  useMacFullScreenControls()
   val fonts = DesktopResources.fonts(clientLib)
   IslandsDark.density = DesktopResources.uiDensity()
   // Lux dialogs' images (ui/lux/LuxImages.kt).

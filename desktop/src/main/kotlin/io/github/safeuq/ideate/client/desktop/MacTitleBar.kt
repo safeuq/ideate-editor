@@ -38,12 +38,12 @@ fun rememberMacTitleBar(window: ComposeWindow, fullScreen: Boolean): TitleBarAre
   val controls = remember(window) { ControlAreas() }
   val height = IslandsDark.toolbarHeight
   // Set before the first layout so the left inset is known: the room JBR leaves for the traffic
-  // lights. In full screen the traffic lights are hidden.
+  // lights. They stay in the toolbar in full screen too (useMacFullScreenControls).
   val leftInset =
     remember(titleBar, height, fullScreen) {
       titleBar.height = height.value
       decorations.setCustomTitleBar(window, titleBar)
-      if (fullScreen) 0f else titleBar.leftInset
+      titleBar.leftInset
     }
   DisposableEffect(window, titleBar) {
     val listener =
@@ -82,6 +82,20 @@ fun rememberMacTitleBar(window: ComposeWindow, fullScreen: Boolean): TitleBarAre
       control = Modifier.then(ControlAreaElement(controls)),
     )
   }
+}
+
+/**
+ * Full screen as IntelliJ's new UI has it on macOS (`MacFullScreenControlsManager`): the traffic
+ * lights stay where they are in the main toolbar, and macOS's own title bar no longer slides down
+ * when the pointer reaches the top of the screen. JetBrains Runtime reads these properties when a
+ * window enters full screen, so they are set once, before any window opens. The background is the
+ * buttons' backdrop, IntelliJ's `MainWindow.FullScreeControl.Background` in a dark theme (Islands
+ * Dark doesn't set it). Other runtimes ignore the properties.
+ */
+fun useMacFullScreenControls() {
+  if (!System.getProperty("os.name").startsWith("Mac")) return
+  System.setProperty("apple.awt.newFullScreenControls", "true")
+  System.setProperty("apple.awt.newFullScreenControls.background", 0x57595C.toString())
 }
 
 /** Where the title bar's controls are, in window px; one entry per [ControlAreaNode]. */
