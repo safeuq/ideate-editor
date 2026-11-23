@@ -21,6 +21,7 @@ import io.github.safeuq.ideate.client.connect.ConnectController
 import io.github.safeuq.ideate.client.connect.ConnectionHistory
 import io.github.safeuq.ideate.client.connect.SshSetup
 import io.github.safeuq.ideate.client.connect.StoredText
+import io.github.safeuq.ideate.client.session.JetBrainsWorkspace
 import io.github.safeuq.ideate.client.session.OpenEditors
 import io.github.safeuq.ideate.client.ssh.RemoteHosts
 import io.github.safeuq.ideate.client.ui.lux.PngDecoder
@@ -77,7 +78,11 @@ class MainActivity : ComponentActivity() {
         history = ConnectionHistory(preferenceText("connection-history", "entries")),
         lastLink = preferenceText("connection", "joinLink"),
         lastFile = preferenceText("connection", "openFile"),
-        openEditors = OpenEditors(preferenceText("connection", "openEditors")),
+        openEditors =
+          OpenEditors(
+            preferenceText("connection", "openEditors"),
+            JetBrainsWorkspace(emptyList(), filesDir.resolve("jetbrains")),
+          ),
         termux = termux,
         device = "This phone",
         savedSession = preferenceText("connection", "savedSession"),

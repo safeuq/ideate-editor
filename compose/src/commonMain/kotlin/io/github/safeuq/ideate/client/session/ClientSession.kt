@@ -1,7 +1,7 @@
 package io.github.safeuq.ideate.client.session
 
-import com.jediterm.core.util.TermSize
 import com.intellij.platform.split.protocol.DefaultSplitMarshallersProvider
+import com.jediterm.core.util.TermSize
 import com.jetbrains.codeWithMe.model.CwmRunConfigurationExecuteArgs
 import com.jetbrains.codeWithMe.model.RdFileIconParams
 import com.jetbrains.codeWithMe.model.RdFindFileParams
@@ -256,8 +256,11 @@ class ClientSession(
   private val tabOrder = mutableListOf<String>()
   /** Saved editors still being reopened; [saveEditors] waits for them so it doesn't drop any. */
   private val reopening = mutableSetOf<String>()
-  /** Saved carets of reopened files, put back once each file's edit session is ready. */
-  private val caretsToRestore = mutableMapOf<String, Int>()
+  /**
+   * Saved carets of reopened files, put back once each file's edit session is ready: the caret
+   * offset in the file's text.
+   */
+  private val caretsToRestore = mutableMapOf<String, (String) -> Int>()
   /** How often each file's caret was put back, for [EditorFile.caretToShow]. */
   private val caretsRestored = mutableMapOf<String, Int>()
   private var saveScheduled = false
@@ -1438,40 +1441,67 @@ class ClientSession(
 
   /**
    * Reopens the editors open when this project was last left, in their tab order, and selects the
-   * one that was selected, as JetBrains Client does on connecting (see [OpenEditors]). A file that
-   * is gone is skipped and dropped from the saved list. [initialFile], when given, opens on top.
+   * one that was selected, as JetBrains Client does on connecting (the tabs are in JetBrains
+   * Client's own workspace file, see [JetBrainsWorkspace]). A file that is gone is skipped and
+   * dropped from the saved tabs. A project with no tabs saved there yet gets the ones an older
+   * version kept in JSON. [initialFile], when given, opens on top.
    */
   private fun reopenEditors() {
     val id = projectId?.value ?: return
-    val saved = savedEditors?.read(id) ?: return
-    val files = saved.files.filter { it != initialFile }
+    val slot = savedEditors ?: return
+    val tabs = slot.readTabs(id)
+    val older = if (tabs == null) slot.readSavedEditors(id) else null
+    val files = (tabs?.map { it.path } ?: older?.files.orEmpty()).filter { it != initialFile }
+    val selected = tabs?.firstOrNull { it.current }?.path ?: older?.selected
     if (files.isNotEmpty()) log("Reopening ${files.size} editors: ${files.joinToString()}")
     reopening += files
     tabOrder += files
-    caretsToRestore += saved.carets.filterKeys { it in files }
-    for (path in files) openFile(path, select = path == saved.selected && initialFile == null)
+    for (tab in tabs.orEmpty()) {
+      val caret = tab.caret
+      if (caret != null && tab.path in files) {
+        caretsToRestore[tab.path] = { text -> offsetOf(text, caret.position) }
+      }
+    }
+    for ((path, offset) in older?.carets.orEmpty()) {
+      if (path in files) caretsToRestore[path] = { offset }
+    }
+    for (path in files) openFile(path, select = path == selected && initialFile == null)
   }
 
-  /** Keeps the open editors and the selected one for the next connection. */
+  /**
+   * Keeps the open tabs and the selected one for the next connection: the tabs on screen in their
+   * order, which include the ones the backend opened itself once [nameDocument] has named them.
+   */
   private fun saveEditors() {
     val slot = savedEditors ?: return
     val id = projectId?.value ?: return
     if (reopening.isNotEmpty()) return
-    val files = tabOrder.filter { it in compositeIds }
-    val carets =
-      files
-        .mapNotNull { path -> (caretsToRestore[path] ?: caretOf(path))?.let { path to it } }
-        .toMap()
-    slot.save(id, SavedEditors(files, mutableState.value.selectedEditor, carets))
+    val selected = mutableState.value.selectedEditor
+    val tabs =
+      tabOrder
+        .filter { it in compositeIds }
+        .map { path -> WorkspaceTab(path, current = path == selected, caret = caretOf(path)) }
+    slot.saveTabs(id, tabs)
   }
 
-  /** [path]'s caret offset in its edit session, once the backend has sent it. */
-  private fun caretOf(path: String): Int? =
-    editSessions.entries
-      .firstOrNull { (documentId, _) -> pathOf(documentId) == path }
-      ?.value
-      ?.takeIf { it.isReady }
-      ?.caret
+  /**
+   * [path]'s caret and selection in its edit session, once the backend has sent it; null while it
+   * is not known or not put back yet, which keeps the stored one.
+   */
+  private fun caretOf(path: String): WorkspaceCaret? {
+    if (path in caretsToRestore) return null
+    val session =
+      editSessions.entries
+        .firstOrNull { (documentId, _) -> pathOf(documentId) == path }
+        ?.value
+        ?.takeIf { it.isReady } ?: return null
+    // ponytail: a tab counts as one column, IntelliJ counts it as several.
+    return WorkspaceCaret(
+      positionOf(session.text, session.caret),
+      positionOf(session.text, session.selectionStart),
+      positionOf(session.text, session.selectionEnd),
+    )
+  }
 
   /**
    * Saves the editors a second after the last edit or caret move, so a caret that moved since the
@@ -1500,9 +1530,9 @@ class ClientSession(
    */
   private fun restoreCaret(path: String, session: EditSession) {
     if (!session.isReady || session.caretModelVersion < 0) return
-    val offset = caretsToRestore.remove(path) ?: return
+    val offsetIn = caretsToRestore.remove(path) ?: return
     caretsRestored[path] = (caretsRestored[path] ?: 0) + 1
-    session.moveCaret(offset)
+    session.moveCaret(offsetIn(session.text))
   }
 
   /** [path]'s open request ended, opened or not. */
@@ -1878,6 +1908,8 @@ class ClientSession(
   private fun nameDocument(backendId: Int, path: String) {
     documentPaths[backendId] = path
     unnamedComposites.remove(backendId)?.let { compositeIds[path] = it }
+    // A tab the backend opened is saved like the ones we asked for.
+    if (path !in tabOrder) tabOrder += path
     val unnamed = "document-$backendId"
     mutableState.update { state ->
       state.copy(

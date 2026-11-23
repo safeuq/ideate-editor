@@ -180,3 +180,24 @@ different case (the join token stays bound to the old client until the backend i
 ## Addendum (2026-11-23): the soft keyboard's action key in Search Everywhere
 
 The soft keyboard's action key (bottom right) sends an IME action, not an Enter key event, so Search Everywhere's Enter handling (`onPreviewKeyEvent`, Key.Enter → open the selected row) never saw it. `SearchTextField` takes `onSubmit`; with it the field asks for `ImeAction.Go`, so Gboard shows → instead of the default Done ✓, and the key calls `onSubmit`. Search Everywhere passes "open the selected row", the first one unless the arrows moved it, as Enter does. Checked on the Pixel 3a emulator: "Hello" in Files, → opened Hello.java.
+
+## Addendum (2026-11-23): editor tabs kept in JetBrains Client's files
+
+Ideate keeps each project's open tabs the way JetBrains Client does, in files of the same layout, so the desktop Ideate and an installed JetBrains Client share them for the same backend project (`session/JetBrainsWorkspace.kt`).
+
+| What | Example |
+| --- | --- |
+| Config root (macOS) | `~/Library/Application Support/JetBrains/IntelliJIdea2026.3` (Linux `~/.config/JetBrains/<product>`, Windows `%APPDATA%\JetBrains\<product>`) |
+| Project folder | `<root>/projects/<sha1 of RdProjectId.value>/`, e.g. sha1 of `6d9b208e-6ee1-4ef7-90f7-ad353e610b57:3M6vsUcRFtWmIj7kcJysZPs4ZkY` is `90838c858145b5a10d1aa545ebcbdb58dc32ba48` |
+| Project id | `.idea/workspace.xml`: `<component name="ProjectId" id="3M6vsZ6tIYOZU24M22V6piMwnxX" />` (made when missing: `3` + 26 random letters and digits) |
+| Tabs | `<root>/workspace/3M6vsZ6tIYOZU24M22V6piMwnxX.xml`, component `FileEditorManager`, first `<leaf>`, one `<file>` per tab with `<entry file="cwm:///abs/backend/path">` |
+
+Root on the desktop: the product folder that already has `projects/<hash>`; else the newest product folder (by version in its name) that has a `projects` folder; else `~/.ideate/jetbrains`. The system property `ideate.jetbrains.config` names one folder to use instead (tests, live checks). On Android the root is the app's `files/jetbrains`, same layout.
+
+Shared: the tab order, the selected tab (`current-in-tab`), each text tab's caret and selection (`<caret line column selection-*>`, a value of 0 left out as IntelliJ does). Kept as they are for a tab we reopen and save again: other editor providers (`split-provider[text-editor;markdown-preview-editor]`), `file-id`, `managing-fs`, `protocol`, `pinned`, `preview`, `relative-caret-position`, the `<tab>` JSON, other leaves and splitters, and every other component of the file. A tab we have no entry for gets `<tab>` with `{"tabTitle":"Name.java"}` only. The leaf's `ideFingerprint` is removed when we rewrite it, so JetBrains works the tab info out again. The file is written to a temporary file and moved over the old one. It is written again with 2-space indent, so attributes may be in another order than IntelliJ wrote them.
+
+Not shared: the scroll position (we centre the caret's line instead of using `relative-caret-position`), a selection is saved but not put back (only the caret is), a tab counts as one column, and split editors are not shown. Tool window pane sizes stay in `open-editors.json`.
+
+Tabs the backend opened (Search Everywhere, Go to Declaration, usages, Run-output links) are saved too: `nameDocument` adds them to the tab order. A project with no `FileEditorManager` leaf yet reopens the tabs the old `openEditors` JSON had, once; the next save writes the XML.
+
+Checked on the Pixel 3a emulator against a Mac backend: Hello.java opened through Search Everywhere, caret moved to 3:19, `files/jetbrains/workspace/<id>.xml` held the tab (`<caret line="2" column="18" .../>`), and after a force stop and reconnect the tab and the caret were back.

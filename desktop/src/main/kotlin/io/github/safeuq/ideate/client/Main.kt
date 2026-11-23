@@ -23,6 +23,7 @@ import io.github.safeuq.ideate.client.desktop.DesktopResources
 import io.github.safeuq.ideate.client.desktop.FileSecretStore
 import io.github.safeuq.ideate.client.desktop.IdeateLocals
 import io.github.safeuq.ideate.client.desktop.Snapshots
+import io.github.safeuq.ideate.client.session.JetBrainsWorkspace
 import io.github.safeuq.ideate.client.session.OpenEditors
 import io.github.safeuq.ideate.client.ssh.RemoteHosts
 import io.github.safeuq.ideate.client.ui.ClientScreen
@@ -97,7 +98,11 @@ fun main(arguments: Array<String>) {
       history = ConnectionHistory(FileText(dataFolder.resolve("connection-history.json"))),
       lastLink = FileText(dataFolder.resolve("join-link.txt")),
       lastFile = FileText(dataFolder.resolve("open-file.txt")),
-      openEditors = OpenEditors(FileText(dataFolder.resolve("open-editors.json"))),
+      openEditors =
+        OpenEditors(
+          FileText(dataFolder.resolve("open-editors.json")),
+          jetBrainsWorkspace(dataFolder),
+        ),
       termux = null,
       device = "This computer",
       ssh =
@@ -176,6 +181,33 @@ private fun IdeateWindow(
       content,
     )
   }
+}
+
+/**
+ * Where JetBrains Client keeps its per-project files on this computer: the product folders (e.g.
+ * `~/Library/Application Support/JetBrains/IntelliJIdea2026.3`) of the OS's JetBrains config
+ * folder, newest version first. The system property `ideate.jetbrains.config` names the one folder
+ * to use instead, for tests.
+ */
+private fun jetBrainsWorkspace(dataFolder: File): JetBrainsWorkspace {
+  System.getProperty("ideate.jetbrains.config")?.let { override ->
+    return JetBrainsWorkspace(listOf(File(override)), File(override))
+  }
+  val home = System.getProperty("user.home")
+  val configFolders =
+    listOfNotNull(
+      File(home, "Library/Application Support/JetBrains"),
+      File(home, ".config/JetBrains"),
+      System.getenv("APPDATA")?.let { File(it, "JetBrains") },
+    )
+  val productFolders =
+    configFolders
+      .flatMap { it.listFiles { folder -> folder.isDirectory }.orEmpty().toList() }
+      // `IntelliJIdea2026.3` -> `02026.00003`, so the newest sorts first.
+      .sortedByDescending { folder ->
+        folder.name.dropWhile { !it.isDigit() }.split('.').joinToString(".") { it.padStart(5, '0') }
+      }
+  return JetBrainsWorkspace(productFolders, dataFolder.resolve("jetbrains"))
 }
 
 /** One stored string in a file under `~/.ideate`. */
