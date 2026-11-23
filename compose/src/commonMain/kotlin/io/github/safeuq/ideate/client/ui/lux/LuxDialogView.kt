@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,6 +31,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -45,8 +47,8 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
@@ -263,7 +265,17 @@ internal fun LuxSurface(
       (dialog.width * density.density).roundToInt().coerceAtLeast(1),
       (dialog.height * density.density).roundToInt().coerceAtLeast(1),
     )
-  val bitmap = remember(dialog.id, pixelSize) { ImageBitmap(pixelSize.width, pixelSize.height) }
+  // A new size starts from the old pixels, so the panel keeps its picture until the backend has
+  // painted it again at that size instead of showing an empty bitmap (a flicker while a tool window
+  // page slides and its rounded corners come and go).
+  var previous by remember(dialog.id) { mutableStateOf<ImageBitmap?>(null) }
+  val bitmap =
+    remember(dialog.id, pixelSize) {
+      ImageBitmap(pixelSize.width, pixelSize.height).also { next ->
+        previous?.let { GraphicsCanvas(next).drawImage(it, Offset.Zero, Paint()) }
+      }
+    }
+  SideEffect { previous = bitmap }
   var painted by remember { mutableIntStateOf(0) }
   LaunchedEffect(bitmap) { onNewBitmap?.invoke() }
   LaunchedEffect(dialog.version, bitmap) {
@@ -715,15 +727,20 @@ fun LuxPaneView(
   }
   Box(
     modifier.onGloballyPositioned { coordinates ->
-      val bounds = coordinates.boundsInWindow()
-      // Backend pixels are dp.
+      // The whole pane, not the part on screen (boundsInWindow is cut at the window's edge): while
+      // a
+      // tool window page slides in or out the panel moves, it doesn't get narrower, so the backend
+      // isn't asked to lay it out and paint it again on every frame. Backend pixels are dp.
+      val topLeft = coordinates.positionInWindow()
       area =
         with(density) {
+          val left = topLeft.x.toDp().value.roundToInt()
+          val top = topLeft.y.toDp().value.roundToInt()
           IntRect(
-            bounds.left.toDp().value.roundToInt(),
-            bounds.top.toDp().value.roundToInt(),
-            bounds.right.toDp().value.roundToInt(),
-            bounds.bottom.toDp().value.roundToInt(),
+            left,
+            top,
+            left + coordinates.size.width.toDp().value.roundToInt(),
+            top + coordinates.size.height.toDp().value.roundToInt(),
           )
         }
     },
