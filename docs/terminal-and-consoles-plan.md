@@ -444,7 +444,7 @@ spec 3.1 says why IJent is out).
   | Alt | glyph `⌥` (`MacKeymapUtil.OPTION`), added 2026-11-23 | sticky like Ctrl: Esc before the next character, or `ALT_DOWN_MASK` on a key |
   | ⌘ | glyph `⌘` (`MacKeymapUtil.COMMAND`), added 2026-11-23 | sticky; never sent to the shell: ⌘ then `c`/`v`/`a`/`k` = copy / paste / select all / clear buffer, anything else nothing |
   | Tab | glyph `⇥` (U+21E5, `MacKeymapUtil.TAB`) | `\t` |
-  | ← ↑ → ↓ | `expui/general/chevronLeft.svg`, `chevronUp.svg`, `chevronRight.svg`, `chevronDown.svg` | through `TerminalKeyEncoder` (application mode respected) |
+  | ← ↑ → ↓ | glyphs `MacKeymapUtil.LEFT`, `UP`, `RIGHT`, `DOWN` (were the `expui/general/chevron*.svg` icons until 2026-11-23; options compared at https://claude.ai/artifact/UXxhDbjrMnf3yc1sghsD8T) | through `TerminalKeyEncoder` (application mode respected) |
 
   IntelliJ has no icons for Esc, Ctrl and Tab; the glyphs are the ones IntelliJ itself shows for those keys
   in macOS shortcuts (IC `platform/platform-api/src/com/intellij/openapi/keymap/MacKeymapUtil.java`), drawn as

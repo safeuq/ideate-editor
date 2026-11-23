@@ -1,6 +1,6 @@
 package intellijandroid.client.ui.terminal
 
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -11,13 +11,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
@@ -26,13 +26,13 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jediterm.core.input.KeyEvent
 import intellijandroid.client.session.terminal.TerminalKeyInput
 import intellijandroid.client.ui.IS_MAC
-import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.component.IconButtonLook
 import intellijandroid.client.ui.theme.IslandsDark
 import intellijandroid.client.ui.theme.LocalClientFonts
@@ -50,8 +50,7 @@ class TerminalFocus {
  * shown while the soft keyboard is open. With a terminal focused it holds the keys a soft keyboard
  * doesn't have, each one an icon: Esc, Ctrl, Alt and Meta (each stays on until the next key), Tab
  * and the four arrows. The glyphs (⌥ and ⌘ are `MacKeymapUtil.OPTION` and `COMMAND`) are the ones
- * IntelliJ shows for these keys in macOS shortcuts (`MacKeymapUtil`); the arrows are IntelliJ's
- * chevron icons.
+ * IntelliJ shows for these keys in macOS shortcuts (`MacKeymapUtil`), arrows included.
  *
  * The buttons take taps without taking focus, so the terminal keeps it (and the soft keyboard stays
  * open).
@@ -72,10 +71,12 @@ fun TerminalKeyBar(keys: TerminalKeyInput, modifier: Modifier = Modifier) {
     GlyphKey("⌥", "Alt", selected = keys.alt) { keys.toggleAlt() }
     GlyphKey("⌘", if (IS_MAC) "Command" else "Meta", selected = keys.meta) { keys.toggleMeta() }
     GlyphKey("⇥", "Tab") { keys.key(KeyEvent.VK_TAB) }
-    ArrowKey("expui/general/chevronLeft.svg", "Left", KeyEvent.VK_LEFT, keys)
-    ArrowKey("expui/general/chevronUp.svg", "Up", KeyEvent.VK_UP, keys)
-    ArrowKey("expui/general/chevronRight.svg", "Right", KeyEvent.VK_RIGHT, keys)
-    ArrowKey("expui/general/chevronDown.svg", "Down", KeyEvent.VK_DOWN, keys)
+    // IntelliJ's arrow key symbols in shortcut text (MacKeymapUtil.LEFT, UP, RIGHT, DOWN), the same
+    // family as the keys before them.
+    GlyphKey("←", "Left") { keys.key(KeyEvent.VK_LEFT) }
+    GlyphKey("↑", "Up") { keys.key(KeyEvent.VK_UP) }
+    GlyphKey("→", "Right") { keys.key(KeyEvent.VK_RIGHT) }
+    GlyphKey("↓", "Down") { keys.key(KeyEvent.VK_DOWN) }
   }
 }
 
@@ -120,27 +121,20 @@ private fun GlyphKey(
   onTap: () -> Unit,
 ) {
   KeyButton(description, selected, onTap) {
-    // The glyph fills the 16 dp icon box, as an SVG icon does.
-    BasicText(
-      glyph,
-      Modifier.size(16.dp),
-      style =
-        TextStyle(
-          color = IslandsDark.text,
-          fontFamily = LocalClientFonts.current.ui,
-          fontSize = 16.sp,
-          textAlign = TextAlign.Center,
-        ),
-      maxLines = 1,
-      softWrap = false,
-    )
-  }
-}
-
-@Composable
-private fun ArrowKey(iconPath: String, description: String, keyCode: Int, keys: TerminalKeyInput) {
-  val icon = LocalIcons.current.painter(iconPath)
-  KeyButton(description, selected = false, onTap = { keys.key(keyCode) }) {
-    icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(16.dp)) }
+    // Centred by the glyph's outline, as an SVG icon is: centring the line of text leaves ⎋ ⌥ ⌘
+    // low,
+    // since each sits on the font's baseline. ⌃ still sits high (its outline doesn't come through
+    // from the fallback font on Android), which keeps it apart from the ↑ key.
+    val measurer = rememberTextMeasurer()
+    val style = TextStyle(fontFamily = LocalClientFonts.current.ui, fontSize = 16.sp)
+    Canvas(Modifier.size(16.dp)) {
+      val layout = measurer.measure(glyph, style)
+      val outline = layout.getPathForRange(0, glyph.length).getBounds()
+      drawText(
+        layout,
+        color = IslandsDark.text,
+        topLeft = Offset(size.width / 2 - outline.center.x, size.height / 2 - outline.center.y),
+      )
+    }
   }
 }

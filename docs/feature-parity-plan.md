@@ -108,8 +108,7 @@ Steps 1 to 4 are built.
   **Addendum 2026-11-21:** the bar now exists (`ui/terminal/TerminalKeyBar.kt`, terminal plan phase 4) with the
   terminal's keys only (Esc, Ctrl, Tab, arrows). It sits between the tool window bar and the status bar, and shows
   while `WindowInsets.ime` has a bottom inset and a terminal has focus. Undo and Redo buttons still to add.
-  **Addendum 2026-11-23:** (1) In the portrait layout, while the keyboard is docked (`WindowInsets.ime` bottom inset
-  > 0; a floating keyboard has none), the tool window bar and the status bar are hidden so the keyboard bar sits
+  **Addendum 2026-11-23:** (1) In the portrait layout, while the keyboard is docked, the tool window bar and the status bar are hidden so the keyboard bar sits
   right above the keyboard. Other layouts are unchanged. (2) Each key has a 1 dp border (`Component.borderColor` =
   control-border, on the toolbar button's 4 dp corners). (3) Two more sticky keys after Ctrl: Alt (`⌥`,
   `MacKeymapUtil.OPTION`) and ⌘ (`MacKeymapUtil.COMMAND`). A typed character with Alt on gets an Esc prefix (`\eb`,
@@ -117,7 +116,13 @@ Steps 1 to 4 are built.
   (Alt+Up = `\e[1;3A`). ⌘ never reaches the shell, as in IntelliJ's terminal (`metaSendsEscape` is off): ⌘ then
   `c` / `v` / `a` / `k` runs copy / paste / select all / clear buffer, on every platform, through the same
   `command()` as the hardware ⌘ keys; any other key with ⌘ on sends nothing. Ctrl, Alt and ⌘ all go
-  off after the next key.
+  off after the next key. (4) Docked vs floating: Android has no API for it, and any open keyboard has a bottom
+  inset of at least the navigation bar (which then shows the keyboard's back and switch buttons); a floating Gboard
+  adds only a ~50 dp strip (Android 14 emulator), a docked one 250 dp or more. So docked = the keyboard reaches
+  100 dp above the navigation bar; the keyboard bar itself shows with any open keyboard. (5) Keys are drawn
+  centred by the glyph's outline (⌃ stays high: its outline doesn't come through from the fallback font, which
+  keeps it apart from ↑). The arrows are `MacKeymapUtil` glyphs ← ↑ → ↓ like the other keys, chosen from the
+  options at https://claude.ai/artifact/UXxhDbjrMnf3yc1sghsD8T.
 - **Checked** on the emulator against the Mac backend: typed `hello`, Undo removed it, the enabled states
   followed (Undo greyed, Redo enabled), Redo brought it back and hardware Ctrl+Z removed it again (through the
   ⋮ menu that has since been removed).

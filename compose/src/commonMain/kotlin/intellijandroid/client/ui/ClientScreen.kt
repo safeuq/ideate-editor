@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -458,8 +460,16 @@ fun ClientScreen(
           if (editorCovered) ToolbarBack(pointsRight = page == Page.LEFT, onClick = ::backToEditor)
           else null,
       )
-      // A docked soft keyboard reserves space at the bottom; a floating one reserves none.
-      val keyboardDocked = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+      // Any open soft keyboard has a bottom inset. A floating one keeps only a strip for its back
+      // and
+      // switch buttons (about 50 dp on Gboard, Android 14); a docked one is 250 dp or more. Android
+      // can't tell the two apart, so: docked when the keyboard reaches 100 dp above the navigation
+      // bar. ponytail: a size rule; a docked keyboard under 100 dp would count as floating.
+      val density = LocalDensity.current
+      val keyboardOpen = WindowInsets.ime.getBottom(density) > 0
+      val keyboardDocked =
+        WindowInsets.ime.exclude(WindowInsets.navigationBars).getBottom(density) >=
+          with(density) { 100.dp.roundToPx() }
       when (layout) {
         ScreenLayout.PORTRAIT -> {
           // Only the window the drag started on: Project over Structure each scroll on their own.
@@ -506,7 +516,7 @@ fun ClientScreen(
             modifier = Modifier.weight(1f).fillMaxWidth(),
           )
           // A docked keyboard leaves little height, so the bar and the status bar give way to the
-          // keyboard bar; a floating keyboard has no bottom inset and changes nothing.
+          // keyboard bar; a floating keyboard changes nothing.
           if (!keyboardDocked)
             ToolWindowBar(buttons, shown, ::barClick, vertical = false, Modifier.fillMaxWidth())
         }
@@ -600,7 +610,7 @@ fun ClientScreen(
       }
       // The keyboard bar (docs/feature-parity-plan.md section 1): extra keys under the tool window
       // bar while the soft keyboard is open. For now only a focused terminal has keys to show.
-      if (keyboardDocked) terminalFocus.focused?.let { TerminalKeyBar(it) }
+      if (keyboardOpen) terminalFocus.focused?.let { TerminalKeyBar(it) }
       // IntelliJ's status bar: breadcrumbs, the info text or the newest task, the backend's
       // widgets.
       if (!(keyboardDocked && layout == ScreenLayout.PORTRAIT))
