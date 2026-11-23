@@ -115,7 +115,7 @@ fun TerminalToolWindow(
       // One view per tab, so a tab keeps its own scroll, selection and focus.
       key(selected.id) {
         val input =
-          remember(selected.id) {
+          remember(session, selected.id) {
             TerminalKeyInput(
               sendText = { text -> session.terminalText(selected.id, text) },
               sendKey = { keyCode, modifiers ->
@@ -124,7 +124,7 @@ fun TerminalToolWindow(
             )
           }
         val actions =
-          remember(selected.id) {
+          remember(session, selected.id) {
             TerminalActions(
               resize = { columns, rows -> session.resizeTerminal(selected.id, columns, rows) },
               paste = { text -> session.pasteToTerminal(selected.id, text) },

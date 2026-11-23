@@ -24,6 +24,7 @@ internal class TerminalSessions(
   private val scheduler: IScheduler,
   private val change: ((List<TerminalTabState>) -> List<TerminalTabState>) -> Unit,
   private val log: (String) -> Unit,
+  measured: TermSize?,
 ) {
   private var model: com.jetbrains.codeWithMe.model.TerminalModel? = null
   private val tabs = ConcurrentHashMap<String, TerminalTab>()
@@ -38,8 +39,12 @@ internal class TerminalSessions(
     Thread(task, "terminal-publish").apply { isDaemon = true }
   }
 
-  /** The last grid the view measured, for a new tab to start at (80 × 24 until then). */
-  @Volatile private var lastSize = TermSize(80, 24)
+  /**
+   * The last grid the view measured, kept by the [ClientSession] while no project was bound yet:
+   * the view sizes itself before the terminals bind after a reconnect, and that size must not be
+   * lost.
+   */
+  @Volatile private var lastSize: TermSize? = measured
 
   fun bind(solutionLifetime: Lifetime, solution: Solution) {
     val terminalModel = solution.terminalModel
@@ -57,9 +62,15 @@ internal class TerminalSessions(
           publish = { state -> change { tabs -> replace(tabs, state) } },
           // A session from before a reconnect has the size its screen was laid out at: start there,
           // so the restored screen doesn't reflow.
-          initialSize = session.size.valueOrNull?.let { TermSize(it.width, it.height) } ?: lastSize,
+          initialSize =
+            session.size.valueOrNull?.let { TermSize(it.width, it.height) }
+              ?: lastSize
+              ?: TermSize(80, 24),
         )
       tabs[id] = tab
+      // Then to the view's grid, which reflows that screen as a resize does (null before the view
+      // measured anything).
+      lastSize?.let { size -> tab.resize(size.columns, size.rows) }
       sessions[id] = session
       // The backend ends a session by closing it (the shell exited): the tab goes too.
       session.closed.advise(sessionLifetime) { closed ->
@@ -79,7 +90,7 @@ internal class TerminalSessions(
   fun open(): String {
     val terminalModel = checkNotNull(model) { "Terminal sessions aren't bound to a project yet" }
     val id = sessionId(run, ++counter)
-    terminalModel.sessions[id] = newClientSession(lastSize)
+    terminalModel.sessions[id] = newClientSession(lastSize ?: TermSize(80, 24))
     return id
   }
 

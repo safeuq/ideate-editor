@@ -1,5 +1,6 @@
 package io.github.safeuq.ideate.client.session
 
+import com.jediterm.core.util.TermSize
 import com.intellij.platform.split.protocol.DefaultSplitMarshallersProvider
 import com.jetbrains.codeWithMe.model.CwmRunConfigurationExecuteArgs
 import com.jetbrains.codeWithMe.model.RdFileIconParams
@@ -281,8 +282,10 @@ class ClientSession(
   fun closeTerminal(id: String) = onRd { checkNotNull(terminalSessions).close(id) }
 
   /** The terminal's grid is now [columns] × [rows] cells; keys and text can go from any thread. */
-  fun resizeTerminal(id: String, columns: Int, rows: Int) =
+  fun resizeTerminal(id: String, columns: Int, rows: Int) {
+    terminalSize = TermSize(columns, rows)
     terminalSessions?.resize(id, columns, rows)
+  }
 
   fun terminalKey(id: String, keyCode: Int, modifiers: Int) =
     terminalSessions?.tab(id)?.sendKey(keyCode, modifiers)
@@ -319,6 +322,9 @@ class ClientSession(
   private var luxDialogs: LuxDialogs? = null
   private var backendPopups: BackendPopups? = null
   private var terminalSessions: TerminalSessions? = null
+
+  /** The view's last terminal grid, also from before the terminals were bound. */
+  @Volatile private var terminalSize: TermSize? = null
   private val menuSerials = AtomicInteger()
   private var selectedEditorId: RdFileEditorId? = null
 
@@ -1164,6 +1170,7 @@ class ClientSession(
           rdScheduler,
           { edit -> mutableState.update { it.copy(terminals = edit(it.terminals)) } },
           ::log,
+          terminalSize,
         )
       terminals.bind(solutionLifetime, newSolution)
       terminalSessions = terminals

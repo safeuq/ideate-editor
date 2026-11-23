@@ -681,3 +681,19 @@ Without `smoke.iml` and `modules.xml` the run opens an "Edit Configuration" dial
 ## Addendum (2026-11-23): keyboard bar keys show when they are pressed
 
 A key on the keyboard bar now shows the toolbar button's pressed background (`ActionButton.pressedBackground`, `IconButtonLook.pressedBackground`) while a finger or the mouse holds it, as `IconButton` already did, so a touch shows which key it landed on. The keys still use `detectTapGestures` (not `clickable`) so they never take the focus from the terminal; its `onPress` sets the pressed state and `tryAwaitRelease()` clears it. A sticky key that is on (⌃ ⌥ ⌘) keeps the same background, as before. Checked on the Pixel 3a emulator: holding ↑ highlights it, releasing clears it.
+
+## Addendum (2026-11-23): the terminal after a reconnect looks as it did before
+
+After the app was frozen or killed and reconnected, the restored terminal was wrong in three ways, and typing did nothing after a restart. Example (Pixel 3a emulator, a pane of 52 × 23 cells): `seq 1 80` and then a prompt of 168 characters.
+
+| | Before | After |
+|---|---|---|
+| Grid the screen was restored at | 80 × 24, the backend's `session.size` | 52 × 23, the pane's |
+| The 168-character prompt | one row, cut at the right edge | four rows, wrapped |
+| Cursor | three rows below the prompt | on the prompt |
+| Typing after the app was killed | sent nowhere | reaches the shell |
+
+Causes and fixes:
+- The view sends its grid as soon as it is drawn, which after a reconnect is before the terminals are bound to the new project; `ClientSession.resizeTerminal` dropped it, and the view sent it only when the size changed. The `ClientSession` now keeps the last grid, `TerminalSessions` starts with it, and a newly added tab is resized to it right after it restores its screen (JediTerm's resize then lays the screen out again).
+- `TerminalToolWindow` remembered the input and resize callbacks per tab id only, so after the saved screen's stand-in session gave way to the real one, they still called the stand-in. They are now remembered per session and tab id, and `TerminalView` re-sends its grid when the callbacks change.
+- The backend's `BeTerminalScreenState` lines are whole lines, not cut at any width (the 168-character prompt is one line even when the backend's size is 52 columns), and `BeTerminalLine` has no wrapped flag. JetBrains Client's `TerminalWidgetControlKt.setInitialState` adds them unchanged too; JediTerm only rewraps over-long lines when the width changes (`ChangeWidthOperation`), and here it doesn't. `TerminalTab.restore` now wraps each line at the grid's width with `terminalLines` (all rows but the last marked wrapped, as JediTerm marks output that ran past the edge), moves the cursor down by the rows the lines above it gained, and moves rows past the screen's height into the history. It counts characters, not cells, so a wide (CJK) character would run one cell past the edge.

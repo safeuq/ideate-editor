@@ -19,16 +19,31 @@ class TerminalLineTest {
       BeTerminalEntryStyle(BeTerminalColor(2, 0, 0, 0), null, 1 shl TextStyle.Option.BOLD.ordinal)
     val orange = BeTerminalEntryStyle(BeTerminalColor(-1, 255, 128, 0), null, 0)
     val line =
-      terminalLine(
-        BeTerminalLine(
-          listOf(BeTerminalLineEntry("➜ ", green), BeTerminalLineEntry("echo", orange)),
-        ),
-      )
+      terminalLines(
+          BeTerminalLine(
+            listOf(BeTerminalLineEntry("➜ ", green), BeTerminalLineEntry("echo", orange)),
+          ),
+          columns = 80,
+        )
+        .single()
 
     assertEquals("➜ echo", line.text)
     assertEquals(TerminalColor(2), checkNotNull(line.getStyleAt(0)).foreground)
     assertTrue(checkNotNull(line.getStyleAt(0)).hasOption(TextStyle.Option.BOLD))
     assertEquals(TerminalColor(255, 128, 0), checkNotNull(line.getStyleAt(2)).foreground)
     assertNull(checkNotNull(line.getStyleAt(2)).background)
+  }
+
+  @Test
+  fun aLineLongerThanTheGridWrapsIntoRows() {
+    val plain = BeTerminalEntryStyle(null, null, 0)
+    val rows =
+      terminalLines(
+        BeTerminalLine(listOf(BeTerminalLineEntry("abc", plain), BeTerminalLineEntry("defg", plain))),
+        columns = 3,
+      )
+
+    assertEquals(listOf("abc", "def", "g"), rows.map { row -> row.text })
+    assertEquals(listOf(true, true, false), rows.map { row -> row.isWrapped })
   }
 }

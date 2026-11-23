@@ -169,16 +169,29 @@ internal class TerminalTab(
     }
   }
 
+  /**
+   * The backend sends whole lines, not cut at any width (a 168-character prompt is one entry list),
+   * so each wraps at this grid's width here; the cursor moves down by the rows the lines above it
+   * gained, and rows beyond the screen's height go to the history.
+   */
   private fun restore(state: BeTerminalScreenState) {
+    val columns = terminal.size.columns
+    val history = state.historyLines.orEmpty().flatMap { line -> terminalLines(line, columns) }
+    var cursorY = state.cursorY
+    val screen =
+      state.screenLines.flatMapIndexed { index, line ->
+        terminalLines(line, columns).also { rows -> if (index < state.cursorY - 1) cursorY += rows.size - 1 }
+      }
+    val overflow = (screen.size - terminal.size.rows).coerceAtLeast(0)
     buffer.lock()
     try {
       buffer.clearScreenAndHistoryBuffers()
-      state.historyLines?.let { lines -> buffer.historyBuffer.addLines(lines.map(::terminalLine)) }
-      buffer.screenBuffer.addLines(state.screenLines.map(::terminalLine))
+      buffer.historyBuffer.addLines(history + screen.take(overflow))
+      buffer.screenBuffer.addLines(screen.drop(overflow))
     } finally {
       buffer.unlock()
     }
-    terminal.cursorPosition(state.cursorX, state.cursorY)
+    terminal.cursorPosition(state.cursorX, cursorY - overflow)
     queuePublish()
   }
 
@@ -271,14 +284,31 @@ private class TerminalExecutors : TerminalExecutorServiceManager {
 }
 
 /** One line of a backend screen state (spec 3.3), as JetBrains Client's `fromModel` builds it. */
-internal fun terminalLine(line: BeTerminalLine): TerminalLine {
-  val terminalLine = TerminalLine()
+/**
+ * One backend line as rows of [columns] cells, all but the last marked wrapped as JediTerm marks a
+ * line the shell's output ran past the edge of.
+ */
+// ponytail: counts characters, not cells; a wide (CJK) character takes two cells and would run one
+// past the edge. Count cells with JediTerm's CharUtils if that shows up.
+internal fun terminalLines(line: BeTerminalLine, columns: Int): List<TerminalLine> {
+  val rows = mutableListOf(TerminalLine())
   var column = 0
   line.entries.forEach { entry ->
-    terminalLine.insertString(column, CharBuffer(entry.text), textStyle(entry.style))
-    column += entry.text.length
+    val style = textStyle(entry.style)
+    var start = 0
+    while (start < entry.text.length) {
+      if (column == columns) {
+        rows.last().isWrapped = true
+        rows += TerminalLine()
+        column = 0
+      }
+      val end = minOf(entry.text.length, start + columns - column)
+      rows.last().insertString(column, CharBuffer(entry.text.substring(start, end)), style)
+      column += end - start
+      start = end
+    }
   }
-  return terminalLine
+  return rows
 }
 
 /** Bit `n` of `optionsMask` is JediTerm's `TextStyle.Option` number `n` (bold, italic, …). */

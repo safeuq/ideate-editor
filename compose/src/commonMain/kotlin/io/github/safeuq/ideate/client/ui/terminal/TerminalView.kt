@@ -171,7 +171,7 @@ fun TerminalView(
   // full-screen program doesn't resize the shell on entering.
   val columns = terminalColumns(viewport.width.toFloat(), leftInset, metrics.cellWidth)
   val rows = ((viewport.height - 2 * inset) / metrics.lineHeight).toInt()
-  LaunchedEffect(tab.id, columns, rows) {
+  LaunchedEffect(tab.id, actions, columns, rows) {
     if (columns >= 2 && rows >= 1) actions.resize(columns, rows)
   }
 
