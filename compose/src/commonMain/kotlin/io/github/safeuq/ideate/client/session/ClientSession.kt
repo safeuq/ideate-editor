@@ -1457,14 +1457,16 @@ class ClientSession(
     val slot = savedEditors ?: return
     val tabs = slot.readTabs(id)
     val older = if (tabs == null) slot.readSavedEditors(id) else null
-    val files = (tabs?.map { it.path } ?: older?.files.orEmpty()).filter { it != initialFile }
+    // [initialFile] keeps its saved place, caret and scroll; it is opened after this, on top.
+    val saved = tabs?.map { it.path } ?: older?.files.orEmpty()
+    val files = saved.filter { it != initialFile }
     val selected = tabs?.firstOrNull { it.current }?.path ?: older?.selected
     if (files.isNotEmpty()) log("Reopening ${files.size} editors: ${files.joinToString()}")
     reopening += files
-    tabOrder += files
+    tabOrder += saved
     for (tab in tabs.orEmpty()) {
       val caret = tab.caret
-      if (caret != null && tab.path in files) {
+      if (caret != null && tab.path in saved) {
         caretsToRestore[tab.path] = { text ->
           offsetOf(text, caret.position) to offsetOf(text, caret.anchorPosition())
         }
@@ -1472,7 +1474,7 @@ class ClientSession(
       }
     }
     for ((path, offset) in older?.carets.orEmpty()) {
-      if (path in files) caretsToRestore[path] = { offset to offset }
+      if (path in saved) caretsToRestore[path] = { offset to offset }
     }
     for (path in files) openFile(path, select = path == selected && initialFile == null)
   }

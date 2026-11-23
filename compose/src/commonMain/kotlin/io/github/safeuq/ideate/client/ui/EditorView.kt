@@ -349,8 +349,8 @@ fun EditorView(
 
   // The caret was put back (a reopened file) or the backend moved it (navigation, e.g. a symbol
   // chosen in Search Everywhere): centre its line, as IntelliJ's navigation does. The backend sends
-  // no scroll message for it. ponytail: a reopened file in IntelliJ gets its exact scroll position
-  // back; the centred caret line is close enough.
+  // no scroll message for it. A reopened file with a saved scroll position puts the caret line
+  // back that far below the top instead.
   LaunchedEffect(file.path, file.caretToShow) {
     if (file.caretToShow == 0) return@LaunchedEffect
     // A file opened by the navigation itself has no layout yet.
@@ -361,10 +361,10 @@ fun EditorView(
     if (fromTop == null) {
       listState.scrollToItem(maxOf(0, lines.lineOf(caret) - height / lineHeight / 2))
     } else {
-      // The saved place: the caret line's top this far below the view's top.
-      val top =
-        maxOf(0, lines.lineOf(caret) * lineHeight - (fromTop * density.density).roundToInt())
-      listState.scrollToItem(top / lineHeight, top % lineHeight)
+      // The saved place: the caret line this far below the view's top, rounded to whole lines so
+      // no line is cut at the top (the two clients' line heights can differ).
+      val linesAbove = (fromTop * density.density / lineHeight).roundToInt()
+      listState.scrollToItem(maxOf(0, lines.lineOf(caret) - linesAbove))
     }
   }
 
