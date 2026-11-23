@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -236,9 +237,25 @@ fun TerminalView(
   val pasteFromClipboard = { paste() }
   val selectEverything = { selectAll() }
   val selectedTextNow = { selectedText() }
+  // The ⌘ commands, for the hardware ⌘ key and the keyboard bar's sticky ⌘: C copy, V paste, A
+  // select all, K clear buffer. False for any other letter.
+  fun command(letter: Char): Boolean {
+    when (letter.lowercaseChar()) {
+      'c' -> copy()
+      'v' -> typed(::paste)
+      'a' -> selectAll()
+      'k' -> actions.clearBuffer()
+      else -> return false
+    }
+    return true
+  }
+  SideEffect { input.onCommand = ::command }
+
   val keyboardTarget =
     object : EditorTextTarget {
-      override fun type(character: Char) = typed { input.type(character) }
+      // typed() would drop the selection before ⌘C could copy it.
+      override fun type(character: Char) =
+        if (input.meta) input.type(character) else typed { input.type(character) }
 
       override fun enter() = typed { input.key(TerminalKey.VK_ENTER) }
 
@@ -273,14 +290,13 @@ fun TerminalView(
     val clipboardKey =
       if (IS_MAC) event.isMetaPressed else event.isCtrlPressed && event.isShiftPressed
     if (clipboardKey) {
-      when (key) {
-        Key.C -> copy()
-        Key.V -> typed(::paste)
-        Key.A -> selectAll()
-        Key.K -> actions.clearBuffer()
-        else -> return false
+      return when (key) {
+        Key.C -> command('c')
+        Key.V -> command('v')
+        Key.A -> command('a')
+        Key.K -> command('k')
+        else -> false
       }
-      return true
     }
     if (event.isMetaPressed) return false
     var modifiers = 0

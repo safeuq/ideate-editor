@@ -442,7 +442,7 @@ spec 3.1 says why IJent is out).
   | Esc | glyph `⎋` (U+238B, IntelliJ's `MacKeymapUtil.ESCAPE`) | `\e` |
   | Ctrl | glyph `⌃` (U+2303, `MacKeymapUtil.CONTROL`) | sticky: on until the next key, which is sent as Ctrl+key (`a`–`z` → 0x01–0x1a); shown selected while on |
   | Alt | glyph `⌥` (`MacKeymapUtil.OPTION`), added 2026-11-23 | sticky like Ctrl: Esc before the next character, or `ALT_DOWN_MASK` on a key |
-  | Meta | glyph `⌘` (`MacKeymapUtil.COMMAND`), added 2026-11-23 | sticky like Ctrl: `META_DOWN_MASK` on a key, Esc before a character |
+  | ⌘ | glyph `⌘` (`MacKeymapUtil.COMMAND`), added 2026-11-23 | sticky; never sent to the shell: ⌘ then `c`/`v`/`a`/`k` = copy / paste / select all / clear buffer, anything else nothing |
   | Tab | glyph `⇥` (U+21E5, `MacKeymapUtil.TAB`) | `\t` |
   | ← ↑ → ↓ | `expui/general/chevronLeft.svg`, `chevronUp.svg`, `chevronRight.svg`, `chevronDown.svg` | through `TerminalKeyEncoder` (application mode respected) |
 

@@ -18,7 +18,7 @@ class TerminalKeyInput(
 ) {
   /**
    * The Ctrl key of the keyboard bar is on: the next key is sent as Ctrl+that key, then it goes
-   * off. [alt] (Option) and [meta] (⌘, Super or Win) work the same way.
+   * off. [alt] (Option) and [meta] (⌘) work the same way.
    */
   var ctrl by mutableStateOf(false)
     private set
@@ -28,6 +28,13 @@ class TerminalKeyInput(
 
   var meta by mutableStateOf(false)
     private set
+
+  /**
+   * Runs ⌘+letter (copy, paste, select all, clear buffer: the terminal view sets it; true when the
+   * letter is one of them). Like IntelliJ's terminal, ⌘ never reaches the shell: JediTerm's
+   * `metaSendsEscape` is off and `TerminalView.onKey` drops every other ⌘ key.
+   */
+  var onCommand: (Char) -> Boolean = { false }
 
   fun toggleCtrl() {
     ctrl = !ctrl
@@ -42,33 +49,41 @@ class TerminalKeyInput(
   }
 
   /**
-   * A typed character: with Ctrl on, `c` is sent as 0x03 (Ctrl+C). With Alt or Meta on, Esc goes
-   * first (`\eb`, readline's "back a word"), which is how JediTerm and xterm send Alt+key.
+   * A typed character: with Ctrl on, `c` is sent as 0x03 (Ctrl+C). With Alt on, Esc goes first
+   * (`\eb`, readline's "back a word"), which is how JediTerm and xterm send Alt+key. With ⌘ on, the
+   * character runs [onCommand] and nothing is sent.
    */
   fun type(character: Char) {
+    if (meta) {
+      clearModifiers()
+      onCommand(character)
+      return
+    }
     val withCtrl = if (ctrl) controlCharacter(character) else null
-    val prefix = if (alt || meta) "\u001b" else ""
+    val prefix = if (alt) "\u001b" else ""
     clearModifiers()
     sendText(prefix + (withCtrl ?: character))
   }
 
   /**
-   * A key that has no character: arrows, Enter, Backspace, Tab, Escape, F-keys. The sticky keys
-   * join [modifiers] as AWT bits, which JediTerm's `TerminalKeyEncoder` turns into `\e[1;3A`
-   * (Alt+Up) and the like.
+   * A key that has no character: arrows, Enter, Backspace, Tab, Escape, F-keys. Ctrl and Alt join
+   * [modifiers] as AWT bits, which JediTerm's `TerminalKeyEncoder.getCode` turns into `\e[1;3A`
+   * (Alt+Up) and the like. With ⌘ on nothing is sent.
    */
   fun key(keyCode: Int, modifiers: Int = 0) {
     val stickyModifiers =
-      (if (ctrl) InputEvent.CTRL_DOWN_MASK else 0) or
-        (if (alt) InputEvent.ALT_DOWN_MASK else 0) or
-        (if (meta) InputEvent.META_DOWN_MASK else 0)
+      (if (ctrl) InputEvent.CTRL_DOWN_MASK else 0) or (if (alt) InputEvent.ALT_DOWN_MASK else 0)
+    val commandOn = meta
     clearModifiers()
+    if (commandOn) return
     sendKey(keyCode, modifiers or stickyModifiers)
   }
 
   /** Text from the soft keyboard, e.g. a pasted clip or a whole word. */
   fun text(text: String) {
+    val commandOn = meta
     clearModifiers()
+    if (commandOn) return
     sendText(text)
   }
 

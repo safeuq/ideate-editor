@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jediterm.core.input.KeyEvent
 import intellijandroid.client.session.terminal.TerminalKeyInput
+import intellijandroid.client.ui.IS_MAC
 import intellijandroid.client.ui.LocalIcons
 import intellijandroid.client.ui.component.IconButtonLook
 import intellijandroid.client.ui.theme.IslandsDark
@@ -69,7 +70,7 @@ fun TerminalKeyBar(keys: TerminalKeyInput, modifier: Modifier = Modifier) {
     GlyphKey("⎋", "Esc") { keys.key(KeyEvent.VK_ESCAPE) }
     GlyphKey("⌃", "Ctrl", selected = keys.ctrl) { keys.toggleCtrl() }
     GlyphKey("⌥", "Alt", selected = keys.alt) { keys.toggleAlt() }
-    GlyphKey("⌘", "Meta", selected = keys.meta) { keys.toggleMeta() }
+    GlyphKey("⌘", if (IS_MAC) "Command" else "Meta", selected = keys.meta) { keys.toggleMeta() }
     GlyphKey("⇥", "Tab") { keys.key(KeyEvent.VK_TAB) }
     ArrowKey("expui/general/chevronLeft.svg", "Left", KeyEvent.VK_LEFT, keys)
     ArrowKey("expui/general/chevronUp.svg", "Up", KeyEvent.VK_UP, keys)
