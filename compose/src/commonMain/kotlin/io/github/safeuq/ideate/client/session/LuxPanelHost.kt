@@ -40,6 +40,10 @@ data class PanelBuildTree(val modelUid: Int, override val bounds: LxRect) : Pane
  * client-drawn controls (`localComponents`, spec 7.2) are in `surface.locals`. Called on the
  * protocol thread.
  */
+// The backend can remove a panel before the tool window's tab names its replacement, e.g. a new run
+// replacing the Run tab's content (seen on the S24: "Not bound: LuxModel.components.[23]
+// .requestRepaint" while panel 25 was arriving). Until then the UI still shows this one and may ask
+// it to repaint, resize or take an event: those calls do nothing once it is gone.
 internal class LuxPanelHost(
   private val panel: LxPanel,
   private val lifetime: Lifetime,
@@ -134,6 +138,7 @@ internal class LuxPanelHost(
    * the backend places the panel's popups (New ▾) next to it.
    */
   fun resize(x: Int, y: Int, width: Int, height: Int) {
+    if (!panel.isBound) return
     surface.x = x
     surface.y = y
     panel.position.set(LxPoint(x.toDouble(), y.toDouble()))
@@ -142,11 +147,11 @@ internal class LuxPanelHost(
 
   /** Asks the backend to paint the panel again, whole. */
   fun repaint() {
-    panel.requestRepaint.start(lifetime, Unit)
+    if (panel.isBound) panel.requestRepaint.start(lifetime, Unit)
   }
 
   /** A tap, a scroll or a key for the panel. */
   fun event(event: LxEvent) {
-    panel.events.fire(event)
+    if (panel.isBound) panel.events.fire(event)
   }
 }

@@ -7,16 +7,16 @@ import kotlin.test.assertTrue
 
 /** Where the BuildView panel's toolbar buttons are, and how a point in a drawn cell maps back. */
 class BuildToolbarCellsTest {
-  private val buildStrips = BuildStrips(top = 0, left = 33, consoleLeft = 41)
+  private val buildStrips = BuildStrips(top = 0, left = 33, consoleLeft = 44)
   private val buildCells =
-    stripCells(BUILD_VIEW_LABELS, 0, 0) + stripCells(BUILD_CONSOLE_LABELS, 41, 0)
+    stripCells(BUILD_VIEW_LABELS, 0, 0) + stripCells(BUILD_CONSOLE_LABELS, 44, 0)
 
   @Test
   fun runCellsAreUnderItsToolbarRow() {
-    // Run at 411 dp: console strip at 379, under the 32 dp toolbar row
-    val cells = stripCells(BUILD_CONSOLE_LABELS, 379, 32)
+    // Run at 411 dp: console strip at 382, under the 32 dp toolbar row
+    val cells = stripCells(BUILD_CONSOLE_LABELS, 382, 32)
     assertEquals(
-      listOf(IntOffset(384, 36), IntOffset(384, 62), IntOffset(384, 88)),
+      listOf(IntOffset(387, 36), IntOffset(387, 62), IntOffset(387, 88)),
       cells.map { IntOffset(it.x, it.y) },
     )
   }
@@ -30,11 +30,11 @@ class BuildToolbarCellsTest {
         "Stop" to IntOffset(5, 30),
         "Pin" to IntOffset(5, 56),
         "Filter" to IntOffset(5, 82),
-        "Soft-Wrap" to IntOffset(46, 4),
-        "Scroll to the End" to IntOffset(46, 30),
-        "Clear All" to IntOffset(46, 56),
+        "Soft-Wrap" to IntOffset(49, 4),
+        "Scroll to the End" to IntOffset(49, 30),
+        "Clear All" to IntOffset(49, 56),
       )
-    assertEquals(41, buildStrips.consoleLeft)
+    assertEquals(44, buildStrips.consoleLeft)
     val actual = buildCells.associate { it.label to IntOffset(it.x, it.y) }
     assertEquals(expected, actual)
   }
@@ -63,7 +63,7 @@ class BuildToolbarCellsTest {
         ("Rerun" to IntOffset(0, 0)) to IntOffset(5, 4),
         ("Pin" to IntOffset(11, 11)) to IntOffset(16, 67),
         ("Filter" to IntOffset(21, 21)) to IntOffset(26, 103),
-        ("Clear All" to IntOffset(11, 11)) to IntOffset(57, 67),
+        ("Clear All" to IntOffset(11, 11)) to IntOffset(60, 67),
       )
     val cells = buildCells.associateBy { it.label }
     val actual = expected.mapValues { (input, _) ->

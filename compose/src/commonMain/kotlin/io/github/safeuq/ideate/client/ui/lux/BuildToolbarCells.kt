@@ -63,8 +63,9 @@ internal data class BuildCell(
  * panel (dp). [top] is the height of a toolbar row above both (the Run window's: tree `y=32`,
  * console `y=32` gives 32; 0 in the Build window), [left] the width of a strip left of the tree
  * (the Build window's `BuildView` toolbar: tree `x=33` gives 33; 0 in the Run window), and
- * [consoleLeft] where the strip right of the console starts (its right edge: Run at 411 dp wide:
- * console `x=136, width=243` gives 379; Build at 73 dp: `x=44, width=-3` gives 41).
+ * [consoleLeft] where the strip right of the console starts ([CONSOLE_STRIP_GAP] right of its right
+ * edge: Run at 411 dp wide: console `x=136, width=243` gives 382; Build at 73 dp: `x=44, width=-3`
+ * gives 44).
  */
 internal data class BuildStrips(val top: Int, val left: Int, val consoleLeft: Int)
 
@@ -75,9 +76,18 @@ internal fun buildStrips(locals: List<PanelLocal>): BuildStrips {
   return BuildStrips(
     top = minOf(tree.y, console.y).coerceAtLeast(0),
     left = tree.x.coerceAtLeast(0),
-    consoleLeft = console.x + console.width,
+    consoleLeft = console.x + console.width + CONSOLE_STRIP_GAP,
   )
 }
+
+/**
+ * How far right of the console's bounds its toolbar strip starts, in dp. Measured on the Pixel 3a
+ * emulator (2.75 px per dp): with the strip taken to start at the console's right edge, every
+ * console button's icon was 7.5 to 8.7 px right of its cut-out's centre, in Build and in Run alike,
+ * so a toggled button's highlight lost its right edge. ponytail: one measurement; likely the
+ * console's scroll bar, read it from the backend if a theme changes it.
+ */
+private const val CONSOLE_STRIP_GAP = 3
 
 /** The labels of the "BuildView" toolbar's buttons, as IntelliJ names the place. */
 internal val BUILD_VIEW_LABELS = listOf("Rerun", "Stop", "Pin", "Filter")
@@ -89,8 +99,8 @@ internal val BUILD_CONSOLE_LABELS = listOf("Soft-Wrap", "Scroll to the End", "Cl
  * The buttons of a vertical strip whose top left is ([stripLeft], [stripTop]), measured on the Mac
  * backend with the new UI dark theme (spec 2026-11-23, "Cell geometry"): every button is a 22 dp
  * square, 5 dp from the strip's left, the first 4 dp under its top, one every 26 dp. Build: the
- * left strip at (0, 0) gives x 5; the console's at (41, 0) gives x 46. Run: the console's at (379,
- * 32) gives (384, 36 + 26 * i). ponytail: fixed numbers from one backend and theme; read the
+ * left strip at (0, 0) gives x 5; the console's at (44, 0) gives x 49. Run: the console's at (382,
+ * 32) gives (387, 36 + 26 * i). ponytail: fixed numbers from one backend and theme; read the
  *     buttons' places from the backend, or find them in the bitmap, if a theme or scale moves them.
  */
 internal fun stripCells(labels: List<String>, stripLeft: Int, stripTop: Int) =

@@ -779,6 +779,7 @@ private fun BackendToolWindowContent(
       session = session,
       modifier = Modifier.fillMaxSize(),
       portrait = portrait,
+      scroll = scroll,
     )
     return
   }

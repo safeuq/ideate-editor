@@ -12,6 +12,7 @@ import io.github.safeuq.ideate.client.session.EditorKind
 import io.github.safeuq.ideate.client.session.EditorScheme
 import io.github.safeuq.ideate.client.ui.EditorActions
 import io.github.safeuq.ideate.client.ui.EditorView
+import io.github.safeuq.ideate.client.ui.SidewaysScroll
 
 /**
  * A backend console (Run, Build Output) in IntelliJ's console editor, `ConsoleViewUtil.
@@ -29,6 +30,11 @@ fun ConsoleEditor(
   modifier: Modifier = Modifier,
   /** Text Ideate copied, e.g. for the backend's clipboard; nothing needs it for a console yet. */
   copied: (String) -> Unit = {},
+  /**
+   * The sideways scroll of the tool window the console is in, so the phone's page swiper lets a
+   * sideways swipe scroll a long line instead of turning the page (ClientScreen asks it).
+   */
+  scroll: SidewaysScroll = remember { SidewaysScroll() },
 ) {
   // The console is read-only, but its text can be selected and copied: the selection lives here
   // (an editor of a file keeps it in its edit session).
@@ -58,6 +64,7 @@ fun ConsoleEditor(
       copied = copied,
     ),
     modifier,
+    scroll = scroll,
     kind = EditorKind.CONSOLE,
   )
 }

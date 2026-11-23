@@ -30,17 +30,19 @@ class StackedBuildTest {
 
   @Test
   fun stripsComeFromTheBounds() {
-    // Run at 411 dp: the toolbar row is 32 tall, no left strip, the console's strip starts at 379.
+    // Run at 411 dp: the toolbar row is 32 tall, no left strip, the console's strip starts 3 right
+    // of its edge, at 382.
     val run =
       listOf(
         PanelBuildTree(6, LxRect(0, 32, 135, 681)),
         PanelConsole("a", LxRect(136, 32, 243, 681)),
       )
-    // Build at 73 dp: left strip 33, no top row, the console's strip starts at 41.
+    // Build at 73 dp: left strip 33, no top row, the console's strip starts 3 right of its edge, at
+    // 44.
     val build =
       listOf(PanelBuildTree(6, LxRect(33, 0, 10, 681)), PanelConsole("a", LxRect(44, 0, -3, 681)))
-    assertEquals(BuildStrips(top = 32, left = 0, consoleLeft = 379), buildStrips(run))
-    assertEquals(BuildStrips(top = 0, left = 33, consoleLeft = 41), buildStrips(build))
+    assertEquals(BuildStrips(top = 32, left = 0, consoleLeft = 382), buildStrips(run))
+    assertEquals(BuildStrips(top = 0, left = 33, consoleLeft = 44), buildStrips(build))
   }
 
   @Test

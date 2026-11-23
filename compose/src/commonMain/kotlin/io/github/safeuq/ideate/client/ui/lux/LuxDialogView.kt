@@ -89,6 +89,7 @@ import io.github.safeuq.ideate.client.ui.EditorTextTarget
 import io.github.safeuq.ideate.client.ui.LocalEditorTextInput
 import io.github.safeuq.ideate.client.ui.LocalLandscapeRequest
 import io.github.safeuq.ideate.client.ui.ProjectTreeView
+import io.github.safeuq.ideate.client.ui.SidewaysScroll
 import io.github.safeuq.ideate.client.ui.component.AppPopup
 import io.github.safeuq.ideate.client.ui.component.SplitPane
 import io.github.safeuq.ideate.client.ui.console.ConsoleEditor
@@ -754,6 +755,8 @@ fun LuxPaneView(
   modifier: Modifier,
   /** Phone upright: see [stackedBuildView]. */
   portrait: Boolean = false,
+  /** The tool window's sideways scroll, for its console ([ConsoleEditor]). */
+  scroll: SidewaysScroll = remember { SidewaysScroll() },
 ) {
   val density = LocalDensity.current
   val stacked = stackedBuildView(portrait, panel.locals)
@@ -822,6 +825,7 @@ fun LuxPaneView(
                   state,
                   session,
                   Modifier.fillMaxSize(),
+                  scroll,
                 )
               }
             }
@@ -841,6 +845,7 @@ fun LuxPaneView(
                 state,
                 session,
                 Modifier.fillMaxWidth().weight(1f),
+                scroll,
               )
             }
           },
@@ -864,6 +869,7 @@ fun LuxPaneView(
           session,
           Modifier.offset(local.bounds.x.dp, local.bounds.y.dp)
             .size(local.bounds.width.dp, local.bounds.height.dp),
+          scroll,
         )
       }
     }
@@ -903,6 +909,7 @@ private fun PanelLocalView(
   state: SessionState,
   session: ClientSession,
   modifier: Modifier,
+  scroll: SidewaysScroll,
 ) {
   when (local) {
     is PanelConsole -> {
@@ -916,6 +923,7 @@ private fun PanelLocalView(
           console,
           scheme,
           modifier.semantics { text = AnnotatedString(console.text) },
+          scroll = scroll,
         )
     }
     is PanelBuildTree -> BuildTreeView(local.modelUid, state, session, modifier)
