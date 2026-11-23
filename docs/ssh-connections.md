@@ -594,3 +594,27 @@ connection starts with (on the desktop the default is still the generated key).
 - **Needs.** Termux installed, Ideate holding Termux's RUN_COMMAND permission, and `allow-external-apps = true` in
   `~/.termux/termux.properties` (the same as for starting the backend). The radio button is checked each time the
   New connection dialog opens, so granting the permission while the app runs is enough.
+
+## Addendum (2026-11-23): Termux's ssh-agent can't be shared over an abstract socket
+
+The idea: Termux runs `ssh-agent` and a small bridge that listens on an abstract Unix socket
+(a socket with a name but no file, e.g. `@ideate-ssh-agent`), checks the caller's user id with
+`SO_PEERCRED` and forwards only Ideate's connections to the agent. Ideate would then log in with
+Termux's keys without the key leaving Termux and without a RUN_COMMAND call per login.
+
+Tested on the S24+ (Android SDK 37), both ends in real app processes:
+
+| | Process | SELinux label | User id |
+|---|---|---|---|
+| Listener (`python3`, started through RUN_COMMAND) | Termux | `untrusted_app_27:s0:c148,c257,c512,c768` | 10404 |
+| Client (`LocalSocket`, `Namespace.ABSTRACT`) | Ideate debug build | `untrusted_app_34` | Ideate's |
+| Control client (`python3` in Termux's sshd) | Termux | `runas_app:s0:c148,c257,c512,c768` | 10404 |
+
+- Ideate's `connect` failed with `java.io.IOException: Permission denied`; the listener never saw
+  a connection. Abstract sockets have no file permissions, so this is SELinux refusing one app
+  connecting to another app's socket. The denial isn't printed to logcat on this phone.
+- The control client in Termux's own user connected and got the answer.
+
+So the agent can only be reached through RUN_COMMAND, one call per agent message (list keys, then
+sign). That keeps the key in Termux and lets `ssh-add` unlock a passphrase key once, but it
+doesn't save time over reading the key file.
