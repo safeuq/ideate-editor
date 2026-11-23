@@ -89,6 +89,9 @@ class MainActivity : ComponentActivity() {
             // Termux's ~/.ssh, offered while Termux is installed and has the permission.
             openSsh = { if (termux.isInstalled && termux.hasPermission) termuxSsh else null },
             openSshLabel = "Termux's ~/.ssh",
+            openSshFolder = "Termux's ~/.ssh",
+            openSshMakeKeyAdvice =
+              "Make one in Termux with `ssh-keygen -t ed25519` (or run `intellij-backend setup`)",
             openSshIsDefault = true,
             // Extra trust only: a Termux failure here must not stop hosts that don't use ~/.ssh.
             alsoKnownHosts = {

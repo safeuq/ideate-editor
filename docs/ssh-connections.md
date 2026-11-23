@@ -667,3 +667,29 @@ line and answers `0x00`, `T` or `A`; after `0x00` it answers a request for ident
 `AgentProxy(connection).identities` works. Also covered: the one re-read and retry, no file, nothing
 listening, a malformed file, and that resolving a login reads only `~/.ssh/config` and not the
 identity files. Not tested on a phone.
+
+## Addendum (2026-11-23): the New Connection dialog shows ~/.ssh's public key
+
+Choosing the OPEN_SSH login ("Termux's ~/.ssh" on Android, "OpenSSH config and authentication
+agent" on the desktop) now shows the public key of `~/.ssh` under its radio button, the same way
+"Ideate key" shows Ideate's own key, so the user can add it to the host's
+`~/.ssh/authorized_keys`.
+
+- **Which file.** The first existing, non-blank one of `~/.ssh/id_ed25519.pub`, `id_ecdsa.pub`,
+  `id_rsa.pub` (`OpenSshPublicKey.FILES`, OpenSSH's default order). It is read through
+  `OpenSshFiles.read` on the SSH worker thread, once per dialog opening, and again when the user
+  switches to OPEN_SSH after a failed read. On Android each read is a Termux call, so the dialog
+  shows `Reading Termux's ~/.ssh…` meanwhile.
+- **Texts** (`SshSetup.openSshFolder` and `openSshMakeKeyAdvice` carry the platform parts):
+
+  | State | Android | Desktop |
+  |---|---|---|
+  | Loading | `Reading Termux's ~/.ssh…` | `Reading ~/.ssh…` |
+  | Found | `Key from Termux's ~/.ssh (add it to the host's ~/.ssh/authorized_keys)`, then `ssh-ed25519 AAAAC3Nza… termux-galaxy-s24-plus` and Copy Public Key | same with `Key from ~/.ssh` |
+  | No key | `There is no SSH key in Termux's ~/.ssh. A key lets Ideate log in without a password: the host lets you in when the key's public half is in its ~/.ssh/authorized_keys. Make one in Termux with `ssh-keygen -t ed25519` (or run `intellij-backend setup`), then add ~/.ssh/id_ed25519.pub to the host.` | same with `~/.ssh` and `Make one with `ssh-keygen -t ed25519``|
+  | Read failed | `Couldn't read Termux's ~/.ssh: <reason>. Connecting may still work through the ssh-agent.` | same with `~/.ssh` |
+
+- **Logging in is unchanged.** A failed or missing key doesn't block Check Connection: the agent
+  may still log in.
+- **Tests.** `OpenSshPublicKeyTest` covers the file order, the blank file, the missing and the
+  failed states with a fake `OpenSshFiles`. Not tested on a phone.

@@ -12,6 +12,8 @@ import io.github.safeuq.ideate.client.ssh.KnownHosts
 import io.github.safeuq.ideate.client.ssh.LaunchFailure
 import io.github.safeuq.ideate.client.ssh.LoginMethod
 import io.github.safeuq.ideate.client.ssh.OpenSshFiles
+import io.github.safeuq.ideate.client.ssh.OpenSshKeyState
+import io.github.safeuq.ideate.client.ssh.OpenSshPublicKey
 import io.github.safeuq.ideate.client.ssh.RecentProject
 import io.github.safeuq.ideate.client.ssh.RemoteFolder
 import io.github.safeuq.ideate.client.ssh.RemoteHost
@@ -50,6 +52,10 @@ class SshSetup(
   val openSsh: () -> OpenSshFiles?,
   /** The OPEN_SSH radio button's text. */
   val openSshLabel: String = "OpenSSH config and authentication agent",
+  /** Names `~/.ssh` in the New Connection dialog: `~/.ssh`, or `Termux's ~/.ssh`. */
+  val openSshFolder: String = "~/.ssh",
+  /** The sentence that says how to make a key, shown when `~/.ssh` has none. */
+  val openSshMakeKeyAdvice: String = "Make one with `ssh-keygen -t ed25519`",
   /** Whether OPEN_SSH, when offered, is the log-in method a new connection starts with. */
   val openSshIsDefault: Boolean = false,
   /** More trusted known_hosts text (`~/.ssh/known_hosts`). Background threads only. */
@@ -102,6 +108,8 @@ sealed interface SshDialog {
   data class NewConnection(
     val form: SshForm,
     val publicKey: String?,
+    /** `~/.ssh`'s public key for OPEN_SSH; null until it is asked for. */
+    val openSshKey: OpenSshKeyState? = null,
     val checking: Boolean = false,
     val error: String? = null,
   ) : SshDialog
@@ -136,6 +144,8 @@ data class SshPageState(
   val message: ConnectMessage? = null,
   val offersOpenSsh: Boolean = false,
   val openSshLabel: String = "",
+  val openSshFolder: String = "",
+  val openSshMissingKeyText: String = "",
 )
 
 class SshActions(
@@ -173,7 +183,15 @@ class SshController(
   private val connect: (link: String, projectPath: String, hostName: String) -> Unit,
 ) {
   private val deviceName = setup.deviceName
-  var state by mutableStateOf(SshPageState(openSshLabel = setup.openSshLabel))
+  var state by
+    mutableStateOf(
+      SshPageState(
+        openSshLabel = setup.openSshLabel,
+        openSshFolder = setup.openSshFolder,
+        openSshMissingKeyText =
+          OpenSshPublicKey.missingText(setup.openSshFolder, setup.openSshMakeKeyAdvice),
+      ),
+    )
     private set
 
   private val hosts = SshHosts(setup.hosts)
@@ -433,11 +451,45 @@ class SshController(
         IdeateKey.get(setup.secrets, "Ideate on $deviceName").publicKey
       else null
     state = state.copy(dialog = SshDialog.NewConnection(form, publicKey))
+    if (form.method == LoginMethod.OPEN_SSH) loadOpenSshKey()
+  }
+
+  @Volatile private var keyRun = 0
+
+  /** Reads `~/.ssh`'s public key on the worker thread; the dialog shows "Reading…" meanwhile. */
+  private fun loadOpenSshKey() {
+    val files = setup.openSsh()
+    if (files == null) {
+      updateDialog<SshDialog.NewConnection> {
+        it.copy(openSshKey = OpenSshKeyState.Failed("${setup.openSshFolder} isn't available now"))
+      }
+      return
+    }
+    val run = ++keyRun
+    updateDialog<SshDialog.NewConnection> { it.copy(openSshKey = OpenSshKeyState.Loading) }
+    work.execute {
+      val loaded = OpenSshPublicKey.load(files)
+      main.launch {
+        if (run == keyRun) updateDialog<SshDialog.NewConnection> { it.copy(openSshKey = loaded) }
+      }
+    }
   }
 
   private inline fun <reified T : SshDialog> updateDialog(change: (T) -> SshDialog) {
     val dialog = state.dialog as? T ?: return
     var changed = change(dialog)
+    // Switching to OPEN_SSH reads ~/.ssh's key, once, or again after a failed read.
+    if (
+      dialog is SshDialog.NewConnection &&
+        changed is SshDialog.NewConnection &&
+        changed.form.method == LoginMethod.OPEN_SSH &&
+        dialog.form.method != LoginMethod.OPEN_SSH &&
+        (changed.openSshKey == null || changed.openSshKey is OpenSshKeyState.Failed)
+    ) {
+      state = state.copy(dialog = changed)
+      loadOpenSshKey()
+      return
+    }
     // The generated key's public line is shown as soon as that method is picked.
     if (
       changed is SshDialog.NewConnection &&

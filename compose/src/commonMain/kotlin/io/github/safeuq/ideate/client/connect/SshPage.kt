@@ -27,6 +27,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.safeuq.ideate.client.ssh.LoginMethod
+import io.github.safeuq.ideate.client.ssh.OpenSshKeyState
 import io.github.safeuq.ideate.client.ui.MenuItem
 import io.github.safeuq.ideate.client.ui.component.CheckboxRow
 import io.github.safeuq.ideate.client.ui.component.OutlinedButton
@@ -160,7 +161,15 @@ internal fun SshOverlays(state: SshPageState, actions: SshActions, fonts: Client
   var browsing by remember { mutableStateOf(false) }
   when (val dialog = state.dialog) {
     is SshDialog.NewConnection ->
-      NewConnectionDialog(dialog, state.offersOpenSsh, state.openSshLabel, actions, fonts)
+      NewConnectionDialog(
+        dialog,
+        state.offersOpenSsh,
+        state.openSshLabel,
+        state.openSshFolder,
+        state.openSshMissingKeyText,
+        actions,
+        fonts,
+      )
     is SshDialog.ChooseIde ->
       if (browsing) {
         FolderChooser(
@@ -212,6 +221,8 @@ private fun NewConnectionDialog(
   dialog: SshDialog.NewConnection,
   offersOpenSsh: Boolean,
   openSshLabel: String,
+  openSshFolder: String,
+  openSshMissingKeyText: String,
   actions: SshActions,
   fonts: ClientFonts,
 ) {
@@ -241,19 +252,7 @@ private fun NewConnectionDialog(
       actions.formChanged(form.copy(method = LoginMethod.GENERATED_KEY))
     }
     if (form.method == LoginMethod.GENERATED_KEY) {
-      dialog.publicKey?.let { publicKey ->
-        val clipboard = LocalClipboardManager.current
-        BasicText(
-          publicKey,
-          style = fonts.editor(IslandsDark.textSecondary).copy(fontSize = 11.sp),
-          modifier = Modifier.padding(start = 28.dp),
-        )
-        Box(Modifier.padding(start = 28.dp)) {
-          OutlinedButton("Copy Public Key") {
-            clipboard.setText(AnnotatedString(publicKey))
-          }
-        }
-      }
+      dialog.publicKey?.let { publicKey -> PublicKeyBlock(publicKey, fonts) }
     }
     RadioButtonRow("Specify private key", form.method == LoginMethod.KEY_FILE) {
       actions.formChanged(form.copy(method = LoginMethod.KEY_FILE))
@@ -290,7 +289,54 @@ private fun NewConnectionDialog(
       RadioButtonRow(openSshLabel, form.method == LoginMethod.OPEN_SSH) {
         actions.formChanged(form.copy(method = LoginMethod.OPEN_SSH))
       }
+      if (form.method == LoginMethod.OPEN_SSH) {
+        val note = fonts.label(IslandsDark.textSecondary)
+        when (val key = dialog.openSshKey) {
+          null -> {}
+          OpenSshKeyState.Loading ->
+            BasicText(
+              "Reading $openSshFolder…",
+              style = note,
+              modifier = Modifier.padding(start = 28.dp),
+            )
+          is OpenSshKeyState.Found -> {
+            BasicText(
+              "Key from $openSshFolder (add it to the host's ~/.ssh/authorized_keys)",
+              style = note,
+              modifier = Modifier.padding(start = 28.dp),
+            )
+            PublicKeyBlock(key.line, fonts)
+          }
+          OpenSshKeyState.Missing ->
+            BasicText(
+              openSshMissingKeyText,
+              style = note,
+              modifier = Modifier.padding(start = 28.dp),
+            )
+          is OpenSshKeyState.Failed ->
+            BasicText(
+              "Couldn't read $openSshFolder: ${key.reason}. Connecting may still work through " +
+                "the ssh-agent.",
+              style = note,
+              modifier = Modifier.padding(start = 28.dp),
+            )
+        }
+      }
     }
+  }
+}
+
+/** A public key line and its Copy button, indented under its radio button. */
+@Composable
+private fun PublicKeyBlock(publicKey: String, fonts: ClientFonts) {
+  val clipboard = LocalClipboardManager.current
+  BasicText(
+    publicKey,
+    style = fonts.editor(IslandsDark.textSecondary).copy(fontSize = 11.sp),
+    modifier = Modifier.padding(start = 28.dp),
+  )
+  Box(Modifier.padding(start = 28.dp)) {
+    OutlinedButton("Copy Public Key") { clipboard.setText(AnnotatedString(publicKey)) }
   }
 }
 
