@@ -97,8 +97,8 @@ enum class Place(val side: Side, val split: Boolean) {
 /**
  * A tool window button: one of the backend's tool windows ([BackendToolWindow]) or Project and
  * Terminal, which JetBrains Client registers itself. Every one opens: Project and Structure are
- * Ideate's own; a backend window shows the toolbar and tree the backend sends (Gradle), or "Tool
- * window not implemented" when it sends neither. Two are the same window when their [id]s are.
+ * Ideate's own; a backend window shows the panel, or the toolbar and tree, the backend sends
+ * (Build, Gradle), or nothing when it sends neither. Two are the same window when their [id]s are.
  */
 class ToolWindow(val id: String, val title: String, val icon: String?, val place: Place) {
 

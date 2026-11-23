@@ -225,9 +225,9 @@ class ClientSession(
         actionMenus?.show(serial, groupId, place, timestamps)
       },
       publish = { views -> mutableState.update { it.copy(backendViews = views) } },
-      showRequested = { windowId ->
+      showRequested = { windowId, show ->
         mutableState.update {
-          it.copy(showRequest = ShowRequest(windowId, (it.showRequest?.serial ?: 0) + 1))
+          it.copy(showRequest = ShowRequest(windowId, (it.showRequest?.serial ?: 0) + 1, show))
         }
       },
       luxComponent = { id -> luxProtocol?.luxModel?.components?.get(id) },

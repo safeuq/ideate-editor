@@ -118,8 +118,8 @@ data class Highlight(
  */
 @Serializable data class GutterIcon(val offset: Int, val iconPaths: List<String>)
 
-/** [windowId] is a backend tool window id, e.g. `Run`. */
-data class ShowRequest(val windowId: String, val serial: Int)
+/** [windowId] is a backend tool window id, e.g. `Run`; [show] false asks to hide it. */
+data class ShowRequest(val windowId: String, val serial: Int, val show: Boolean = true)
 
 /** A console's text and its colors, e.g. the Run window's `Main` output. */
 data class ConsoleText(val text: String, val highlights: List<Highlight>)

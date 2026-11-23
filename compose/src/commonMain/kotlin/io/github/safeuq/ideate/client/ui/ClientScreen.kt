@@ -237,18 +237,25 @@ fun ClientScreen(
     }
     LocalBackHandler.current(editorCovered) { backToEditor() }
 
+    // Closes [window]; on a phone upright the last one of a side page takes you back to the middle.
+    fun closeWindow(window: ToolWindow) {
+      windows.close(window)
+      if (
+        layout == ScreenLayout.PORTRAIT &&
+          window.place.side.page() != Page.MIDDLE &&
+          windows.openOn(window.place.side).isEmpty()
+      )
+        page = Page.MIDDLE
+    }
+
     fun barClick(window: ToolWindow) {
       if (layout != ScreenLayout.PORTRAIT) return windows.toggle(window, layout)
       val target = window.place.side.page()
       when {
         // Open on another page: show that page.
         windows.isOpen(window) && page != target -> page = target
-        // On screen: close it; the last one of a side page takes you back to the middle.
-        windows.isOpen(window) -> {
-          windows.close(window)
-          if (target != Page.MIDDLE && windows.openOn(window.place.side).isEmpty())
-            page = Page.MIDDLE
-        }
+        // On screen: close it.
+        windows.isOpen(window) -> closeWindow(window)
         else -> {
           windows.open(window, layout)
           page = target
@@ -281,7 +288,8 @@ fun ClientScreen(
         .toSet()
     LaunchedEffect(backendShown) { session.setBackendToolWindowsShown(backendShown) }
     // The backend asks for a window to show, e.g. Run when a run starts (IntelliJ's "Activate tool
-    // window"). The window's own button does the opening.
+    // window"), or to hide, e.g. Build when its last tab closed. The window's own button does the
+    // opening.
     // The request can come before the window has its button, so it waits for the button.
     var handledRequest by remember { mutableStateOf(0) }
     LaunchedEffect(state.showRequest, buttons) {
@@ -291,7 +299,8 @@ fun ClientScreen(
         buttons.byPlace.values.flatten().firstOrNull { it.id == request.windowId }
           ?: return@LaunchedEffect
       handledRequest = request.serial
-      if (window !in shown) barClick(window)
+      if (request.show && window !in shown) barClick(window)
+      if (!request.show && windows.isOpen(window)) closeWindow(window)
     }
 
     // Opening a file from a tool window shows the editor on a phone held upright.
@@ -777,7 +786,8 @@ private fun BackendToolWindowContent(
   if (view == null || (view.tree.nodes.isEmpty() && view.toolbar.isEmpty())) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
       BasicText(
-        view?.label ?: if (view == null) "Tool window not implemented" else "",
+        // Empty until the backend's content arrives, a moment after the window opens.
+        view?.label ?: "",
         style = LocalClientFonts.current.label().copy(color = IslandsDark.textSecondary),
       )
     }

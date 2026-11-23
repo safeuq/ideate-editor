@@ -39,7 +39,11 @@ data class BackendToolWindowView(
   /** The tabs' names, e.g. `["Main", "Slow"]` in Run; [selectedTab] is the one that shows. */
   val tabs: List<String> = emptyList(),
   val selectedTab: Int = 0,
-  /** Per tab: whether it has a close button (`BeTab.isCloseable`). */
+  /**
+   * Per tab: whether it has a close button, as IntelliJ's `ContentTabLabel.canBeClosed`: the tab is
+   * closeable (`BeTab.isCloseable`) and so is the window's content
+   * (`BeToolWindow.canCloseContents`; false for Database, whose tree has no close button).
+   */
   val closeable: List<Boolean> = emptyList(),
   /** The selected tab's panel when the backend paints it (Run, Build): a `BeneluxView`. */
   val panel: LuxDialog? = null,
@@ -63,8 +67,12 @@ internal class BackendToolWindowViews(
   private val loadToolbar:
     (windowId: String, groupId: String, place: String, ActionTimestampSetModel) -> Unit,
   private val publish: (Map<String, BackendToolWindowView>) -> Unit,
-  /** The backend set a hidden window Active, e.g. Run when a run starts: show it. */
-  private val showRequested: (windowId: String) -> Unit = {},
+  /**
+   * The backend set a hidden window Active, e.g. Run when a run starts: show it ([show] true). Or
+   * it hid a window on screen, e.g. Build after its last tab closed (IntelliJ's
+   * `ToolWindowContentUi.contentRemoved` for a window that hides on empty content): hide it.
+   */
+  private val showRequested: (windowId: String, show: Boolean) -> Unit = { _, _ -> },
   /** The Lux component with this id, e.g. a `BeneluxView`'s panel; null when it isn't there. */
   private val luxComponent: (Int) -> Any? = { null },
   private val log: (String) -> Unit = {},
@@ -93,8 +101,10 @@ internal class BackendToolWindowViews(
       model.toolWindow.state.advise(windowLifetime) { state ->
         log("Tool window $id state $state")
         // A window the backend registers already Active (Run, as a run starts) or sets Active
-        // later is to show. Our own changes (setShown) come with the window already in [shown].
-        if (state != BeToolWindowState.Hidden && id !in shown) showRequested(id)
+        // later is to show; one it sets Hidden while on screen is to hide. Our own changes
+        // (setShown, hide) come with [shown] already changed, so they ask for nothing.
+        val show = state != BeToolWindowState.Hidden
+        if (show != (id in shown)) showRequested(id, show)
       }
       windowLifetime.onTermination {
         models.remove(id)
@@ -147,7 +157,9 @@ internal class BackendToolWindowViews(
     val content = models[windowId]?.content ?: return
     val tabs = content.tabs
     val tab = tabs.getOrNull(index) ?: return
-    require(tab.isCloseable) { "Tab $index of $windowId is not closeable" }
+    require(tab.isCloseable && models[windowId]?.canCloseContents == true) {
+      "Tab $index of $windowId is not closeable"
+    }
     log("Closing tab $index (${tab.tabName.text.value}) of $windowId")
     tabs.remove(tab)
     // The backend builds a tab's content when it is selected and keeps the old index: select the
@@ -213,7 +225,8 @@ internal class BackendToolWindowViews(
     val names = tabNames(content.tabs.toList())
     log("Tool window $id: tabs $names, selected ${content.selectedIndex.valueOrNull}")
     val selected = content.tabs.indexOf(tab).coerceAtLeast(0)
-    val closeable = content.tabs.map { it.isCloseable }
+    val canClose = models[id]?.canCloseContents == true
+    val closeable = content.tabs.map { it.isCloseable && canClose }
     if (tab != null && tab === window.tab) {
       update(id) { copy(tabs = names, selectedTab = selected, closeable = closeable) }
       return
