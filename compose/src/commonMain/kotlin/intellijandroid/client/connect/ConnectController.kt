@@ -805,20 +805,9 @@ class ConnectController(
         else -> TermuxAccess.READY
       }
     }
-    thread(name = "local-ports", isDaemon = true) {
-      val ports = LocalPorts.open()
-      main.launch {
-        val known = localBackends.filter { it.joinLink != null && it.port in ports }
-        localBackends =
-          known +
-            ports
-              .filter { port -> known.none { it.port == port } }
-              .map { port ->
-                DiscoveredBackend("$device · port $port", port, project = null, joinLink = null)
-              }
-      }
-    }
-    if (termuxAccess != TermuxAccess.READY) return
+    // With Termux the ports are probed once its status has answered (2 s or more on a phone):
+    // before that, Termux's own backend port would show as an unknown "127.0.0.1:5990" row.
+    if (termuxAccess != TermuxAccess.READY) return probePorts()
     requireTermux().run(listOf("status", "--json")) { result ->
       result.fold(
         onSuccess = { output ->
@@ -847,6 +836,23 @@ class ConnectController(
         },
         onFailure = { failure -> fail(failure.message ?: failure.toString()) },
       )
+      probePorts()
+    }
+  }
+
+  private fun probePorts() {
+    thread(name = "local-ports", isDaemon = true) {
+      val ports = LocalPorts.open()
+      main.launch {
+        val known = localBackends.filter { it.joinLink != null && it.port in ports }
+        localBackends =
+          known +
+            ports
+              .filter { port -> known.none { it.port == port } }
+              .map { port ->
+                DiscoveredBackend("$device · port $port", port, project = null, joinLink = null)
+              }
+      }
     }
   }
 

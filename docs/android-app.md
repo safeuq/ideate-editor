@@ -26,7 +26,7 @@ The app opens on the connect screen, shared with the desktop since 2026-11-17 (`
 | Part | What it does |
 |---|---|
 | Join link | Paste the link the backend printed, optionally an absolute file path on the backend, and tap **Connect**. |
-| On this phone | Backends running here: from Termux (`intellij-backend status --json`, once the app may run Termux commands), or any of the ports 127.0.0.1:5990–5999 that accept a connection. A bare port needs its link pasted. |
+| On this phone | Backends running here: from Termux (`intellij-backend status --json`, once the app may run Termux commands), or any of the ports 127.0.0.1:5990–5999 that accept a connection. A bare port needs its link pasted. With Termux, the ports are probed only after `status` answers (2 s or more), so Termux's own port never shows as a bare `127.0.0.1:5990` row while it is still answering. |
 | History | Connections that worked, newest first. A tap connects again with the stored link and client identity, also after the app was closed. When the backend has restarted, the old link is refused: paste the new one, and the entry is updated. Termux entries ask Termux for the current link, and offer `intellij-backend start <project>` when none is running. |
 
 | Backend | Join link |
