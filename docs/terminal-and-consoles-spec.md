@@ -993,3 +993,6 @@ Only on a phone: the stacked layout needs `ScreenLayout.PORTRAIT` and a window n
 (Android's tablet line, as in `screenLayout`); a tablet upright keeps the backend's layout. Checked on
 the S24+ (411 dp wide) with xtool's Sync tab: console on top, the tree (`xtool: finished`) below, both
 toolbar strips on the left; dragging the divider moves it.
+
+Checked on the S24+ (xtool's Sync tab): both rows drawn with their lines, and the Filter menu opens
+under its button.
