@@ -607,3 +607,26 @@ popup but a backend list popup (`BackendPopups`).
 **Why simply reporting scale 2 is not enough.** Tried live on the Mac (`gradle-smoke`, Run window of the `hello` task): with both transforms at `[2, 0, 0, 2, 0, 0]` the Run toolbar's icons (Rerun, Run, Stop, the eye) came out twice their size and overlapped the tree. The backend's transforms then include the screen scale: `LxTransformStateChange` replaces the whole transform (AWT `setTransform`), as it does in a Graphics2D whose base transform is the 2x default transform. `LuxPainter.paint` scales the canvas by the density first, so the 2x counts twice.
 
 **The fix (2026-11-22).** IDEate now reports the real scale, as JetBrains Client does: `luxScreenScale` (`ui/lux/LuxImages.kt`) is set at startup from the default screen's `defaultTransform` on the desktop (2 on a Retina Mac) and from `displayMetrics.density` on Android, and `LuxDialogs.CONFIGURATION` sends it as both transforms. `LuxPainter.paint` scales the canvas by `density / luxScreenScale` instead of `density`, so the backend's transforms carry the scale and its images are drawn at full resolution. Component bounds, positions and events stay in backend pixels (dp), as AWT keeps them in user space, so input and layout are unchanged. Checked on the Mac at 2x: the Run toolbar icons are sharp and the normal size, the Rename dialog looks the same as before (its shapes and text were already vector drawing), and clicks land on the right controls. A window moved to a screen of another density keeps the scale reported at startup; the factor `density / luxScreenScale` keeps the size right, only the sharpness differs. Not yet checked on Android (fractional densities such as 2.625).
+
+## Addendum (2026-11-23): dialogs fit the phone screen
+
+**What was wrong.** IDEate always reported a 1920 × 1200 screen (`LuxDialogs.CONFIGURATION`, and the same screen in `graphicsDevices`), so on a phone the backend laid dialogs out for a desktop, and IDEate wrote every preferred size back as the window size with no limit.
+
+**What JetBrains Client does** (`LuxFrontendPanelAdapter`, in `intellij.platform.frontend.split.jar`): on each `preferredSize` it sets the Swing panel's preferred size, packs the window, calls `ScreenUtil.fitToScreen(bounds)` (move onto the screen, then crop to it) and writes the panel's real size back to `size`. On the backend, `LuxComponentAdapter.receiveSize` calls `Window.setSize`, `validate` and `repaint`, so the dialog is laid out again at that size.
+
+**The fix.** Every Lux window now uses the same rule:
+
+| | Before | Now |
+|---|---|---|
+| Reported screen (`luxScreenSize`) | 1920 × 1200 everywhere | Android: the app's screen in dp (e.g. 393 × 785 on a Pixel 3a); desktop: 1920 × 1200 |
+| Size written back | `preferredSize` | `LuxDialogs.fitToScreen(preferredSize)`: each side cropped to the screen |
+| Size drawn | `preferredSize` | the fitted size, but never below the window's `minimumSize` |
+
+- `LuxDialogs` reports the screen (`graphicsConfiguration`) before it writes any size, and fits again when `preferredSize` or `minimumSize` changes. `BackendPopups` (a Lux panel in a popup) and `LuxPanelHost` crop the same way.
+- Why never below the minimum: AWT's `Window.setSize` won't make a window smaller than its minimum size, so the backend keeps laying it out at the minimum. Drawing it smaller would cut off its right part with nothing to pan to.
+
+**Dialogs opened after the client connects** fit the phone on the backend side too: the backend picks a new window's screen from the client's `graphicsDevices` (`LuxComponentAdapter.guessInitialGraphicsConfiguration` → `IdeGraphicsEnvironment.findGraphicsConfigurationFor`), `DialogWrapper.fitToScreen` fits the window to that screen, and `DialogWrapperPeerImpl.MyDialog.validate` caps the window's minimum size at it.
+
+**Dialogs opened before any client connects stay wide.** Example: "Trust and Open Project", which remote-dev-server shows when it opens the project at startup. With no client, the backend's screen is `HeadlessDummyGraphicsEnvironment`'s fixed 1024 × 768 (there is no setting for it). The dialog was packed there with a minimum of 637 × 201. `MyDialog.validate` caps the minimum again only when the root pane's own minimum changes (`myLastMinimumSize`), and a new screen doesn't change it. So the client can't shrink it (checked on the Pixel 3a emulator: preferred 637 × 201, minimum 637 × 201). IDEate draws it at 637 dp, scaled to 0.75 and pannable (`dialogFit`), as before.
+
+ponytail: the screen is reported once per connection; a rotation is not re-sent.

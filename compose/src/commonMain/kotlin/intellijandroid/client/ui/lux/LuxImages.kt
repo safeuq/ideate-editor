@@ -1,6 +1,7 @@
 package intellijandroid.client.ui.lux
 
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.unit.IntSize
 import com.jetbrains.rd.ide.model.LxImageContent
 import com.jetbrains.rd.ide.model.LxPngImageContent
 
@@ -22,6 +23,15 @@ fun interface PngDecoder {
  * transform. [LuxPainter] takes it back out.
  */
 @Volatile var luxScreenScale: Float = 1f
+
+/**
+ * The screen size reported to the backend, in dp (its pixels), set once at startup like
+ * [luxScreenScale]. IntelliJ fits every dialog to the screen it shows on
+ * (`DialogWrapper.fitToScreen` → `ScreenUtil.fitToScreen`), so on a phone this keeps a dialog such
+ * as "Trust and Open Project" no wider than the phone. Android: the app's screen in dp; the desktop
+ * keeps 1920 × 1200. ponytail: sent when the session connects; a later rotation isn't re-sent.
+ */
+@Volatile var luxScreenSize: IntSize = IntSize(1920, 1200)
 
 /**
  * Images Lux sends once and then refers to by id, shared by all dialogs of a session, as the

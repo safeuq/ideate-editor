@@ -56,7 +56,9 @@ internal class LuxPanelHost(
 
   init {
     if (panel.layoutSource != LuxLayoutSource.Frontend)
-      panel.preferredSize.advise(lifetime) { preferred -> panel.size.set(preferred) }
+      panel.preferredSize.advise(lifetime) { preferred ->
+        panel.size.set(LuxDialogs.fitToScreen(preferred))
+      }
     panel.size.advise(lifetime) { size ->
       surface.width = size.width
       surface.height = size.height

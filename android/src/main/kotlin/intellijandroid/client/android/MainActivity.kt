@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.IntSize
 import androidx.core.content.edit
 import intellijandroid.client.connect.ConnectApp
 import intellijandroid.client.connect.ConnectController
@@ -21,6 +22,7 @@ import intellijandroid.client.session.OpenEditors
 import intellijandroid.client.ssh.RemoteHosts
 import intellijandroid.client.ui.lux.PngDecoder
 import intellijandroid.client.ui.lux.luxScreenScale
+import intellijandroid.client.ui.lux.luxScreenSize
 import intellijandroid.client.ui.lux.pngDecoder
 
 /**
@@ -55,6 +57,8 @@ class MainActivity : ComponentActivity() {
       BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
     }
     luxScreenScale = resources.displayMetrics.density
+    luxScreenSize =
+      IntSize(resources.configuration.screenWidthDp, resources.configuration.screenHeightDp)
     val fonts = AndroidResources.fonts(this)
     val icons =
       AndroidResources.SvgIcons(AndroidResources.iconJar(this), resources.displayMetrics.density)

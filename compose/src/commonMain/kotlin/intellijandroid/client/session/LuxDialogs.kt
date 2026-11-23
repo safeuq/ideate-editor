@@ -18,6 +18,7 @@ import com.jetbrains.rd.ide.model.LxEvent
 import com.jetbrains.rd.ide.model.LxFrame
 import com.jetbrains.rd.ide.model.LxPoint
 import com.jetbrains.rd.ide.model.LxRect
+import com.jetbrains.rd.ide.model.LxSize
 import com.jetbrains.rd.ide.model.LxWindow
 import com.jetbrains.rd.ide.model.LxWindowEvent
 import com.jetbrains.rd.ide.model.LxWindowEventType
@@ -26,6 +27,7 @@ import com.jetbrains.rd.util.lifetime.Lifetime
 import com.jetbrains.rd.util.reactive.viewNotNull
 import intellijandroid.client.ui.lux.LuxImages
 import intellijandroid.client.ui.lux.luxScreenScale
+import intellijandroid.client.ui.lux.luxScreenSize
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
@@ -154,21 +156,29 @@ internal class LuxDialogs(
         dialog.x = position.x.toInt()
         dialog.y = position.y.toInt()
       }
-      component.preferredSize.advise(componentLifetime) { preferred ->
-        // Like LuxFrontendPanelAdapter: every preferred size packs the window again, also after it
-        // shows, and is written back as its size. The backend's own window size is not taken: for
-        // the decompiler's licence dialog its DialogWrapper kept 555 × 158 ("has changed after
-        // showing … resetting it back") while the content needed 555 × 389, which cut the buttons
-        // off.
-        dialog.width = preferred.width
-        dialog.height = preferred.height
-        if (component.size.valueOrNull != preferred) component.size.set(preferred)
+      // The screen first: DialogWrapper caps a window's minimum size at its screen
+      // (DialogWrapperPeerImpl.MyDialog.validate), and AWT's Window.setSize won't go below that
+      // minimum.
+      if (component.graphicsConfiguration.valueOrNull == null)
+        component.graphicsConfiguration.set(CONFIGURATION)
+      if (component.position.valueOrNull == null) component.position.set(LxPoint(0.0, 0.0))
+      // Like LuxFrontendPanelAdapter: every preferred size packs the window again, also after it
+      // shows, is fitted to the screen and written back as its size. The backend's own window size
+      // is not taken: for the decompiler's licence dialog its DialogWrapper kept 555 × 158 ("has
+      // changed after showing … resetting it back") while the content needed 555 × 389, which cut
+      // the buttons off. It is drawn no smaller than its minimum, as the backend window can't be.
+      // Example: "Trust and Open Project" asks for 637 × 201 with a minimum of 637 × 201; once the
+      // backend caps the minimum at the 393 dp phone, it is 393 × 201.
+      fun fit() {
+        val preferred = component.preferredSize.valueOrNull ?: return
+        val fitted = fitToScreen(preferred)
+        val minimum = component.minimumSize.valueOrNull
+        dialog.width = maxOf(fitted.width, minimum?.width ?: 0)
+        dialog.height = maxOf(fitted.height, minimum?.height ?: 0)
+        if (component.size.valueOrNull != fitted) component.size.set(fitted)
       }
-      component.size.advise(componentLifetime) {
-        if (component.position.valueOrNull == null) component.position.set(LxPoint(0.0, 0.0))
-        if (component.graphicsConfiguration.valueOrNull == null)
-          component.graphicsConfiguration.set(CONFIGURATION)
-      }
+      component.preferredSize.advise(componentLifetime) { fit() }
+      component.minimumSize.advise(componentLifetime) { fit() }
       component.graphics.drawOperations.advise(componentLifetime) { operations ->
         dialog.batches += operations
         dialog.version++
@@ -206,8 +216,9 @@ internal class LuxDialogs(
 
   internal companion object {
     /**
-     * One screen at [luxScreenScale]; a backend pixel (component bounds, events) is still a dp. Its
-     * size only bounds where the backend places windows; IDEate centres its dialogs itself.
+     * One screen of [luxScreenSize] at [luxScreenScale]; a backend pixel (component bounds, events)
+     * is still a dp. Its size bounds how big the backend makes a dialog; IDEate centres its dialogs
+     * itself.
      */
     internal val CONFIGURATION: RemoteGraphicsConfigurationModel
       get() {
@@ -215,11 +226,23 @@ internal class LuxDialogs(
         val transform = LxAffineTransform(doubleArrayOf(scale, 0.0, 0.0, scale, 0.0, 0.0))
         return RemoteGraphicsConfigurationModel(
           "ideate",
-          LxRect(0, 0, 1920, 1200),
+          LxRect(0, 0, luxScreenSize.width, luxScreenSize.height),
           transform,
           transform,
         )
       }
+
+    /**
+     * [preferred] cropped to the screen, as LuxFrontendPanelAdapter packs a Lux window and then
+     * calls `ScreenUtil.fitToScreen` before writing its size back; the backend then lays the window
+     * out at that size. Example on a 411 × 842 dp phone: "Trust and Open Project" asks for 637 ×
+     * 201 and gets 411 × 201.
+     */
+    internal fun fitToScreen(preferred: LxSize): LxSize =
+      LxSize(
+        preferred.width.coerceAtMost(luxScreenSize.width),
+        preferred.height.coerceAtMost(luxScreenSize.height),
+      )
 
     private const val DEVICE = "ideate"
   }

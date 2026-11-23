@@ -226,7 +226,9 @@ internal class BackendPopups(
           val surface = LuxDialog(control.luxId, false, true, true, "", 0, 0)
           // The popup is laid out around the panel, so it gets the size it asks for (with either
           // layout source; the client does the same).
-          panel.preferredSize.advise(popupLifetime) { preferred -> panel.size.set(preferred) }
+          panel.preferredSize.advise(popupLifetime) { preferred ->
+            panel.size.set(LuxDialogs.fitToScreen(preferred))
+          }
           panel.size.advise(popupLifetime) { size ->
             surface.width = size.width
             surface.height = size.height
