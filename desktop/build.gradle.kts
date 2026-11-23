@@ -44,7 +44,7 @@ kotlin {
 compose {
   desktop {
     application {
-      mainClass = "intellijandroid.client.MainKt"
+      mainClass = "io.github.safeuq.ideate.client.MainKt"
       // Run on the JetBrains Runtime of the same JetBrains Client install, whatever JDK Gradle runs
       // on: the macOS title bar needs JBR's window decorations (MacTitleBar.kt); another runtime
       // falls back to the native title bar. The install keeps it next to lib:

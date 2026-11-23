@@ -1,6 +1,6 @@
 # IntelliJ's look: Islands Dark editor and Project tree
 
-Reference values for `client/` (used by `compose/src/commonMain/kotlin/intellijandroid/client/ui/IslandsDark.kt` and `EditorView.kt`). Researched 2026-11-15. The client takes editor text colors from the backend's color scheme at run time; the tables below are for the chrome around it and for checking.
+Reference values for `client/` (used by `compose/src/commonMain/kotlin/io/github/safeuq/ideate/client/ui/IslandsDark.kt` and `EditorView.kt`). Researched 2026-11-15. The client takes editor text colors from the backend's color scheme at run time; the tables below are for the chrome around it and for checking.
 
 
 Legend: **Seen** = read in an installed file or in source at tag `idea/263.7307.200`. **Inferred** = computed from Seen code/values, or not readable without running the IDE.
@@ -10,7 +10,7 @@ Values were read from the installed IDE's jars and from the IntelliJ Community s
 
 Things I could NOT read (user config is off limits) and that change numbers; confirm with the user:
 1. Editor line spacing (default 1.2, `FontPreferences.DEFAULT_LINE_SPACING`). The user may have changed it.
-2. Compact mode (IntelliJ's default is off). The user's IntelliJ runs in compact mode (`UI_DENSITY = COMPACT`, seen 2026-11-17), and so does IDEate by default. Both densities are in section 11; values below marked "compact" are the same pairs.
+2. Compact mode (IntelliJ's default is off). The user's IntelliJ runs in compact mode (`UI_DENSITY = COMPACT`, seen 2026-11-17), and so does Ideate by default. Both densities are in section 11; values below marked "compact" are the same pairs.
 3. Whether line numbers / folding outline / git change markers / breadcrumbs are shown (assumed default: line numbers on, folding outline on, gutter icons on, left free painters (git markers) shown in a git project).
 
 ---------------------------------------------------------------------
@@ -183,12 +183,12 @@ Total (git project, markers shown) = 4+4+L+4+10+17+4+0+11+9 = **63 + L**: 77 wit
 Line numbers are **right-aligned**: right edge x = 4 + 4 + L (left of "gap after line numbers"), font 11 px JBM plain, baseline = line top + the editor's ascent' (not the 11 px font's), color per 2.1. Text area starts at gutter width (separate component, no extra padding; the 3 px strip before the separator is inside the gutter). Fold chevron icon `expui/gutter/fold(_dark).svg` is only drawn on hover (alpha context) in New UI.
 Line numbers area on a non-real editor without numbers: 14 wide.
 
-IDEate (`EditorView`, 2026-11-19): items 1, 2, 4 and 7 follow the density (`IslandsDark.gutterEmptyAnnotationArea`,
+Ideate (`EditorView`, 2026-11-19): items 1, 2, 4 and 7 follow the density (`IslandsDark.gutterEmptyAnnotationArea`,
 `gutterGap`); before that the numbers started at the island's edge (items 1 and 2 left out) and items 4 and 7 were
 always 4. Items 5 (no git markers yet), 8 and 10 are not drawn; the folding area is 11 + 6. Normal density, two-digit
 numbers: numbers from 8, text at 64; compact: numbers from 2, text at 54. The desktop takes the density from the
 newest `IntelliJIdea*/options/ui.lnf.xml`; JetBrains Client keeps its own settings and runs at normal density when
-it has none, so it can show the normal gaps while the desktop IntelliJ (and IDEate) is compact.
+it has none, so it can show the normal gaps while the desktop IntelliJ (and Ideate) is compact.
 
 ## 3. Project tool window (Islands Dark colors resolved)
 
@@ -337,7 +337,7 @@ These measurements were most likely taken in compact mode: the row height (22) a
 
 ## 8. Completion popup, measured (2026-11-15)
 
-From a screenshot of the real client's popup at 2× (`compose/src/commonMain/kotlin/intellijandroid/client/ui/LookupPopup.kt` uses these):
+From a screenshot of the real client's popup at 2× (`compose/src/commonMain/kotlin/io/github/safeuq/ideate/client/ui/LookupPopup.kt` uses these):
 
 | Item | Value |
 |---|---|
@@ -406,11 +406,11 @@ Landscape keeps the sidebar, now always 224 wide.
 
 IntelliJ's Settings | Appearance | UI density has two values, `DEFAULT` and `COMPACT` (`com.intellij.ide.ui.UIDensity`). In compact mode `LafManagerImpl` copies every theme key ending in `.compact` over the key without it, e.g. `Tree.rowHeight.compact` 22 over `Tree.rowHeight` 24; a key without a `.compact` twin stays the same. The setting is saved in `<config>/options/ui.lnf.xml` as `<option name="UI_DENSITY" value="COMPACT" />`; at `DEFAULT` the option is left out.
 
-IDEate has one setting, `IslandsDark.density`, and every size below that IDEate draws reads it. The default is compact. The desktop app reads it at start (never writes) from the newest `IntelliJIdea<version>/options/ui.lnf.xml` (macOS `~/Library/Application Support/JetBrains`, Linux `~/.config/JetBrains`, Windows `%APPDATA%\JetBrains`): option present means that value, a settings folder without the file means normal, and no IntelliJ settings means compact. `IDEATE_UI_DENSITY=normal` or `compact` overrides it. The Android app uses compact.
+Ideate has one setting, `IslandsDark.density`, and every size below that Ideate draws reads it. The default is compact. The desktop app reads it at start (never writes) from the newest `IntelliJIdea<version>/options/ui.lnf.xml` (macOS `~/Library/Application Support/JetBrains`, Linux `~/.config/JetBrains`, Windows `%APPDATA%\JetBrains`): option present means that value, a settings folder without the file means normal, and no IntelliJ settings means compact. `IDEATE_UI_DENSITY=normal` or `compact` overrides it. The Android app uses compact.
 
 Key values from `darcula.theme.json` → `expUI_dark.theme.json` → `ManyIslandsDark.theme.json` (each overrides the one before), and code defaults from `JBUI.CurrentTheme` where the theme has only the compact key.
 
-| What | Key | Normal | Compact | In IDEate (`IslandsDark` unless named) |
+| What | Key | Normal | Compact | In Ideate (`IslandsDark` unless named) |
 |---|---|---|---|---|
 | Main toolbar button | `MainToolbar.Button.size` | 30,30 (code) | 26,26 | `toolbarButton` |
 | Main toolbar icon | `MainToolbar.Button.iconSize` | 20 (code) | 16 | `toolbarIcon`; the project badge too (`RecentProject.Avatar.iconSize` falls back to it) |
@@ -435,17 +435,17 @@ Key values from `darcula.theme.json` → `expUI_dark.theme.json` → `ManyIsland
 | Editor tabs font | `EditorTabs.fontSizeOffset` | 0 | -1 | not used yet |
 | Component arc, button and field heights | `Component.arc`, `Button.minimumSize`, `TextField.minimumSize`, `ComboBox.minimumSize` | 8, 28 | 6, 24 | not used (connect screen sizes are Gateway's, section 10) |
 
-Other `.compact` keys in those themes (popups, find, search everywhere, status bar, run widget, VCS log, diff, debugger tabs, title pane) are for parts IDEate doesn't draw.
+Other `.compact` keys in those themes (popups, find, search everywhere, status bar, run widget, VCS log, diff, debugger tabs, title pane) are for parts Ideate doesn't draw.
 
 Checked 2026-11-17 on the desktop against a Mac backend (snapshots with `CLIENT_SNAPSHOT`): in compact mode the main toolbar and the tool window bar both have 16 px icons, the toolbar is 32 high, tree rows 22, the header 31; with `IDEATE_UI_DENSITY=normal` the icons are 20 in both bars, the toolbar 40, rows 24, the header 41. Before this, the bar used compact sizes, the toolbar a mix (30 buttons with 16 icons), and the tree, header and islands the normal ones.
 
 ## 12. Gutter border line and sticky lines (2026-11-17)
 
-**Gutter border line.** New UI (`EditorGutterComponentImpl.paint`, IntelliJ Community 263.7307.200): after the gutter backgrounds, a vertical line the editor's full height, 1 px wide, in the scheme's `INDENT_GUIDE` color (`EditorColors.INDENT_GUIDE_COLOR`), at `getWhitespaceSeparatorOffset()` = gutter width − 3 (+1 px when the IDE scale is above 1; on a Mac it is 1). It is not drawn on the sticky lines panel. Seen in the user's IntelliJ 2026.3 (Islands Dark, a screenshot of the `ideate-editor` window): a thin line between the line numbers and the text, past the last line. In IDEate: `EditorView`'s `drawWithContent`, x = gutter width − 3 dp, drawn over the caret row; the sticky panel covers it.
+**Gutter border line.** New UI (`EditorGutterComponentImpl.paint`, IntelliJ Community 263.7307.200): after the gutter backgrounds, a vertical line the editor's full height, 1 px wide, in the scheme's `INDENT_GUIDE` color (`EditorColors.INDENT_GUIDE_COLOR`), at `getWhitespaceSeparatorOffset()` = gutter width − 3 (+1 px when the IDE scale is above 1; on a Mac it is 1). It is not drawn on the sticky lines panel. Seen in the user's IntelliJ 2026.3 (Islands Dark, a screenshot of the `ideate-editor` window): a thin line between the line numbers and the text, past the last line. In Ideate: `EditorView`'s `drawWithContent`, x = gutter width − 3 dp, drawn over the caret row; the sticky panel covers it.
 
 **Sticky lines.** When the start line of a class, method, … has scrolled out of view, IntelliJ pins it at the top of the editor (`StickyLinesPanel`, `VisualStickyLines`):
 
-| Part | IntelliJ | IDEate |
+| Part | IntelliJ | Ideate |
 |---|---|---|
 | Scopes | the backend's `STICKY_LINE_MARKER` highlighters in the document markup; start offset = the name (`Big` in `public class Big {`), end offset = the closing brace | `EditorFile.stickyRanges`; `Big.java` (500 methods with nested `if`/`for`) gets 501: the class and each method, none for the `if`/`for` blocks |
 | Which ones | scopes of at least 5 lines; of scopes on the same start line, one; sorted by start line (longer scope first); pinned while the start line is above the panel's next row and the end line reaches it; a scope ending under the panel pushes its line up by the overlap and ends the list | `stickyPanel()` in `StickyLines.kt`, a port of `VisualStickyLines.setYLocation`; `StickyLinesTest` |
@@ -498,7 +498,7 @@ in place also works with a finger and in a centred menu. Items are plain data (`
 **The editor's menu** (IntelliJ's `EditorPopupMenu`, New UI order). A right click or long press first moves the
 caret to that point, unless it is inside the selection, as IntelliJ does.
 
-| Item | In IDEate |
+| Item | In Ideate |
 |---|---|
 | Cut ⌘X | works: copies the selection, or the caret's whole line with its line break, then deletes it (the backend's `EditorBackSpace`) |
 | Copy ⌘C | works: the selection, or the whole line with its line break, to the system clipboard and the backend's `ClipboardModel` |
@@ -510,11 +510,11 @@ caret to that point, unless it is inside the selection, as IntelliJ does.
 
 **The editor tab's menu** (`EditorTabPopupMenu`):
 
-| Item | In IDEate |
+| Item | In Ideate |
 |---|---|
 | Close ⌘W, Close Other Tabs, Close All Tabs, Close Tabs to the Left, Close Tabs to the Right | work (each tab closes as with its close button); greyed out when there is no such tab |
 | Copy Absolute Path, Copy File Name | work |
-| Pin Tab, Split Right, Split Down, Split and Move Right, Split and Move Down, Select In…, Open In ▸, Configure Editor Tabs… | greyed out: no pinned tabs, split editors or settings in IDEate yet |
+| Pin Tab, Split Right, Split Down, Split and Move Right, Split and Move Down, Select In…, Open In ▸, Configure Editor Tabs… | greyed out: no pinned tabs, split editors or settings in Ideate yet |
 
 JetBrains Client probably fills these menus from the backend: the rd model has an actions protocol
 (`ActionPopupSession`, `ActionPopupContent`, `ActionExecuteRequest`, …). That would bring every greyed item at
@@ -528,9 +528,9 @@ Checked 2026-11-17 against the Mac backend (port 5992):
 - **Emulator (Pixel 3a):** a long press on line 8 opened the editor menu in the middle of the screen with
   40 dp rows and moved the caret to line 8. "Copy / Paste Special" opened in place with its back row.
 - **"A right click into an unfocused desktop window doesn't move the caret"** (seen while testing paste) is the
-  test tool, not IDEate. The cmux-cua click arrived at (412, 132) px instead of (994, 300): its first click into a
+  test tool, not Ideate. The cmux-cua click arrived at (412, 132) px instead of (994, 300): its first click into a
   window that isn't in front converts the screenshot point with the Retina scale (÷ 2) instead of the
-  screenshot's 1.307 (1100 ÷ 2 × 1.307 ≈ 719, where the menu opened). IDEate put both the menu and the caret at
+  screenshot's 1.307 (1100 ÷ 2 × 1.307 ≈ 719, where the menu opened). Ideate put both the menu and the caret at
   that wrong point (line 4, `main`), as it should for the position it got. A real click goes to the right place.
 - **Labels:** on the first version, labels shared the row's free space with the gap before the shortcut, so a
   long label was cut at half the width ("Remove from Recent Pr…", seen by the UI session). Now the label takes
@@ -538,13 +538,13 @@ Checked 2026-11-17 against the Mac backend (port 5992):
 
 ## 14. Tool window bar, tree indent and headers, measured against Gateway (2026-11-17)
 
-The user compared Gateway (JetBrains Client) with IDEate on the same phone backend, both in compact density, both
+The user compared Gateway (JetBrains Client) with Ideate on the same phone backend, both in compact density, both
 screenshots at 2x. Measured in pixels, halved here to dp; code reading from IntelliJ 263 sources.
 
 **Tool window bar** (`SquareStripeButton`, `SquareStripeButtonLook`). IntelliJ paints the highlight inside the
 button minus the stripe's icon padding, not over the whole button:
 
-| | IntelliJ / Gateway | IDEate before | Key |
+| | IntelliJ / Gateway | Ideate before | Key |
 |---|---|---|---|
 | Button | 37×40, compact 32×32; no gap between buttons | 40×40 / 32×32 plus 2 on each side (36 apart) | `StripeToolbar.Button.size` |
 | Highlight | button minus 5,5,5,2 (top, left, bottom, right), compact 4,5,4,3: 30×30, compact 24×24 | the whole button | `StripeToolbar.Button.leftStripeIcon.padding(.compact)` |
@@ -554,11 +554,11 @@ button minus the stripe's icon padding, not over the whole button:
 | Separator | 1 dp `#FFFFFF21` (`#43454A` on the bar), as long as the highlight and lined up with it, 5 from the buttons on either side (an 11 gap) | `#393B40`, 20 long, 6 from the buttons | `toolbar-border`; measured |
 
 A focused tool window's button uses `ToolWindow.Button.selectedBackground` (`toolbar-selected-bg` = blue-60)
-instead; IDEate has no tool window focus yet, so every shown window gets the pressed colour, as Gateway showed.
+instead; Ideate has no tool window focus yet, so every shown window gets the pressed colour, as Gateway showed.
 
 **Tree indent** (Project and Structure share `ProjectTreeView`). From the island's left edge, in px at 2x:
 
-| Row part | Gateway | IDEate before | IDEate now |
+| Row part | Gateway | Ideate before | Ideate now |
 |---|---|---|---|
 | Top-level chevron glyph | 26 | 32 | 26 |
 | Second-level chevron glyph | 67 | 73 | 67 |
@@ -651,13 +651,13 @@ painted on the window background behind the islands, so it tints the toolbar and
 | Across | `main-window-bg` `#26282C` at x = 0 → the project colour blended in at 85% under the project widget's icon centre → `#26282C` 600 dp further right (`RecentProject.MainToolbarGradient.width` 600) |
 | Down | fades to `#26282C` over 300 dp (`.height` 300) |
 | Project colour | `RecentProject.ColorN.MainToolbarGradientStart`, same index as the avatar: `#664832`, `#5E4724`, `#45522F`, `#335661` (`smoke`), `#394773`, `#613861`, `#503D70`, `#325959`, `#365439` |
-| Inactive window | IntelliJ fades it; IDEate doesn't yet |
+| Inactive window | IntelliJ fades it; Ideate doesn't yet |
 
 ## 16. Toolbar dropdowns, toolbar start and selection band, measured (2026-11-17)
 
-From the user's screenshots of Gateway and IDEate (with and without JBR's title bar), 2x pixels:
+From the user's screenshots of Gateway and Ideate (with and without JBR's title bar), 2x pixels:
 
-| Item | Gateway | IDEate before | Now |
+| Item | Gateway | Ideate before | Now |
 |---|---|---|---|
 | Project widget | a box 25 dp high (the toolbar button's 26 in compact), 10 dp before the avatar, ~8 after the chevron; `toolbar-bg-hovered` `#FFFFFF17` under the pointer | no box: the avatar right after the row's 6 dp padding | `ToolbarDropdown`: `MainToolbar.Dropdown.borderInsets` new UI 5,10,5,6, `toolbarButton` high, radius 4 (`MainToolbar.Button.arc.compact` 8), hover fill. "Current File" uses it too |
 | Toolbar start, own title bar, landscape | the row under the title bar starts at the islands' left edge (71 px = the tool window bar) | 6 dp from the window edge | the project widget's box starts at the islands' left edge: `stripeThickness` in landscape, `islandGap` otherwise; after JBR's left inset when the traffic lights share the row |
@@ -671,7 +671,7 @@ be measured; IntelliJ's own rule is 40, compact 32 (`CustomWindowHeaderUtil.getP
 
 `component/SplitPane.kt`, from IntelliJ's `Splitter`, `ThreeComponentsSplitter` and `ToolWindowPane`:
 
-| Rule | IntelliJ | IDEate |
+| Rule | IntelliJ | Ideate |
 |---|---|---|
 | Proportion | first pane ÷ (first + second), 0..1 (`Splitter.myProportion`) | same; room = the split less the island gap |
 | Drag | the proportion follows the pointer along the splitter (`DividerImpl.processMouseMotionEvent`) | the first pane grows by the pointer's travel since the press |
@@ -715,7 +715,7 @@ keeps the insets on its own column; the reconnect popup centres on the whole scr
 
 ## 19. Two windows: connections and editor (2026-11-18)
 
-IntelliJ has a welcome frame and a project frame; Gateway has its own window and JetBrains Client's. IDEate had one
+IntelliJ has a welcome frame and a project frame; Gateway has its own window and JetBrains Client's. Ideate had one
 window that showed the connect screen and then the IDE screen.
 
 | | Connections window | Editor window |
@@ -760,7 +760,7 @@ calls it, with the default registry values `ide.text.effect.new`, `ide.text.effe
 - **Offset under the baseline.** The font's underline offset (1.86 at size 12), on a device pixel the same way, and
   never so low that the effect leaves the line.
 
-| Effect | JetBrains Mono 12, 2x screen | 1x screen | Before (IDEate) |
+| Effect | JetBrains Mono 12, 2x screen | 1x screen | Before (Ideate) |
 |---|---|---|---|
 | `LINE_UNDERSCORE` | 0.5 thick, 1.5 under the baseline | 1 thick at 1 | 1 thick, centred 1.5 under |
 | `BOLD_LINE_UNDERSCORE` | 1.5 thick at 1.5 | 2 thick at 1 | 2 thick, centred 1.5 under |
@@ -778,7 +778,7 @@ calls it, with the default registry values `ide.text.effect.new`, `ide.text.effe
 - **Checked:** unit tests for the geometry at 1x and 2x (`EditorEffectsTest`); on the desktop (2x) the error,
   warning and typo waves against IntelliJ's Color Scheme preview. Not seen on screen: strikeout, dotted line and
   box (the test file showed none).
-- **Not done:** IntelliJ joins a box that spans several lines into one outline; IDEate frames each line's part.
+- **Not done:** IntelliJ joins a box that spans several lines into one outline; Ideate frames each line's part.
 
 ## 21. Search Everywhere popup (2026-11-19)
 
@@ -792,7 +792,7 @@ automation used here cannot capture).
 | Place | centred; top at a quarter of the window's height less half the popup's, not above the main toolbar; fixed once shown, so it grows downward | `SeFrontendService.calcPopupPositionAndShow` |
 | Frame | `Popup.background` `#26282C`, 1 px `#33353B`, radius 8 | `PopupContainer` |
 | Header | insets 2, 4, 0, 9; tabs 24 high, 12 each side; the selected one filled `#233558` with white text, radius 4 | `SearchEverywhere.Header.insets`, `BigPopup.tabInsets`, `SearchEverywhere.Tab.*` |
-| Field | IDEate's `SearchTextField` undecorated, 14 each side (12 + the input insets' 2); the search-with-history icon (`AllIcons.Actions.SearchWithHistory`, magnifier with ▾), 6 to the text; a click lists the tab's earlier searches | `ComplexPopup.TextField.borderInsets`, `textFieldInputInsets`, `SePopupContentPane.addHistoryExtensionToTextField` |
+| Field | Ideate's `SearchTextField` undecorated, 14 each side (12 + the input insets' 2); the search-with-history icon (`AllIcons.Actions.SearchWithHistory`, magnifier with ▾), 6 to the text; a click lists the tab's earlier searches | `ComplexPopup.TextField.borderInsets`, `textFieldInputInsets`, `SePopupContentPane.addHistoryExtensionToTextField` |
 | Separators | 1 px `#33353B` under the tabs and under the field | `customLineBottom` |
 | Rows | 24 high (22 compact); selection band 8 in from the sides, radius 4, `#2A4371`; then 8 inside | `List.rowHeight`, `Popup.Selection.leftRightInset`, `innerInsets` |
 | Row | icon 16, gap 6, name (never cut), gap 6, folder in `#73767C` shortened to row − name − 16 − location − 20 by `SETextShortener.getShortenContainerText` (`of org.junit.jupiter.api.function` → `of org....api.function`; kept whole when that room is negative), the location and its icon at the right end, cut at the row's end when nothing is left | `SeTargetItemPresentationRenderer` |
@@ -808,7 +808,7 @@ row scrolls sideways; JBTabsImpl scrolls the selected tab into view. When some t
 in the new UI it opens a list popup (`JBTabsImpl.showListPopup`, `HiddenInfosListPopupStep`) of the hidden tabs with
 their icons, a separator between those cut off on the left and those on the right. Choosing one selects it.
 
-IDEate (`ClientScreen.EditorTabs`):
+Ideate (`ClientScreen.EditorTabs`):
 - the row scrolls with a finger, a trackpad or the wheel; names stay on one line (they wrapped before, and the last
   tab lost its ×);
 - a tab counts as hidden when any part of it is outside the visible row, measured on a wrapper around each tab (the
@@ -822,7 +822,7 @@ IDEate (`ClientScreen.EditorTabs`):
   is dropped, like other overlays (`iconPaths`);
 - not yet: the × on hover in the list, and the ⋮ after the ▾ (IntelliJ's editor tab actions). Desktop: checked
   only on the emulator; the mouse wheel on the row is untested.
-Row widths (IDEate, from the renderer's rules): the name in full; the location's icon only while the name and the
+Row widths (Ideate, from the renderer's rules): the name in full; the location's icon only while the name and the
 folder leave room; then the folder; the location's text gets what is left and is cut at the row's end. Checked
 with a copy of the xtool repo (876 files): Classes "Execu", Files "build.gradle".
 History: `SearchHistoryList`, per tab, newest first, at most 50, kept while the app runs; the query is saved when the
@@ -832,13 +832,13 @@ had the row's weight, the folder didn't, so the folder was measured first).
 
 ## 23. Mouse pointer over the editor (2026-11-20)
 
-| Where | IntelliJ | IDEate |
+| Where | IntelliJ | Ideate |
 |---|---|---|
 | Text area | `TEXT_CURSOR`, the I-beam (`EditorImpl`, `getDefaultCursor`) | `PointerIcon.Text` |
 | Gutter (line numbers, icons) | `DEFAULT_CURSOR`, the arrow (`EditorGutterComponentImpl`) | `PointerIcon.Default` left of `gutterWidth` |
 | ⌘ (Ctrl) held over a symbol | `HAND_CURSOR` | `PointerIcon.Hand` |
-| Over the selection, no button down | the arrow, because the selection can be dragged | not done: IDEate has no drag and drop of the selection yet |
-| Over a folded placeholder | `HAND_CURSOR` | not done: IDEate doesn't fold |
+| Over the selection, no button down | the arrow, because the selection can be dragged | not done: Ideate has no drag and drop of the selection yet |
+| Over a folded placeholder | `HAND_CURSOR` | not done: Ideate doesn't fold |
 
 Only a mouse or trackpad shows a pointer; touch is unchanged.
 

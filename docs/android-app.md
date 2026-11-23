@@ -1,6 +1,6 @@
 # Android app
 
-The split-mode client as an Android app, named IDEate on the phone (applicationId `intellijandroid.client.android`). It uses the `:compose` module shared with the desktop client (connection, session, UI; see [`client.md`](client.md)) and adds only the Android pieces: the connect screen (link prompt, backends on this phone, history; Termux commands), fonts and icons from assets, and the soft keyboard hook. How it works and what was tested: [`split-protocol.md`](split-protocol.md), "The Android app (step 5)".
+The split-mode client as an Android app, named Ideate on the phone (applicationId `io.github.safeuq.ideate.client.android`). It uses the `:compose` module shared with the desktop client (connection, session, UI; see [`client.md`](client.md)) and adds only the Android pieces: the connect screen (link prompt, backends on this phone, history; Termux commands), fonts and icons from assets, and the soft keyboard hook. How it works and what was tested: [`split-protocol.md`](split-protocol.md), "The Android app (step 5)".
 
 ## Build
 
@@ -39,7 +39,7 @@ Termux commands need `allow-external-apps = true` in `~/.termux/termux.propertie
 For scripted runs, the link and file can come as extras; the app then connects at once:
 
 ```sh
-adb shell "am start -S -n intellijandroid.client.android/.MainActivity --es joinLink 'tcp://127.0.0.1:5990#jt=…&fp=…' --es openFile '/path/on/backend/Main.java'"
+adb shell "am start -S -n io.github.safeuq.ideate.client.android/.MainActivity --es joinLink 'tcp://127.0.0.1:5990#jt=…&fp=…' --es openFile '/path/on/backend/Main.java'"
 ```
 
 The client's log (connection steps, errors) goes to logcat under `System.out`: `adb logcat -s System.out`.
@@ -65,14 +65,14 @@ when the new session breaks while filling in. Pane weights are kept across the s
 
 The Project tree's open folders and selected row are node ids that the new session doesn't know, so `ConnectController` passes their file paths to the new `ClientSession` (`expandedPaths`, `selectedPath`), which opens and selects those rows as they arrive; the tree switches only once it shows every row the old one showed. A terminal tab of the new session starts at the size the backend already has for it, so its restored screen isn't laid out at 80 × 24 first. Open (2026-11-23): the restored terminal screen comes back top-aligned with long lines cut instead of wrapped, so it doesn't look exactly as before.
 
-**No keep-alive on purpose.** IDEate follows the normal Doze rules: with the screen off the connection may drop,
+**No keep-alive on purpose.** Ideate follows the normal Doze rules: with the screen off the connection may drop,
 and it is reconnected when the app comes back. A foreground service would keep the network on in Doze (tried
 2026-11-17: forced deep Doze on the emulator for a minute, and about 20 minutes locked on the phone, with no drop).
 It was taken out again: Android requires a visible notification for one, and it exempts the app from Doze for the
 whole session, using battery for a connection nobody is looking at. Termux keeps the backend itself running with
 its own foreground service.
 
-**Reconnecting.** IDEate does what JetBrains Client does (`RdUiBundle`: "No connection to IDE Backend. Trying to
+**Reconnecting.** Ideate does what JetBrains Client does (`RdUiBundle`: "No connection to IDE Backend. Trying to
 reconnect…"):
 - While the app is in the background (the activity is stopped) nothing is tried: under Doze every attempt
   would fail. Compose doesn't run the effect that notices the loss until the activity starts again either.

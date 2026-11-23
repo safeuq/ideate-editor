@@ -1,6 +1,6 @@
-# How the IntelliJ backend handles editor edit requests (split mode), for IDEate
+# How the IntelliJ backend handles editor edit requests (split mode), for Ideate
 
-Read from IntelliJ IDEA 2026.3 (263.7307.200) jars, decompiled, on 2026-11-18. The client's side is in [`edit-protocol-client.md`](edit-protocol-client.md); what IDEate does with both is in [`edit-protocol.md`](edit-protocol.md) section 12.
+Read from IntelliJ IDEA 2026.3 (263.7307.200) jars, decompiled, on 2026-11-18. The client's side is in [`edit-protocol-client.md`](edit-protocol-client.md); what Ideate does with both is in [`edit-protocol.md`](edit-protocol.md) section 12.
 
 Source: IntelliJ IDEA build in `/Users/safeuq/Applications/IntelliJ IDEA.app` (same build as the client notes, 263.7307.200).
 Read: `intellij.platform.backend.split.jar` (`com.jetbrains.rdserver.*`), `intellij.rd.platform.jar` (`com.jetbrains.rd.ide.*`),
@@ -397,7 +397,7 @@ Responses and backend patches both come from the EDT through async signals, so t
 - `executeRequests` asserts EDT, calls `BackendClientOperationListener.beforeClientOperation(session, "<ClassName>#<id>" or "Batch request")` (this triggers the alien sessions of 5) and suppresses markup (`"Suppress while request batch is in execution"`). Then:
   - **`requests.size == 1`**, under `retryTimestampMutex` for the whole execution: (a) retry gate (2.5): older -> drop, `afterClientOperation`, return; (b) `if (requestId <= _lastProcessedRequest) Logger.error("RequestId: <id> must be greater than LastProcessedRequestId: <last>")` (**log only, it still runs**); (c) `executeRequest(isBatch=false)`; (d) response `RdSuccessResponse` with a non-null patch -> `Registry.update(patch.expectedItemVersions)`; (e) `responsesWithTime.fire(RdResponses([response], time))`.
   - **`requests.size > 1` (batch)**: **no retry gate**, no ordering log, `BackendRequestsListener.requestExecuted` once, each request via `executeRequest(isBatch=true)`; **one** `RdResponses` with all responses in request order. A `PatchEngineRetryException` in a batch becomes an **empty success** (and `_lastProcessedRequest` is set); `Registry.update` is not called; other exceptions map as in 1.8.
-  - IDEate should send **one request per `RdRequests`**: only that path has the retry gate and the usual retry answers.
+  - Ideate should send **one request per `RdRequests`**: only that path has the retry gate and the usual retry answers.
 - `_lastProcessedRequest` (`MutableStateFlow<Long>`, initial `-1`) is set to the request id for: success, failure, no-editor, any non-cancellation `Throwable`, and batch retry. **Not** set for: dropped requests, single-path retry, cancellation retry.
   Reader: `Executor.awaitRequest(id)` = `_lastProcessedRequest.first { it >= id }` (no own timeout). Used by `BackendPatchEngineSynchronizerKt.awaitPatchEngine(timeout = 30 s)` and `DocumentSyncImpl.awaitDocumentSync`: they read `PatchEngineSynchronizationData.lastQueuedRequest` from the coroutine context and wait until that request was processed; backend features that must see the client's latest edits (completion, inline completion, identifier highlighting) use it. A dropped or retried request never advances the flow, so such a wait can hit the 30 s timeout. [Seen code for the wait; where `lastQueuedRequest` is filled is Inferred]
 
@@ -494,7 +494,7 @@ Confirmed by the code: document hash formula and examples, editor hash formula a
 
 ---------------------------------------------------------------------------------------------------
 
-## 9. Rules for IDEate in short
+## 9. Rules for Ideate in short
 
 1. One request per `RdRequests`; `retryTimestamp` = the last one received in an `RdRetryResponse` (start `(0,0)`); do not wait for answers to requests sent before a retry.
 2. Typing and editor actions: send an empty or null `speculativePatch` if you do not predict. The backend types at **its** caret. If you predict locally, replace the prediction by the response patch whenever they differ.

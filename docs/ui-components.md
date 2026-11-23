@@ -1,9 +1,9 @@
 # Standard UI components (plan, draft)
 
-Agreed 2026-11-17 between the two sessions working on IDEate's UI. Progress per step is in
+Agreed 2026-11-17 between the two sessions working on Ideate's UI. Progress per step is in
 section 4.
 
-IDEate builds its widgets by hand, one copy per screen. The goal is one component per IntelliJ
+Ideate builds its widgets by hand, one copy per screen. The goal is one component per IntelliJ
 widget, laid out the way IntelliJ's own sources are, with colors and sizes from the Islands Dark
 theme keys instead of per-file constants.
 
@@ -30,10 +30,10 @@ Dialogs aren't in Jewel. They follow the Swing classes: `DialogWrapper` and `Ale
 
 ## 2. Inventory
 
-Paths are under `compose/src/commonMain/kotlin/intellijandroid/client/`. Lines are at 508aaa2, before
+Paths are under `compose/src/commonMain/kotlin/io/github/safeuq/ideate/client/`. Lines are at 508aaa2, before
 the SSH message dialog (32b2677) and step 1, so they have moved a little since.
 
-| IDEate widget | file:line | IntelliJ counterpart | Jewel file |
+| Ideate widget | file:line | IntelliJ counterpart | Jewel file |
 |---|---|---|---|
 | `DialogFrame` (frame + title) | connect/SshPage.kt:363 | `DialogWrapper` (`IC/platform/platform-api/src/com/intellij/openapi/ui/DialogWrapper.java`) | none |
 | FolderChooser's own frame + title | connect/FolderChooser.kt:149 (Dialog), `Chooser` at :328 | `FileChooserDialogImpl` on `DialogWrapper` | none |
@@ -67,7 +67,7 @@ the SSH message dialog (32b2677) and step 1, so they have moved a little since.
 | 19 hand-built `TextStyle(...)` in 12 files; `DialogStyles` (SshPage.kt:342), `ConnectStyles` (ConnectScreen.kt:768) | | `JBFont.label()`, `JBFont.small()`, `JBFont.h3()` (`IC/platform/util/ui/src/com/intellij/util/ui/JBFont.java`) | Typography.kt |
 
 Left out on purpose: `EditorView`, `EditorLine`, `StickyLines`, `SidewaysScroll`, `SwipePager`,
-`HostGroup`, `ProjectRowView`. They're the editor or IDEate-only layout, not a reusable widget.
+`HostGroup`, `ProjectRowView`. They're the editor or Ideate-only layout, not a reusable widget.
 
 ### Where copies already differ
 
@@ -97,13 +97,13 @@ Theme values from `ManyIslandsDark.theme.json` with names resolved through its `
 Decision for review: where a measured value and the theme disagree by a few units (`#414349` vs
 `#40434A`, `#4670DA` vs `#3871E1`), the screenshot went through a color-profile change, so the
 theme value wins. Where they disagree a lot (Gateway's menu `#2B2D30`/`#43454A`), Gateway was
-measured in its own Dark theme; IDEate follows Islands Dark, so the theme value wins there too.
+measured in its own Dark theme; Ideate follows Islands Dark, so the theme value wins there too.
 
 ### What is still hand-built (after step 9, 2026-11-17)
 
 Found by searching connect/, ui/ and ui/dialog for `.border(`, `BasicTextField(`, `.clickable`,
 `Color(0x` and `RoundedCornerShape(` outside ui/theme and ui/component. Lines are at 04f0664.
-"Keep" means it is layout or an IDEate-only view, not an IntelliJ widget we'd share.
+"Keep" means it is layout or an Ideate-only view, not an IntelliJ widget we'd share.
 
 | What | file:line | IntelliJ counterpart | Status |
 |---|---|---|---|
@@ -114,7 +114,7 @@ Found by searching connect/, ui/ and ui/dialog for `.border(`, `BasicTextField(`
 | Sidebar rows (Connections list) | connect/ConnectScreen.kt:263 | the welcome screen's tab tree (`TabbedWelcomeScreen`); selection already `selectionBackground` | keep (a list row, like the tree rows) |
 | Main toolbar run widget "Current File ⌄" | ui/ToolWindows.kt:209 | `RunWidget` / `RunConfigurationsComboBoxAction` (a toolbar combo button) | keep until run configurations work; then a combo-box-like button |
 | Main toolbar project badge `#3574F0` | ui/ToolWindows.kt:187, :297 | `RecentProject.Color1..9.Avatar.Start/End` (a gradient picked per project) | done: `projectAvatarBrush(name)`, the theme's nine gradients, picked as for a non-local project (see the note) |
-| Tool window header back chevron | ui/ToolWindows.kt:260 | none in IntelliJ (IDEate's phone layout); looks like an `ActionButton` | could use `IconButton` (22) instead of a 32-wide clickable |
+| Tool window header back chevron | ui/ToolWindows.kt:260 | none in IntelliJ (Ideate's phone layout); looks like an `ActionButton` | could use `IconButton` (22) instead of a 32-wide clickable |
 | Editor tab pills, selected `#233657` / `#2C4A82` | ui/ClientScreen.kt:483-494 | `JBEditorTabs` (`EditorTabs.underlinedTabBackground` etc.) | keep (measured on the real client, section 7 of intellij-look.md) |
 | Status-bar failure text `#FA6675` | ui/ClientScreen.kt:227 | `Label.errorForeground` = text-error `#F57E84` | done: `IslandsDark.textError` |
 | Completion rows | ui/LookupPopup.kt:201-202, :256-257 | `LookupCellRenderer`; `CompletionPopup.foreground`/`matchForeground` already named | keep (one popup, already key-commented) |
@@ -132,7 +132,7 @@ Notes on the rows above (2026-11-17):
   - A tool window that is open but unfocused is PUSHED and gets the transparent white
     `ActionButton` background over the stripe's `#26282C`. That blend gives the gray: `#26282C` +
     `#FFFFFF17` = `#393B3F`.
-  - IDEate doesn't track which tool window has focus, so the gray stays.
+  - Ideate doesn't track which tool window has focus, so the gray stays.
 - **Project avatar.** IntelliJ keeps each project's color index in the project's workspace
   (`ProjectWindowCustomizerService`), which the client can't read. `projectAvatarBrush` uses
   IntelliJ's rule for non-local projects instead: `abs(name.hashCode() % 9)`. The colors are
@@ -149,7 +149,7 @@ Notes on the rows above (2026-11-17):
 ## 3. Layout
 
 Mirrors Jewel's `ui/component/` for widgets and IntelliJ's `openapi/ui` for dialogs. Package
-`intellijandroid.client.ui.*`, so files sit next to the screens that use them.
+`io.github.safeuq.ideate.client.ui.*`, so files sit next to the screens that use them.
 
 ```
 ui/
@@ -213,7 +213,7 @@ the desktop app and the emulator before it's pushed.
 
 ### Step 1 (done)
 
-- `ui/IslandsDark.kt` → `ui/theme/IslandsDark.kt` (package `intellijandroid.client.ui.theme`), with
+- `ui/IslandsDark.kt` → `ui/theme/IslandsDark.kt` (package `io.github.safeuq.ideate.client.ui.theme`), with
   `UiDensity` and its test. `byDensity(normal, compact)` is public now, for component files.
 - New colors, each named after its key: `textDisabled` `#4C4F56`, `textOverAccent`,
   `controlBorder` `#40434A`, `controlBrandBackground` and `focusBorder` `#3871E1`,
@@ -335,7 +335,7 @@ the desktop app and the emulator before it's pushed.
 - `DialogAction(label, enabled, onClick)` stands for `createActions()`. The first is the default:
   filled, and Enter runs it. The south panel puts it last on macOS (`sortActionsOnMac`) and first
   elsewhere, with 12 between buttons (`BASE_BUTTON_GAP`). Escape or a click outside cancels.
-- `ui/dialog/MessageDialog.kt` (moved from `ui/`, package `intellijandroid.client.ui.dialog`) uses
+- `ui/dialog/MessageDialog.kt` (moved from `ui/`, package `io.github.safeuq.ideate.client.ui.dialog`) uses
   the same window and south panel. Its `MessageOption` is gone; it takes `DialogAction`s.
 - The frame values stay measured: no theme key exists, since macOS draws the window. Width 475,
   title 32, sides 14, south panel 12 below the content, 11 at the bottom, corner 10, outline
@@ -418,7 +418,7 @@ User report with a phone screenshot: the start popup touched both sides of the s
 **The bar** now paints as `DarculaProgressBarUI.paintIndeterminate` (`IC/platform/platform-impl/src/com/intellij/ide/ui/laf/darcula/ui/DarculaProgressBarUI.java`, not simplified):
 no track and no segment; the whole rounded bar is one mirrored gradient that moves right in steps.
 
-| Value | IntelliJ | IDEate |
+| Value | IntelliJ | Ideate |
 | --- | --- | --- |
 | Frames | `CYCLE_TIME_DEFAULT` 800 ms / `REPAINT_INTERVAL_DEFAULT` 50 ms = 16 | the same; the frame changes every 50 ms, no gliding |
 | Gradient | `GradientPaint(x + frame·12, start, x + 16·6 + frame·12, end, cyclic = true)`, step 6 | `Brush.linearGradient(…, TileMode.Mirror)`, same offsets in dp |

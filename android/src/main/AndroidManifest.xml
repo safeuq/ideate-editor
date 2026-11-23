@@ -10,7 +10,7 @@
     </queries>
 
     <application
-        android:label="IDEate"
+        android:label="Ideate"
         android:theme="@style/Theme.Ideate">
         <!-- Any orientation; the layout follows the window's shape (docs/mobile-layout.md). A rotation or a hardware
              keyboard change must not recreate the activity, because the session lives in it. -->

@@ -7,7 +7,7 @@ Two MCP servers let an agent (Claude Code, or any MCP client) look at and drive 
 | `compose-hot-reload` | the Compose Hot Reload plugin (`./gradlew :desktop:hotMcpServer`), started through [compose-hot-reload-proxy](https://github.com/safeuq/compose-hot-reload-proxy) | stdio (the client starts it) | screenshot, read the Compose semantics tree, click or type into a node by id, scroll, read the app's log, reload, restart | anything inside backend-painted parts (the Run toolbar, Git windows, backend dialogs and popups): they have no semantic nodes |
 | `ideate-window` | this repo: `AgentMcpServer.kt`, started inside the app by `-PagentMcpPort` | HTTP on `127.0.0.1` | move, click, drag, scroll, type and press keys at points in the main window or a popup window; screenshot every window | read the semantics tree, reload |
 
-Use them together: `compose-hot-reload` for IDEate's own UI and for reloading, `ideate-window` for hover and clicks inside backend-painted content. Neither moves your mouse cursor or takes keyboard focus from what you are doing. The tools of `ideate-window` are listed in [`client.md`](../client.md), "Agent MCP server".
+Use them together: `compose-hot-reload` for Ideate's own UI and for reloading, `ideate-window` for hover and clicks inside backend-painted content. Neither moves your mouse cursor or takes keyboard focus from what you are doing. The tools of `ideate-window` are listed in [`client.md`](../client.md), "Agent MCP server".
 
 ## 1. Before you start
 
@@ -62,7 +62,7 @@ export JAVA_HOME="/Users/you/Applications/IntelliJ IDEA.app/Contents/jbr/Content
 | `compose-hot-reload` `use_project` with `{"path": "/path/to/ideate-editor", "task": ":desktop:hotMcpServer"}` (not needed when Claude Code was started in that folder) | `Compose Hot Reload tools now use …`; the first time in a folder can take a few minutes |
 | `compose-hot-reload` `status` | `{"connected": true, "reloadState": "ok", …}` |
 | `compose-hot-reload` `take_screenshot` | the app window |
-| `ideate-window` `list_windows` | `[{"index": 0, "kind": "main", "title": "IDEate", "bounds": {…}}]` |
+| `ideate-window` `list_windows` | `[{"index": 0, "kind": "main", "title": "Ideate", "bounds": {…}}]` |
 
 Or without an agent:
 
@@ -88,7 +88,7 @@ Subagents share the main session's servers, and so the one project its `compose-
 ```markdown
 ---
 name: ideate-ui
-description: Implements a UI change in the IDEate desktop client and checks it live with hot reload and the MCP tools.
+description: Implements a UI change in the Ideate desktop client and checks it live with hot reload and the MCP tools.
 model: sonnet
 mcpServers:
   - compose-ui:

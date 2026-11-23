@@ -1,7 +1,7 @@
 # Context menus and actions over rd
 
 How JetBrains Client 263.7307.200 gets a context menu from the backend and runs the chosen item,
-and how IDEate does the same (`session/ActionMenus.kt`). Found by reading the client's and the
+and how Ideate does the same (`session/ActionMenus.kt`). Found by reading the client's and the
 backend's jars (static analysis), then tested from the desktop client against the isolated Mac
 backend on port 5991 (2026-11-17).
 
@@ -14,7 +14,7 @@ backend on port 5991 (2026-11-17).
 | `ActionPopupContent`, `ActionStepPopupContent` | List popups of the BeControl popup system. |
 | **`protocol.asyncActionsModel`** (`AsyncActionsModel`) | **Menus and toolbars: what to show.** |
 | **`documentsOperationModel.requestResponseModel`** | **Running an action** (`RdCallActionRequest`), the same channel as typing. |
-| `protocol.luxModel` | Backend dialogs drawn on the client (not done in IDEate). |
+| `protocol.luxModel` | Backend dialogs drawn on the client (not done in Ideate). |
 
 ## 1. Asking for a menu
 
@@ -45,7 +45,7 @@ asyncActionsModel.expandGroup(AsyncActionUpdateRequest(
 | Editor | `EditorPopupMenu` | `EditorPopup` | the editor's, as for Structure: the caret is moved to the click first (`ClientSession.editorMenu`) |
 
 A Structure node has no timestamp of its own, in JetBrains Client too, so the backend can't know
-which node was right-clicked. IDEate moves the caret to the node first (selecting a node already
+which node was right-clicked. Ideate moves the caret to the node first (selecting a node already
 does), so the backend's actions see the element at the caret: right-clicking `main(String[]): void`
 gave the menu for `main`.
 
@@ -71,7 +71,7 @@ gave the menu for `main`.
 ### Submenus
 
 The backend fills a submenu's `children` only when that group is asked for (JetBrains Client asks
-when the submenu opens). IDEate's menu panel takes all entries up front, so `ActionMenus` asks for
+when the submenu opens). Ideate's menu panel takes all entries up front, so `ActionMenus` asks for
 each visible submenu after the first answer and shows the menu when the last answer is in. On the
 Mac backend the Project menu for the project root took **3 requests and 329 ms**. The first menu
 after connecting took a few seconds while the backend warmed up.
@@ -103,16 +103,16 @@ answered in 160 ms, and the backend's copy came back over `ClipboardModel` to th
 **An action's document changes come only in the success response's `patch`**, not on the
 document's `backendPatches`. Seen 2026-11-17 on the Mac backend (port 5992): Comment with Line
 Comment on line 6 of `Main.java` answered `RdSuccessResponse` with
-`[caret(141), change(129, -'//', +''), caret(139), caretChange(187)]`. Before IDEate applied that
-patch, the backend's file had the comment and IDEate's text didn't (its highlighting went off by
+`[caret(141), change(129, -'//', +''), caret(139), caretChange(187)]`. Before Ideate applied that
+patch, the backend's file had the comment and Ideate's text didn't (its highlighting went off by
 two characters). `ActionMenus` now hands a non-empty success patch to every edit session it
 concerns (`EditSession.concerns`, then `backendPatch`). The text, caret and highlighting then
 match: the comment removed, the caret on the next line, as IntelliJ moves it.
 
-## 3. What IDEate greys out
+## 3. What Ideate greys out
 
 A backend dialog opens on the backend's screen, where nobody sees it, and holds the backend's UI
-thread until it closes. IDEate doesn't show backend dialogs yet (Lux), so these items are greyed:
+thread until it closes. Ideate doesn't show backend dialogs yet (Lux), so these items are greyed:
 
 - text ending in `...` or `…` (Rename…, Delete…, Compare With…, Show History…);
 - everything under New (`WeighingNewGroup`, `NewGroup`): Java Class, File and the others ask for
@@ -129,10 +129,10 @@ The editor's menu also greys (seen with `CLIENT_MENU_DUMP=1`, 2026-11-17):
   `CompareClipboardWithSelection` (a diff window);
 - the groups `EditorPopupMenu.GoTo` and `UML.EditorGroup` (popups), `AnalyzeMenu` (tool windows),
   `RunContextPopupGroup` and `RunContextGroupMore` (Run/Debug 'Main.main()' would run the program
-  with its output in a backend tool window), and `FoldingGroup` (IDEate doesn't draw folds yet).
+  with its output in a backend tool window), and `FoldingGroup` (Ideate doesn't draw folds yet).
 
 Kept local in the editor's menu: the backend's `$Cut`, `$Copy`, `$Paste`, `EditorPaste` and
-`EditorPasteSimple` items keep their text and place, but run IDEate's own cut, copy and paste, which
+`EditorPasteSimple` items keep their text and place, but run Ideate's own cut, copy and paste, which
 go through the system clipboard and the clipboard sync (docs/edit-protocol.md). `MenuItem.id` carries
 the action id for this. The backend hides Cut and Copy when nothing is selected, as IntelliJ does.
 

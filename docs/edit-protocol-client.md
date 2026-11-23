@@ -1,6 +1,6 @@
 # JetBrains Client: how edits go to the backend and how the local document stays in step
 
-Read from IntelliJ IDEA 2026.3 (263.7307.200) jars, decompiled, on 2026-11-18. The backend's side is in [`edit-protocol-backend.md`](edit-protocol-backend.md); what IDEate does with both is in [`edit-protocol.md`](edit-protocol.md) section 12.
+Read from IntelliJ IDEA 2026.3 (263.7307.200) jars, decompiled, on 2026-11-18. The backend's side is in [`edit-protocol-backend.md`](edit-protocol-backend.md); what Ideate does with both is in [`edit-protocol.md`](edit-protocol.md) section 12.
 
 Source: IntelliJ IDEA (decompiled) `intellij.rd.client.jar` (`com.jetbrains.rdclient.*`), `intellij.rd.platform.jar`
 (`com.jetbrains.rd.ide.*`), `intellij.platform.frontend.split.jar` (`com.jetbrains.thinclient.*`),
@@ -448,5 +448,5 @@ No other statement in sections 5-9 was contradicted by the code I read.
 * Which `RdPatchItemId` subclasses are `RdNonConflictingPatchItemId` (affects `isIntersecting`): enumeration timed out, not done.
 * Exact `getEditorStates` patch content, and the protocol scheduler's use of `viewPermittedModality`: not in the provided sources.
 * Arrow-key / caret-only action wire form and the `postponedState` bookkeeping in `PatchEngineEditorSynchronizer.sendCaretState` (decompiler output dropped some branches): partly [Inferred].
-* `DocumentLogRangeShifterKt.shiftOnePoint` rules (how offsets move for inserts at the offset, deletes covering it): not read; needed to reproduce replay exactly. The IDEate client can avoid it by always re-running its own edit against the rebased text.
+* `DocumentLogRangeShifterKt.shiftOnePoint` rules (how offsets move for inserts at the offset, deletes covering it): not read; needed to reproduce replay exactly. The Ideate client can avoid it by always re-running its own edit against the rebased text.
 * `Old` executor: only the points in section 0 were read.

@@ -82,7 +82,7 @@ Code is formatted with Spotless: ktfmt in Google style (2-space indent, 100 colu
 
 ## Agent MCP server (2026-11-21)
 
-The Compose Hot Reload MCP (`hotMcpServer`) clicks semantic nodes only. IDEate's backend-painted parts (the Run toolbar, Git windows, backend dialogs and their popups) are one drawn image with no nodes, so an agent needs input at points and hover. `AgentMcpServer.kt` (in `desktop`) is a small MCP server that does that on the running app, using `ComposeWindowInput`: it never moves the user's cursor and never takes keyboard focus.
+The Compose Hot Reload MCP (`hotMcpServer`) clicks semantic nodes only. Ideate's backend-painted parts (the Run toolbar, Git windows, backend dialogs and their popups) are one drawn image with no nodes, so an agent needs input at points and hover. `AgentMcpServer.kt` (in `desktop`) is a small MCP server that does that on the running app, using `ComposeWindowInput`: it never moves the user's cursor and never takes keyboard focus.
 
 Setting it up together with the Compose Hot Reload MCP, step by step: [`mcp/setup.md`](mcp/setup.md).
 
@@ -134,7 +134,7 @@ window, but the in-process test is more reliable.
 
 ### Driving the real window (`WindowDriver`)
 
-`desktop/src/test/.../WindowDriver.kt` opens the real window, set up as `Main.kt` does (`IdeateLocals`: a `ComposeWindow`, each popup in its own small OS window, fonts, icons), and drives it with synthetic AWT events. The input and screenshot code is `ComposeWindowInput` in the app's own sources (it takes any `java.awt.Window`, nothing IDEate specific); `WindowDriver` adds the IDEate window, `ClientSession` waits and the file output. Unlike `runDesktopComposeUiTest`, popups are real windows, so tests can check where they open. It never moves the user's cursor (no `java.awt.Robot`), never takes keyboard focus (the window is not focusable) and needs no macOS permission, so you can keep working while it runs.
+`desktop/src/test/.../WindowDriver.kt` opens the real window, set up as `Main.kt` does (`IdeateLocals`: a `ComposeWindow`, each popup in its own small OS window, fonts, icons), and drives it with synthetic AWT events. The input and screenshot code is `ComposeWindowInput` in the app's own sources (it takes any `java.awt.Window`, nothing Ideate specific); `WindowDriver` adds the Ideate window, `ClientSession` waits and the file output. Unlike `runDesktopComposeUiTest`, popups are real windows, so tests can check where they open. It never moves the user's cursor (no `java.awt.Robot`), never takes keyboard focus (the window is not focusable) and needs no macOS permission, so you can keep working while it runs.
 
 | Variable | Meaning |
 |---|---|

@@ -24,11 +24,11 @@ Each `BeIdeaToolWindow` has `toolWindow: BeToolWindow` (title, icon, `position`,
 | `Database` | Database | `icons/expui/dbms.svg` (plugin) | RIGHT | true |
 | `Learn` | Learn | `expui/toolwindows/learn.svg` | LEFT | true, `isShowStripeButton` false |
 
-Not in the map: Project, Run, Debug, Terminal, Services, Notifications. JetBrains Client registers those itself (frontend modules), so IDEate adds Project on its own.
+Not in the map: Project, Run, Debug, Terminal, Services, Notifications. JetBrains Client registers those itself (frontend modules), so Ideate adds Project on its own.
 
 `isShowStripeButton` is true for almost all of them (the backend runs headless with the old layout logic); `isVisibleOnLargeStripe` was never sent on the Mac backend.
 
-Plugin icons come with their SVG: `ImageIconModel.imageSources.sources` lists `path` and `body` for `pullRequests.svg`, `pullRequests_dark.svg`, … IDEate keeps the `_dark` one (`IconJar.remember`), since the client's icons jar has only the platform's icons.
+Plugin icons come with their SVG: `ImageIconModel.imageSources.sources` lists `path` and `body` for `pullRequests.svg`, `pullRequests_dark.svg`, … Ideate keeps the `_dark` one (`IconJar.remember`), since the client's icons jar has only the platform's icons.
 
 ## 2. Where the order comes from
 
@@ -42,10 +42,10 @@ bottom: Version Control (0), Problems (1), Problems View (2), Terminal (3), Serv
 right:  Notifications (0), AIAssistant (1), Database (2), Gradle (3), Maven (4)
 ```
 
-IDEate does what JetBrains Client does with no saved changes (`toolWindowButtons` in `ToolWindows.kt`):
+Ideate does what JetBrains Client does with no saved changes (`toolWindowButtons` in `ToolWindows.kt`):
 
 - a window gets a button when it is available (`available` not false) and is in that default layout, or `isVisibleOnLargeStripe` is true; buttons follow the layout's order;
-- each window goes in one of six places from its side (`BeToolWindow.position`) and IntelliJ's split flag (`BeToolWindow.sideTool`): left top/bottom, bottom left/right, right top/bottom; Structure is split, so it sits under Project, as in IntelliJ (since 2026-11-18; before, IDEate kept it on the right). How each screen shape shows the places: [`mobile-layout.md`](mobile-layout.md);
+- each window goes in one of six places from its side (`BeToolWindow.position`) and IntelliJ's split flag (`BeToolWindow.sideTool`): left top/bottom, bottom left/right, right top/bottom; Structure is split, so it sits under Project, as in IntelliJ (since 2026-11-18; before, Ideate kept it on the right). How each screen shape shows the places: [`mobile-layout.md`](mobile-layout.md);
 - every other available window is under ⋯ ("More tool windows", `MoreSquareStripeButton`), by name.
 
 ### Stripe button tooltips (2026-11-23)
@@ -57,7 +57,7 @@ A mouse over a stripe button shows IntelliJ's `HelpTooltip` (`HelpTooltip.kt`, p
 
 Mac backend result: left top Project, ⋯; left bottom Structure; bottom left Version Control, Problems; right top Database. Under ⋯: Bookmarks, Coverage, Database Changes, Database Output, Endpoints, Learn, Profiler, Pull Requests. Commit, AI Chat and Gradle are unavailable there.
 
-IDEate doesn't keep the user's own layout (moving a window to another side); add it when IDEate can move windows.
+Ideate doesn't keep the user's own layout (moving a window to another side); add it when Ideate can move windows.
 
 ## 3. The Project view's panes
 
@@ -73,22 +73,22 @@ A sub id is a string such as `Scope 'Project Files'; set:Project Files; class co
 
 The selector lists the panes by weight, with a pane's sub ids in its place, as IntelliJ's new UI combo does: Project, Packages, Project Files, Production, Tests, Markdown, Open Files, Scratches and Consoles. Choosing one sets `currentPane` (and fires `setSubId` with the sub id first). The backend keeps a pane's expanded rows across reconnects.
 
-`ProjectPane` is the tree IDEate already draws from `RdProjectViewItem`s. The other two send their tree as BeControls: `control` = BeDynamicControlContainer → BeContextActionBehavior → BeBehaviorControl → `BeTreeGrid`. Each row (`BeTreeGridLine`) is BeGrid [BeRichText]: the text in styled parts, e.g. `smoke` (bold) and ` /private/tmp/…/smoke` in a `NamedColor`. No icons are sent. A collapsed row's children are one placeholder row (a BeSpacer) until IDEate sets `isExpanded` true; then the backend sends the real children. `isSelected` selects a row; `BeTreeGrid.enter` opens the selected row's file. The backend opens the editor itself.
+`ProjectPane` is the tree Ideate already draws from `RdProjectViewItem`s. The other two send their tree as BeControls: `control` = BeDynamicControlContainer → BeContextActionBehavior → BeBehaviorControl → `BeTreeGrid`. Each row (`BeTreeGridLine`) is BeGrid [BeRichText]: the text in styled parts, e.g. `smoke` (bold) and ` /private/tmp/…/smoke` in a `NamedColor`. No icons are sent. A collapsed row's children are one placeholder row (a BeSpacer) until Ideate sets `isExpanded` true; then the backend sends the real children. `isSelected` selects a row; `BeTreeGrid.enter` opens the selected row's file. The backend opens the editor itself.
 
 ## 4. Editors the backend opens itself
 
-Such an editor arrives like any other (`backendDeferredComposites`, then its document), but IDEate never asked for its path. `FileEditorCompositeModel.fileId` (an `RdFileIdNew`, e.g. backendId 938) gives it: `vfsModel.findFile` with `RdFindFileParams(id = fileId, path = null)` answers an `RdFileSnapshot` whose `properties.path` is the file's path. Until that answer the tab is named `document-938`. `vfsModel.startSyncing` with the id doesn't add the file to `vfsModel.files`.
+Such an editor arrives like any other (`backendDeferredComposites`, then its document), but Ideate never asked for its path. `FileEditorCompositeModel.fileId` (an `RdFileIdNew`, e.g. backendId 938) gives it: `vfsModel.findFile` with `RdFindFileParams(id = fileId, path = null)` answers an `RdFileSnapshot` whose `properties.path` is the file's path. Until that answer the tab is named `document-938`. `vfsModel.startSyncing` with the id doesn't add the file to `vfsModel.files`.
 
 ## 5. Library files from the Project tree (2026-11-19)
 
 A Project tree row under External Libraries carries the path of a file inside the JDK image or a jar,
 e.g. `/Users/…/.sdkman/candidates/java/21.0.6-tem!/java.base/java/util/ArrayList.class`. `vfsModel.findFile`
-with that path answers null (IDEate showed "Backend has no file …"): a path alone is looked up on disk.
+with that path answers null (Ideate showed "Backend has no file …"): a path alone is looked up on disk.
 
-IDEate now asks the Project pane to open such a row, as JetBrains Client's double-click does:
+Ideate now asks the Project pane to open such a row, as JetBrains Client's double-click does:
 `RdProjectViewAsyncPane.navigate(RdProjectViewNavigation(ids = [nodeId], requestFocus = true,
 openInRightSplit = false))`. The backend opens the editor itself (`GuestFileEditorManager` logs "Opening
-remote editor for file=ArrayList.class … selectAsCurrent=true"), and IDEate follows it as in section 4.
+remote editor for file=ArrayList.class … selectAsCurrent=true"), and Ideate follows it as in section 4.
 Files on disk (no `!/` in the path) still open through `findFile` and `requestComposite`. Checked on the Mac
 backend: `ArrayList.class` opened from External Libraries ▸ < 21 > ▸ java.base.
 
@@ -96,15 +96,15 @@ backend: `ArrayList.class` opened from External Libraries ▸ < 21 > ▸ java.ba
 
 The backend sends no header buttons for Project or Structure. A probe of `BeIdeaToolWindow` on the Mac backend
 saw Structure's `headerToolbar = []` and `headerToolbarWest = []`, and Project's were never set. JetBrains
-Client draws these buttons itself, so IDEate does too (`headerActions` in `ClientScreen.kt`,
+Client draws these buttons itself, so Ideate does too (`headerActions` in `ClientScreen.kt`,
 `HeaderAction`/`ToolWindowPanel` in `ToolWindows.kt`):
 
-| Window | Button | Icon | What IDEate does |
+| Window | Button | Icon | What Ideate does |
 |---|---|---|---|
-| Project (Project view only) | Select Opened File | `expui/general/locate.svg` | `RdProjectViewAsyncPane.expandByPath(<selected editor's path>)`. The answer is the file's row id. IDEate opens the rows above it and selects it. JetBrains Client does the same for a file it has no `RdFileId` for (`ThinClientProjectViewPaneBinding.select`, else `expandById`). |
+| Project (Project view only) | Select Opened File | `expui/general/locate.svg` | `RdProjectViewAsyncPane.expandByPath(<selected editor's path>)`. The answer is the file's row id. Ideate opens the rows above it and selects it. JetBrains Client does the same for a file it has no `RdFileId` for (`ThinClientProjectViewPaneBinding.select`, else `expandById`). |
 | Project | Expand Selected | `expui/general/expandAll.svg` | `expand` for the selected row and every folder under it. A row that arrives under one of them opens too. The backend can answer `expand` before it sends the rows (seen for `.idea` ▸ `codeStyles`), so the answer can't be used as the signal. |
-| Project | Collapse All | `expui/general/collapseAll.svg` | Closes every row in IDEate. The backend keeps what it loaded. |
-| Structure | Expand All / Collapse All | same icons | Done in IDEate only. Collapse All leaves the root open, so the file's top level stays in view. |
+| Project | Collapse All | `expui/general/collapseAll.svg` | Closes every row in Ideate. The backend keeps what it loaded. |
+| Structure | Expand All / Collapse All | same icons | Done in Ideate only. Collapse All leaves the root open, so the file's top level stays in view. |
 | both | Hide | `expui/general/hide.svg` | The same as tapping the window's stripe button while it shows. On a phone held upright, closing the last window on a side page goes back to the editor. |
 
 Not drawn yet: Project's ⋮ Options menu (flatten packages, show members, and so on; the backend sends none of
@@ -130,12 +130,12 @@ What the backend sends (probe on the Mac backend, port 5994, 17:55–17:59 IST):
 | `PackagesPane` | Packages | `RdProjectViewBePane` | 1 |
 | `Scope` | Scopes | `RdProjectViewBePane` | 4 |
 
-- `currentPane` starts null. IDEate sets it to `ProjectPane` itself (`createProjectView`), so it never shows
+- `currentPane` starts null. Ideate sets it to `ProjectPane` itself (`createProjectView`), so it never shows
   this pane by default. JetBrains Client shows it.
 - The pane's `control` is a `BeneluxView`: a BeControl that only names an `LxPanel` the backend paints. It is
-  the same kind of Lux panel IDEate already paints inside popups (`BackendPopups`, New ▸ File's "already
+  the same kind of Lux panel Ideate already paints inside popups (`BackendPopups`, New ▸ File's "already
   exists" hint). So the buttons and the project list are drawn by the backend, not described as controls.
-- Choosing the pane in IDEate today shows an empty panel, because `ProjectViewPanes` looks only for a
+- Choosing the pane in Ideate today shows an empty panel, because `ProjectViewPanes` looks only for a
   `BeTreeGrid`.
 
 Not looked at yet: where the editor area's New Markdown File, Open File and Open Terminal buttons come from.
@@ -144,7 +144,7 @@ Not looked at yet: where the editor area's New Markdown File, Open File and Open
 
 Checked on the Mac test backend (port 5994, no project) with the desktop client, 00:17–00:31 IST.
 
-- **The pane.** IDEate shows the backend's default pane when it arrives (`isDefaultPane`), and draws the
+- **The pane.** Ideate shows the backend's default pane when it arrives (`isDefaultPane`), and draws the
   `BeneluxView`'s `LxPanel` in the Project window (`LuxPaneView`). Its layout source is the frontend, so the
   panel takes the tool window's size; taps, the wheel and finger drags go to it as Lux events.
 - **A choice in a list popup runs only after the client removes the popup.** New ▾ is a `WizardPopupContent`
@@ -152,14 +152,14 @@ Checked on the Mac test backend (port 5994, no project) with the desktop client,
   (`BeWizardPopupContentProvider.executeOrOpenChildPopup`) gets `FINAL_CHOICE`, keeps the action as the
   popup's final runnable and closes the popup: result `CLOSE`. It runs the action only when the popup's entry
   leaves `activePopups` (`BackendBeAbstractPopup`, `adviseRemoveItem`). JetBrains Client removes the entry on
-  `CLOSE` (`ThinClientPopupsHost.showBePopup`). IDEate only hid it, so New ▸ Markdown File closed the list and
+  `CLOSE` (`ThinClientPopupsHost.showBePopup`). Ideate only hid it, so New ▸ Markdown File closed the list and
   created nothing. It now removes the entry too: Markdown File creates `Untitled.md` in the backend's
   `HomeFiles` folder and opens it.
 - **Opening a recent project in This Window.** The backend asks "Open Project" (New Window, This Window), adds
   the chosen project to `solutionModel.solutions`, then fires `closeRequested` on the welcome project's
   `Solution`. JetBrains Client answers by removing that solution from the map itself
   (`ThinClientRdProjectViewSession.closeSolution`, log "Remove protocol solution"), then closes its project.
-  IDEate ignored `closeRequested`, so it stayed on IdeaHome. It now removes any solution the backend closes,
+  Ideate ignored `closeRequested`, so it stayed on IdeaHome. It now removes any solution the backend closes,
   and shows the new project once the welcome project is gone; the toolbar takes the new name.
 
 | Step | Before | After |
@@ -169,7 +169,7 @@ Checked on the Mac test backend (port 5994, no project) with the desktop client,
 
 - **Where New ▾'s list goes (2026-11-20, 07:00 IST).** Its popup model's `context` is a
   `BePopupPositionDirectTransferContext`: `luxId = 3` (the welcome panel), `x = 17`, `y = 91`, `position =
-  TOP`, the point just under the New button inside the panel. IDEate put every backend popup at the top of the
+  TOP`, the point just under the New button inside the panel. Ideate put every backend popup at the top of the
   window. It now places a popup with this context at the panel's window position (its `LxPanel.position`,
   which `ProjectViews.resizePanel` sets) plus the point, kept inside the window. Popups without it (New ▸
   File's name popup: active window, TOP) stay at the top.
@@ -187,7 +187,7 @@ Still open:
   with the fix above.
 - The editor area's buttons when nothing is open (New Markdown File, Open File, Open Terminal): JetBrains
   Client draws them (`WelcomeScreenEmptyStateProvider`) and calls `WelcomeScreenFeatureApi.onClick` over
-  Fleet RPC; IDEate shows its own hint instead.
+  Fleet RPC; Ideate shows its own hint instead.
 
 ## 8. Backend tool windows: Gradle's tree and action toolbar (2026-11-20)
 
@@ -225,7 +225,7 @@ comes without its SVG: it is in the client's own `intellij.platform.externalSyst
 icons jar. `BeIdeaToolWindow.headerToolbar` was empty for Gradle; `additionalGearActions` had 4 items.
 
 **The toolbar is an ordinary action group.** The client turns `BeIdeToolbar.group` into its proxy AnAction
-(`ActionsKt.fromModel`) and runs the usual async update, so IDEate asks as it does for menus:
+(`ActionsKt.fromModel`) and runs the usual async update, so Ideate asks as it does for menus:
 
 ```
 asyncActionsModel.expandGroup(AsyncActionUpdateRequest(
@@ -244,9 +244,9 @@ Select Project Data To Import, Download Sources | Link Gradle Project, Unlink Gr
 Execute Gradle Task, Toggle Offline Mode | Analyze Dependencies…, Show Diagram… | Expand All, Collapse All |
 Build Tool Settings (a popup group: Auto-Sync Settings…, External Settings…). Composite Build
 Configuration was invisible (flags `0x880`). Expand All ran and the backend expanded the tree, which
-IDEate follows.
+Ideate follows.
 
-**IDEate** (`session/BackendToolWindowViews.kt`, `BeTreeRows.kt`, `ui/ToolWindows.kt`
+**Ideate** (`session/BackendToolWindowViews.kt`, `BeTreeRows.kt`, `ui/ToolWindows.kt`
 `ToolWindowToolbar`): any backend tool window on screen gets `state` Active; the selected tab's toolbar
 and tree are drawn like IntelliJ's (`ToolBar.horizontalToolbarInsets` 5/7, 22 dp buttons, 7 dp
 separators; a group with an icon opens its items below it). The toolbar is asked for again when a row is
@@ -254,18 +254,18 @@ selected and 0.5 s after one of its actions ran. The tree code is shared with Pa
 
 Not done: the 4 gear actions (`additionalGearActions`); a toggle's pressed look (Toggle Offline Mode comes
 with flags `0x88b`, the others `0x883`; which bit means "selected" isn't checked); the output of a task a
-double tap runs goes to the Run tool window, which IDEate doesn't draw yet.
+double tap runs goes to the Run tool window, which Ideate doesn't draw yet.
 
 ## 9. Run and Build: tabs and the backend-painted panel (2026-11-21)
 
 Checked on the Mac test backend (port 5991) on `smoke` (a plain Java module with `Main`, `Slow` and `Forever`
 run configurations) and `gradle-smoke`. The wire facts are in `terminal-and-consoles-spec.md` 7.2 and 8.2
-(with their 2026-11-21 phase 2 addenda); this is what IDEate does with them.
+(with their 2026-11-21 phase 2 addenda); this is what Ideate does with them.
 
 - **Window and button.** Run, Debug and Build have bottom stripe buttons after Services (`DEFAULT_LAYOUT` in
   `ui/ToolWindows.kt`), shown while the backend lists the window as available. When a run starts the backend
   registers Run already `ActiveAndFocused`; `BackendToolWindowViews` turns that (and any later non-Hidden
-  state IDEate did not set) into `SessionState.showRequest`, and `ClientScreen` presses the window's button.
+  state Ideate did not set) into `SessionState.showRequest`, and `ClientScreen` presses the window's button.
   Build sends no state, so it opens with its button.
 - **Tabs.** `BackendToolWindowView` has `tabs` (each `BeTab.tabName`), `selectedTab`, `closeable` and `panel`.
   They are chips in the header after the title, like Terminal's (`HeaderTab` in `ui/HeaderTabs.kt`, shared by
@@ -282,7 +282,7 @@ run configurations) and `gradle-smoke`. The wire facts are in `terminal-and-cons
   left); the Build tree (`BeSplitComponentControl "BuildTree"`) is an empty `PanelBuildTree` until phase 3;
   the port bar draws nothing; anything else is logged once.
 - **Icons.** `LuxDialogs.bind` stores the pixels of every Lux component's frames, so a toolbar's icons that
-  were first sent in a frame IDEate doesn't draw (the backend's main window) are not "unknown cached images".
+  were first sent in a frame Ideate doesn't draw (the backend's main window) are not "unknown cached images".
 
 Tests: `compose/src/jvmTest/.../session/BackendTabsTest.kt` (the tab name mapping) and
 `desktop/src/test/.../RunTabsLiveTest.kt` (live, skipped without `DRIVER_LINK`): `runTabs`, `closeRunningTab`,

@@ -1,7 +1,7 @@
 # Feature parity (plan): undo, Cmd+Click, Search Everywhere, Find in Files, Find in the editor
 
-Plan, 2026-11-18. Five things IntelliJ has and IDEate lacks or only half has. For each: how IntelliJ and
-JetBrains Client 263.7307.200 do it, what IDEate has, the design, the steps and what is still unknown.
+Plan, 2026-11-18. Five things IntelliJ has and Ideate lacks or only half has. For each: how IntelliJ and
+JetBrains Client 263.7307.200 do it, what Ideate has, the design, the steps and what is still unknown.
 
 **Rule for every design here: look and behave like IntelliJ.** Same popup, same rows, same shortcuts, same
 wording. Where a finger can't do what a mouse does, the touch form is listed as an addition, not a replacement.
@@ -20,11 +20,11 @@ or run. **[Open]** = not known yet; the step that settles it is named.
 
 | # | Feature | Where the work happens | Transport | New protocol work | Size |
 |---|---|---|---|---|---|
-| 1 | Undo / redo | backend undoes, IDEate applies the answer | rd `RdUndoRedoRequest` (already sent) | none | small |
+| 1 | Undo / redo | backend undoes, Ideate applies the answer | rd `RdUndoRedoRequest` (already sent) | none | small |
 | 2 | Cmd+Click | backend resolves and navigates | rd `HyperlinkHighlightingModel` + `RdCallActionRequest("GotoDeclaration")` | follow a backend selection change; the usages popup | medium |
-| 3 | Find in the editor | IDEate, on its own copy of the text | none for Find; rd `RdApplyPatchRequest` for Replace | none | medium |
-| 4 | Find in Files | backend searches, IDEate lists | Fleet RPC `FindInFilesApi` | serialize `FindModel`; file ids | medium |
-| 5 | Search Everywhere | backend searches, IDEate lists | Fleet RPC `SeRemoteApi` | **the Rhizome database client (JetBrains' library)** | large |
+| 3 | Find in the editor | Ideate, on its own copy of the text | none for Find; rd `RdApplyPatchRequest` for Replace | none | medium |
+| 4 | Find in Files | backend searches, Ideate lists | Fleet RPC `FindInFilesApi` | serialize `FindModel`; file ids | medium |
+| 5 | Search Everywhere | backend searches, Ideate lists | Fleet RPC `SeRemoteApi` | **the Rhizome database client (JetBrains' library)** | large |
 
 Suggested order: 1, 3, 2, 4, 5. 1 and 3 need nothing new from the backend. 5 has the one real unknown, so it
 starts with a spike.
@@ -54,7 +54,7 @@ starts with a spike.
 - Menu: Edit ▸ Undo *name* / Redo *name* (e.g. "Undo Typing", "Undo Paste"). The editor's context menu
   (`EditorPopupMenu`) has no undo. A step that touches several files asks first ("Undo Rename?").
 
-### What IDEate has
+### What Ideate has
 
 - `EditSession.undo(isUndo)` sends the request with the sizes expected after the undo, and applies the answer
   like any backend patch. `ClientSession.undo()` / `redo()` call it. [Seen code]
@@ -75,7 +75,7 @@ starts with a spike.
    - On screen: the keyboard bar, an extra bar below the tool window bar while the virtual keyboard is open
      (decided 2026-11-18, built later). Not the main toolbar's ⋮: that is the run widget's More Actions.
    - Later, with the phone's key row over the keyboard (not part of this plan), two buttons there.
-4. **While the answer is pending** the editor shows nothing new (IDEate has no local undo history). That is the
+4. **While the answer is pending** the editor shows nothing new (Ideate has no local undo history). That is the
    existing behaviour and stays. Local (speculative) undo is not planned.
 
 ### Steps
@@ -163,7 +163,7 @@ Steps 1 to 4 are built.
   strategy of the action id `"CtrlClick"`; the action itself is `GotoDeclaration`, run on the backend with the
   editor as context. [Seen code for the id; the dispatch to `GotoDeclaration` is **Inferred** from the keymap
   and from `InlayClickAction use-shortcut-of="GotoDeclaration"`]
-- What the backend does next arrives over models IDEate already reads:
+- What the backend does next arrives over models Ideate already reads:
   - same file: a caret move in `backendPatches`;
   - another file: a new entry in `fileEditorsModel.backendDeferredComposites` and a selection change
     (`fileEditorsModel.selectionChanged` with `OriginKind.Backend`);
@@ -171,7 +171,7 @@ Steps 1 to 4 are built.
     maxUsages, …)` under `FindUsagesModel.sessions`, shown by `FrontendShowUsagesManager` with IntelliJ's own
     Show Usages popup. [Seen code: model fields]
 
-### What IDEate has
+### What Ideate has
 
 - `RdCallActionRequest` with the editor's timestamps runs any backend action (`ActionMenus`,
   `EditSession.actionTimestamps()`); the caret is moved to the click first for the context menu.
@@ -193,7 +193,7 @@ Steps 1 to 4 are built.
    Usages**, **Implementation(s)**, **Type Declaration** and **Find Usages**, as IntelliJ's own menu lists
    them. No new gesture, so a tap stays a caret move.
 4. **Following the backend.** When the backend selects another editor (`selectionChanged`,
-   `OriginKind.Backend`), IDEate shows that tab and scrolls to its caret. Today only IDEate's own selections
+   `OriginKind.Backend`), Ideate shows that tab and scrolls to its caret. Today only Ideate's own selections
    are sent; backend ones are ignored.
 5. **Back.** Android's Back and the toolbar get IntelliJ's `Back` action only through the keys above; Android
    Back keeps its current meaning (leave the session).
@@ -217,7 +217,7 @@ Steps 1 to 4 are built.
 - **[Open]** Which action id the click sends (`GotoDeclaration` or a client-only id mapped by
   `ActionCallPolicy`). Step 1.
 - **[Open]** How a library class opens: as a normal composite with decompiled text (expected), or something
-  IDEate has no model for. Step 1.
+  Ideate has no model for. Step 1.
 - **[Open]** `RdShowUsagesSession`'s item list: the fields were read, the flow of `RdUsage` rows was not.
   Settled below.
 
@@ -235,13 +235,13 @@ Client) was skipped: the backend's answers settled the open items.
   ⌘[ ⌘] / Ctrl+Alt+← → `Back` / `Forward`.
 - **Following the backend into another file.** Not `selectionChanged`: the backend never fired it with
   `OriginKind.Backend` here. It adds a `DeferredCompositeModel` to `fileEditorsModel.backendDeferredComposites`
-  whose `openRequest` is `OpenWithFocusRequest(selectAsCurrent = true, openMode = DEFAULT)` (files IDEate
+  whose `openRequest` is `OpenWithFocusRequest(selectAsCurrent = true, openMode = DEFAULT)` (files Ideate
   opens itself come back with `selectAsCurrent = false`); for a file that is already open it sets the
-  composite's `openWithFocus`. IDEate shows that tab, waiting for the document's name and text when they
+  composite's `openWithFocus`. Ideate shows that tab, waiting for the document's name and text when they
   are not in yet. Same file: the caret move arrives as an ordinary backend patch.
 - **Hover underline.** `solution.hyperlinkHighlightingModel.getElementRange(HyperlinkHighlightingArgs(editorId,
   offset, BrowseMode.Declaration))` answers `HyperlinkHighlightingResult(textRange = RdTextRange(408, 416),
-  docInfo)`; IDEate draws the range with the scheme's `CTRL_CLICKABLE` (falls back to an underline in the
+  docInfo)`; Ideate draws the range with the scheme's `CTRL_CLICKABLE` (falls back to an underline in the
   text colour) and a hand cursor. It starts on the first pointer move with ⌘ (Ctrl) down, not on the key
   press itself, and drops on key release, pointer exit or an edit. Mouse only; a touch has no modifier.
 - **Usages popup.** On a declaration the backend adds an `RdShowUsagesSession` to `solution.findUsagesHost
@@ -250,7 +250,7 @@ Client) was skipped: the backend's answers settled the open items.
   `usages.items` in batches, then sets `isSearchComplete = true`. Rows were `RdMergeableUsage`: the line text
   (`'    return twice(new Other().next());'`), document offsets 63–68, `position` with 0-based line and
   column, and grouping texts (the `FileGroupingRule` group is the file name). JetBrains Client
-  (`FrontendUsageManagerHost`) waits 200 ms and shows nothing when `handledOnBackend` is true. IDEate:
+  (`FrontendUsageManagerHost`) waits 200 ms and shows nothing when `handledOnBackend` is true. Ideate:
   - a single usage with `navigateToSingleUsageImmediately`: goes there at once (no popup);
   - otherwise the popup once two rows are in or the search is complete: title, count, a row per usage
     (line number, the line with the usage bold, file name), the scope; ↑ ↓ Enter Esc, click;
@@ -262,7 +262,7 @@ Client) was skipped: the backend's answers settled the open items.
   popups; `Jdbc.OpenEditor.Data`, `Jdbc.OpenEditor.DDL`, `GotoRow` and `sql.SelectInDatabaseView` open data
   editors, a grid dialog or the Database tool window.
 - **Library classes.** ⌘B on `String.length` made the backend open JetBrains' decompiler licence dialog
-  (a Lux dialog). IDEate drew it 555 × 158 with its buttons cut off. The licence was not accepted, so what
+  (a Lux dialog). Ideate drew it 555 × 158 with its buttons cut off. The licence was not accepted, so what
   a decompiled class looks like is still open, and so is the dialog's height.
 - Not yet: ⇧⌘-click (type declaration), ⌥⌘-click (implementation), Show Usages' "more usages" and scope
   change, a file icon per row.
@@ -294,7 +294,7 @@ Client) was skipped: the backend's answers settled the open items.
   change, sent as a patch. **[Inferred]** from the absence of client classes and from how every other local
   edit travels (`edit-protocol-client.md`).
 
-### What IDEate has
+### What Ideate has
 
 - The document's full text in `EditSession.text`; highlighters drawn from backend markup; a shared
   `SearchTextField` component; `RdApplyPatchRequest` for local caret moves.
@@ -302,7 +302,7 @@ Client) was skipped: the backend's answers settled the open items.
 
 ### Design
 
-Everything runs in IDEate, as in JetBrains Client.
+Everything runs in Ideate, as in JetBrains Client.
 
 1. **Bar**: IntelliJ's, same order and icons, above the editor's text and under the tabs. On a phone the two
    rows keep IntelliJ's order; the filter and ⋮ go into one overflow menu when the row is narrower than its
@@ -312,7 +312,7 @@ Everything runs in IDEate, as in JetBrains Client.
    with IntelliJ's flags. An invalid regex shows IntelliJ's red field and "Bad pattern". Re-run 100 ms after
    typing stops and after every document change.
 3. **Highlights**: matches painted with the scheme's `TEXT_SEARCH_RESULT_ATTRIBUTES`, the current one with
-   `SEARCH_RESULT_ATTRIBUTES` plus IntelliJ's border, and marks in the scrollbar when IDEate has one.
+   `SEARCH_RESULT_ATTRIBUTES` plus IntelliJ's border, and marks in the scrollbar when Ideate has one.
 4. **Keys**: ⌘F / Ctrl+F, ⌘R / Ctrl+R, Enter, Shift+Enter, Esc, ⌘G / F3 and ⇧⌘G / Shift+F3. On touch the bar
    opens from the keyboard bar (section 1; later) and the soft keyboard's action key is "next".
 5. **Replace**: a new `EditSession.replace(range, text)`: a local document change in a command named as
@@ -378,7 +378,7 @@ Everything runs in IDEate, as in JetBrains Client.
   are *not* sent back; they show in the backend's Find tool window. [Seen code: the API's comment]
 - A single **Replace** changes the selected usage (`ReplaceInProjectManager.replaceUsage`).
 
-### What IDEate has
+### What Ideate has
 
 - `FleetRpc` with calls, subscriptions and streams (used by completion and Structure); the kernel project id;
   opening a file by path and moving the caret; the Fleet icon id decoder (`iconPath`).
@@ -390,16 +390,16 @@ Everything runs in IDEate, as in JetBrains Client.
    list, hidden while the keyboard is up.
 2. **Search**: on each query change (debounced 100 ms, the delay `FindPopupPanel` reschedules with), cancel the running call and
    start `findByModel` with `maxUsagesCount = 1000`; rows appear as they stream in. Scope chooser: In
-   Project and Directory first (Directory uses the folder chooser IDEate already has); Module and Scope
+   Project and Directory first (Directory uses the folder chooser Ideate already has); Module and Scope
    after.
 3. **Rows**: `presentation` chunks drawn with their attributes, then `shortenPresentablePath` and `line + 1`.
 4. **Open a result**: Enter or a tap opens the file at `navigationOffset` and closes the popup (pinned: stays).
-5. **Preview**: the result's file around the match. First version: the lines IDEate can get by opening the
+5. **Preview**: the result's file around the match. First version: the lines Ideate can get by opening the
    document read-only in the background; if that proves heavy on the phone, the preview shows only the
    matching line and its neighbours from `presentation`.
 6. **Replace**: single Replace opens the file and uses `EditSession.replace` (section 3). **Replace All**
    calls `performFindAllOrReplaceAll`; the backend's confirmation comes over Lux.
-7. **Open in Find Window**: needs the Find tool window, which IDEate doesn't show yet (it is a backend
+7. **Open in Find Window**: needs the Find tool window, which Ideate doesn't show yet (it is a backend
    window). Greyed out until tool windows drawn by the backend exist.
 
 ### Steps
@@ -473,10 +473,10 @@ suspend fun createSession(): SeSession = change { shared { SeSessionEntity.new {
 The backend looks the entity up for every item (`SeItemEntity.createWith`: `session.asRef().derefOrNull()
 ?: return null`), so a made-up id gives **no results**. [Seen code]
 
-IDEate has no Rhizome database: completion and Structure only needed ids that came over rd
+Ideate has no Rhizome database: completion and Structure only needed ids that came over rd
 (`completion-protocol.md` section 5).
 
-**Decided 2026-11-18: bring up the real database client, with JetBrains' own library**, as IDEate does for rd.
+**Decided 2026-11-18: bring up the real database client, with JetBrains' own library**, as Ideate does for rd.
 A hand-made "create session" transaction was the first idea and is dropped: it would write to a database it never
 reads, couldn't see a rejected transaction, and more features will need the database.
 
@@ -507,10 +507,10 @@ withKernel(middleware) {                                   // withTransactor { w
 - `ClientCausalityRequestInterceptor` adds the client's vector clock to each call and waits until the local
   database has caught up with the answer's.
 - The session entity type is `SeSessionEntity` (`DurableEntityType`, ident
-  `com.intellij.platform.searchEverywhere.SeSessionEntity`). IDEate declares a type with the same ident instead
+  `com.intellij.platform.searchEverywhere.SeSessionEntity`). Ideate declares a type with the same ident instead
   of loading IntelliJ's platform jars.
 
-### What IDEate has
+### What Ideate has
 
 - `FleetRpc` (calls, subscriptions, outgoing streams with refill), the kernel project id, the icon id
   decoder, camel-hump match painting from completion, the popup and list components.
@@ -531,7 +531,7 @@ withKernel(middleware) {                                   // withTransactor { w
 4. **Rows**: by presentation type. Targets: icon, text with the matched ranges bold, container text in grey,
    location right aligned. Actions: name, shortcut, the toggle state.
 5. **Choosing**: Enter or a tap calls `itemSelected` and closes the popup when it answers true. The backend
-   opens the file; IDEate follows its selection change (section 2, step 4 is a prerequisite).
+   opens the file; Ideate follows its selection change (section 2, step 4 is a prerequisite).
 6. **Filters**: "Include non-project items" and the scope chooser of each tab, from
    `getSearchScopesInfoForProviders`. Type filters and preview later.
 7. **Session lifetime**: one session per popup opening, retracted when it closes.
@@ -539,7 +539,7 @@ withKernel(middleware) {                                   // withTransactor { w
 ### Steps
 
 1. **Spike on the desktop (go / no-go), in three parts:**
-   1. JetBrains' Fleet RPC client over IDEate's `FleetRpcModel`: resolve `RemoteKernel` and read the snapshot.
+   1. JetBrains' Fleet RPC client over Ideate's `FleetRpcModel`: resolve `RemoteKernel` and read the snapshot.
    2. The database: `withTransactor`, `withRete`, `withRebaseLoop`; log how many entities arrive and stay in
       step.
    3. Create a `SeSessionEntity`, call `getItems` for the Files tab. Done when `Main` returns `Main.java` on
@@ -551,9 +551,9 @@ withKernel(middleware) {                                   // withTransactor { w
 
    | Part | Result |
    |---|---|
-   | 1. JetBrains' `rpcClient` over `FleetRpcModel`, next to IDEate's own `FleetRpc` | works. Each client has its own origin id and takes only envelopes addressed to it. Route `fleet`, instance id = the API's name (`fleet.kernel.rebase.RemoteKernel`). `subscribeWithChunkedSnapshot(null)` answered with a vector clock and the snapshot |
+   | 1. JetBrains' `rpcClient` over `FleetRpcModel`, next to Ideate's own `FleetRpc` | works. Each client has its own origin id and takes only envelopes addressed to it. Route `fleet`, instance id = the API's name (`fleet.kernel.rebase.RemoteKernel`). `subscribeWithChunkedSnapshot(null)` answered with a vector clock and the snapshot |
    | 2. Local database following the backend's | works, set up as IntelliJ's `startClientKernel`: `withTransactor(FollowerTransactorMiddleware(DefaultInstructionSet.encoder()), defaultPart = FrontendPart)`, `withRete`, `withRebaseLoop(…, DefaultInstructionSet, …)`. 30 entities after the snapshot (bookkeeping types only on a fresh backend) |
-   | 3a. Create a `SeSessionEntity` | works locally, no rejection from the backend. IDEate declares the type itself (`SearchSessionEntity`): a type is known by its name, and the module is always `<unknown>`; a reference travels as `{"uid": "…"}` |
+   | 3a. Create a `SeSessionEntity` | works locally, no rejection from the backend. Ideate declares the type itself (`SearchSessionEntity`): a type is known by its name, and the module is always `<unknown>`; a reference travels as `{"uid": "…"}` |
    | 3b. `SeRemoteApi.getItems` with that session | works: the Files tab for `Main` returned one item, `Main.java` in `src/demo` (`presentableText`, `containerText`, `locationText` "smoke", `iconId`, matched ranges), then `SeTransferEnd`. Details below |
 
    What it took:
@@ -568,14 +568,14 @@ withKernel(middleware) {                                   // withTransactor { w
    - The call (3b), as JSON through JetBrains' RPC client, with no IntelliJ platform jars:
      - `SearchApi` and its descriptor are written by hand (JetBrains' RPC compiler plugin generates them for
        IntelliJ). Every argument and the item stream are `JsonElement`; `requestedCountChannel` is a
-       `ReceiveChannel<Int>` that IDEate sends 50 on.
+       `ReceiveChannel<Int>` that Ideate sends 50 on.
      - Arguments: `projectId` `{"id": "<kernel project id>"}`; `session`
        `{"type": "com.intellij.platform.searchEverywhere.SeSessionImpl", "ref": {"uid": "lu5lflrsb7pt7o8n5kgf"}}`;
        `providerIds` `[{"value": "FileSearchEverywhereContributor"}]`; `params`
        `{"inputQuery": "Main", "filter": {"type": "com.intellij.platform.searchEverywhere.SeFilterState.Empty"}}`.
      - The database position: JetBrains Client's `ClientCausalityRequestInterceptor` (decompiled,
        `intellij.platform.kernel.base.frontend.split.jar`) puts `db().clientClock.compressed()` in the call's meta
-       under `CompressedVectorClock`. IDEate's copy leaves it off `RemoteKernel`'s own calls: on `transact` the
+       under `CompressedVectorClock`. Ideate's copy leaves it off `RemoteKernel`'s own calls: on `transact` the
        backend waited for the very changes the call carried ("Timed out waiting for clock … sentTxs=1").
      - `dataContextId` is required: with `null` the backend logs "Cannot create providers on the backend: no
        serialized data context" and answers nothing. It is `{"serializedValue": "<base64>"}`, the bytes of an
@@ -629,7 +629,7 @@ withKernel(middleware) {                                   // withTransactor { w
      `RdCaretStateChange`, e.g. `method399` in Big.java → offset 64440, line 3596. In another file it comes after
      the opening `RdCaretStateSnapshot` (offset 0). What never comes is a scroll: `TextControlModel.scrolling`,
      `requestFocusFromBackend` and `initialState` (null) stay silent, so the frontend has to scroll itself, as
-     `OpenFileDescriptor` asks with `scrollToCaret(ScrollType.CENTER)`. IDEate counts such caret moves in a
+     `OpenFileDescriptor` asks with `scrollToCaret(ScrollType.CENTER)`. Ideate counts such caret moves in a
      backend patch, not in an answer to its own request (`EditSession.backendCaretMoves`), and the editor
      centres the caret's line on each (`EditorFile.caretToShow`, shared with the reopened file's caret). Checked
      on the Pixel 3a emulator: method399 opens Big.java at line 3596; method10 in the open Big.java goes to line
@@ -642,7 +642,7 @@ withKernel(middleware) {                                   // withTransactor { w
 
 - **[Answered 2026-11-18, desktop]** Whether JetBrains' Fleet jars run outside IntelliJ: they are built against JetBrains' coroutines
   fork and may reach for platform classes (logging, tracing). Step 1.
-- **[Answered 2026-11-18: they can]** Whether two RPC clients (IDEate's hand-written `FleetRpc` and JetBrains') can share one
+- **[Answered 2026-11-18: they can]** Whether two RPC clients (Ideate's hand-written `FleetRpc` and JetBrains') can share one
   `FleetRpcModel`, or completion and Structure must move onto JetBrains' client first. Step 1.
 - **[Answered 2026-11-18]** Android: they run on ART. The same spike on the Pixel 3a emulator (API 34) against the Mac
   backend returned `Main.java` for "Main", and the editor kept working beside it. Turned on with
@@ -653,7 +653,7 @@ withKernel(middleware) {                                   // withTransactor { w
   - The APK leaves out each jar's `entityTypes.txt` ("used for validation only"), `__index__` and
     `META-INF/MANIFEST.mf`: they share names across jars and only JetBrains' build tools read them.
   - The APK grew from 49.0 MB to 52.5 MB.
-  - The spike code moved to `compose` (`intellijandroid.client.kernel`); both apps register `FleetLoggerFactory`
+  - The spike code moved to `compose` (`io.github.safeuq.ideate.client.kernel`); both apps register `FleetLoggerFactory`
     in `META-INF/services`. One jar list, `fleetJars` in the root build script.
 - **[Answered 2026-11-18]** `dataContextId`: `null` gets no results; a data context naming only the project is
   enough for the Files tab (spike part 3b). The editor's context (`EditSession.actionTimestamps()`) is the next

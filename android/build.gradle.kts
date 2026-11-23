@@ -257,11 +257,11 @@ val clientAssets by
 base.archivesName = "ideate"
 
 android {
-  namespace = "intellijandroid.client.android"
+  namespace = "io.github.safeuq.ideate.client.android"
   compileSdk = 37
 
   defaultConfig {
-    applicationId = "intellijandroid.client.android"
+    applicationId = "io.github.safeuq.ideate.client.android"
     // java.util.HexFormat (client certificate fingerprints) needs 34.
     minSdk = 34
     targetSdk = 36

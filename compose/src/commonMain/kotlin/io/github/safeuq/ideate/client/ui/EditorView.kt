@@ -1,0 +1,1334 @@
+package io.github.safeuq.ideate.client.ui
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.github.safeuq.ideate.client.session.EditorFile
+import io.github.safeuq.ideate.client.session.EditorKey
+import io.github.safeuq.ideate.client.session.EditorKind
+import io.github.safeuq.ideate.client.session.EditorScheme
+import io.github.safeuq.ideate.client.session.Highlight
+import io.github.safeuq.ideate.client.session.IndentGuide
+import io.github.safeuq.ideate.client.session.Lookup
+import io.github.safeuq.ideate.client.session.LookupKey
+import io.github.safeuq.ideate.client.session.TextEffect
+import io.github.safeuq.ideate.client.session.UsagesPopup
+import io.github.safeuq.ideate.client.ui.component.AppPopup
+import io.github.safeuq.ideate.client.ui.component.PopupPlacement
+import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
+import kotlin.math.ceil
+import kotlin.math.max
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** Where each line starts; line i is text[starts[i] until end(i)], without its line break. */
+private class Lines(val text: String) {
+  val starts: IntArray = buildList {
+    add(0)
+    text.forEachIndexed { index, character -> if (character == '\n') add(index + 1) }
+  }
+    .toIntArray()
+  val count
+    get() = starts.size
+
+  fun end(line: Int) = if (line + 1 < starts.size) starts[line + 1] - 1 else text.length
+
+  fun lineOf(offset: Int): Int =
+    starts.binarySearch(offset).let { if (it >= 0) it else -it - 2 }.coerceIn(0, count - 1)
+
+  fun text(line: Int) = text.substring(starts[line], end(line))
+}
+
+/** Editor geometry in px, following IntelliJ's `EditorView` and `EditorGutterLayout` (New UI). */
+private class EditorMetrics(
+  val lineHeight: Float,
+  val baseline: Float,
+  val caretTop: Float,
+  val caretHeight: Float,
+  val charWidth: Float,
+  val gutterWidth: Float,
+  val lineNumbersRight: Float,
+  val iconAreaLeft: Float,
+)
+
+/**
+ * What the editor asks the session to do; the session applies it locally first and syncs it with
+ * the backend.
+ */
+class EditorActions(
+  val type: (Char) -> Unit,
+  val key: (EditorKey) -> Unit,
+  /** New caret offset and selection anchor (equal to the offset when nothing is selected). */
+  val moveCaret: (Int, Int) -> Unit,
+  val undo: () -> Unit,
+  val redo: () -> Unit,
+  /** Ctrl+Space. */
+  val complete: () -> Unit = {},
+  /** Keys for the completion popup while it is open. */
+  val lookupKey: (LookupKey) -> Unit = {},
+  /** A click or tap on a completion popup row, by item id. */
+  val chooseLookupItem: (String) -> Unit = {},
+  /** Paste this text (the system clipboard's) through the backend's paste. */
+  val paste: (String) -> Unit = {},
+  /** The same through the backend's Paste as Plain Text (`EditorPasteSimple`). */
+  val pasteSimple: (String) -> Unit = {},
+  /** Text Ideate just copied, for the backend's clipboard. */
+  val copied: (String) -> Unit = {},
+  /** Ask the backend for the editor's context menu (the caret is already at the click). */
+  val openMenu: () -> Unit = {},
+  /** Run a backend action at the caret by id, as its shortcut does, e.g. `GotoDeclaration`. */
+  val runAction: (String) -> Unit = {},
+  /**
+   * The range a ⌘-click (Ctrl-click) at this offset would go to, for the underline; null for none.
+   */
+  val linkAt: (Int, (IntRange?) -> Unit) -> Unit = { _, found -> found(null) },
+  /** Keys for the usages popup while it is open. */
+  val usagesKey: (LookupKey) -> Unit = {},
+  /** A click on a usages popup row, by usage index. */
+  val chooseUsage: (Int) -> Unit = {},
+  /** A click outside the usages popup. */
+  val closeUsages: () -> Unit = {},
+)
+
+@Composable
+fun EditorView(
+  file: EditorFile,
+  scheme: EditorScheme,
+  actions: EditorActions,
+  modifier: Modifier = Modifier,
+  lookup: Lookup? = null,
+  usages: UsagesPopup? = null,
+  scroll: SidewaysScroll = remember { SidewaysScroll() },
+  /**
+   * The backend's context menu (`EditorPopupMenu`), read while the menu shows; null entries show
+   * "Loading…". Without it the editor shows its own list.
+   */
+  backendMenu: (() -> List<MenuEntry>?)? = null,
+  /** Told whether sticky lines show at the top, e.g. to drop a line drawn just above them. */
+  onStickyShown: (Boolean) -> Unit = {},
+  /**
+   * `CONSOLE` is IntelliJ's console editor (`ConsoleViewUtil.setupConsoleEditor`): no gutter, no
+   * caret, no caret row, no typing. Text can still be selected and copied.
+   */
+  kind: EditorKind = EditorKind.MAIN_EDITOR,
+) {
+  val isConsole = kind == EditorKind.CONSOLE
+  val fonts = LocalClientFonts.current
+  val density = LocalDensity.current
+  val measurer = rememberTextMeasurer(cacheSize = 512)
+  val lines = remember(file.text) { Lines(file.text) }
+  val textStyle =
+    remember(fonts, scheme) {
+      TextStyle(
+        fontFamily = fonts.editor,
+        fontSize = IslandsDark.EDITOR_FONT_SIZE.sp,
+        color = Color(scheme.foreground),
+      )
+    }
+  val lineNumberStyle =
+    remember(fonts) {
+      TextStyle(fontFamily = fonts.editor, fontSize = IslandsDark.LINE_NUMBER_FONT_SIZE.sp)
+    }
+
+  val metrics =
+    remember(textStyle, lines.count, density, isConsole) {
+      with(density) {
+        // IntelliJ: lineHeight = ceil(fontMetricsHeight × lineSpacing); the extra space is split
+        // above and below.
+        val sample = measurer.measure("0".repeat(100), textStyle)
+        val fontHeight = ceil(sample.size.height.toFloat() / density.density) * density.density
+        val lineHeight =
+          ceil(fontHeight / density.density * IslandsDark.LINE_SPACING) * density.density
+        val extra = ((lineHeight - fontHeight) / density.density / 2).toInt() * density.density
+        val lineNumberWidth =
+          max(
+            14.dp.toPx(),
+            ceil(
+              measurer
+                .measure("9".repeat(lines.count.toString().length), lineNumberStyle)
+                .size
+                .width
+                .toFloat(),
+            ),
+          )
+        // IntelliJ's new UI gutter (EditorGutterLayout.createNewUILayout): the empty annotation
+        // area and the gap after the VCS markers, the line numbers right-aligned, a gap, the icons
+        // (17), a gap, folding 11, 6. Normal density, two-digit numbers: 4 + 4 + 14 + 4 + 17 + 4 +
+        // 11 + 6 = 64, text right after.
+        val numbersLeft =
+          IslandsDark.gutterEmptyAnnotationArea.toPx() + IslandsDark.gutterGap.toPx()
+        val lineNumbersRight = numbersLeft + lineNumberWidth
+        val iconAreaLeft = lineNumbersRight + IslandsDark.gutterGap.toPx()
+        val gutterWidth =
+          // A console (ConsoleViewUtil.setupConsoleEditor: no line numbers, no line markers,
+          // folding outline on) keeps only the folding column, empty: the fold icon's 9 + 2 = 11
+          // (EditorGutterLayout, getFoldingAreaWidth), text right after it.
+          if (isConsole) 11.dp.toPx()
+          else
+            iconAreaLeft + 17.dp.toPx() + IslandsDark.gutterGap.toPx() + 11.dp.toPx() + 6.dp.toPx()
+        EditorMetrics(
+          lineHeight = lineHeight,
+          baseline = sample.firstBaseline + extra,
+          caretTop = extra,
+          caretHeight = fontHeight,
+          charWidth = sample.size.width / 100f,
+          gutterWidth = gutterWidth,
+          lineNumbersRight = lineNumbersRight,
+          // Icons area (17 px) after the line numbers and their gap.
+          iconAreaLeft = iconAreaLeft,
+        )
+      }
+    }
+  // The symbol under the pointer while ⌘ (Ctrl) is held, drawn as IntelliJ's CTRL_CLICKABLE.
+  var link by remember(file.path, file.text) { mutableStateOf<IntRange?>(null) }
+  // The mouse over the gutter: IntelliJ shows the arrow there and the I-beam over the text.
+  var overGutter by remember { mutableStateOf(false) }
+  val linkStyle =
+    remember(scheme) {
+      scheme.style(listOf(listOf("CTRL_CLICKABLE"))).let {
+        if (it.effect != null) it
+        else
+          it.copy(
+            effect = TextEffect.LINE_UNDERSCORE,
+            effectColor = it.foreground ?: scheme.foreground,
+          )
+      }
+    }
+  val shownHighlights =
+    remember(file.highlights, link, linkStyle) {
+      link?.let { file.highlights + Highlight(-1, it.first, it.last + 1, Int.MAX_VALUE, linkStyle) }
+        ?: file.highlights
+    }
+  // Keyed on the lists, not the file: a caret move must not rebuild them (every line would redraw).
+  // A line keeps its previous list when its highlights didn't change, so only lines whose
+  // highlighting changed recompose and measure their text again.
+  val previousBuckets = remember(lines) { HashMap<Int, List<Highlight>>() }
+  val highlightsByLine =
+    remember(shownHighlights, lines) {
+      bucketByLine(shownHighlights, lines)
+        .mapValues { (line, highlights) ->
+          previousBuckets[line]?.takeIf { it == highlights } ?: highlights
+        }
+        .also {
+          previousBuckets.clear()
+          previousBuckets.putAll(it)
+        }
+    }
+  val gutterIconsByLine =
+    remember(file.gutterIcons, lines) { file.gutterIcons.groupBy { lines.lineOf(it.offset) } }
+  // IndentGuideRenderer: a guide is drawn on the lines after its start line and before its end
+  // line.
+  val guidesByLine =
+    remember(file.indentGuides, lines) {
+      val result = HashMap<Int, MutableList<IndentGuide>>()
+      for (guide in file.indentGuides) {
+        for (line in guide.startLine + 1 until minOf(guide.endLine, lines.count)) {
+          result.getOrPut(line) { mutableListOf() } += guide
+        }
+      }
+      result
+    }
+  val longestLine =
+    remember(lines) { (0 until lines.count).maxOfOrNull { lines.end(it) - lines.starts[it] } ?: 0 }
+
+  // Caret and selection belong to the session (they are synced with the backend); only the column
+  // to keep when
+  // moving up and down, and the drag start, live here.
+  val caret = file.caret
+  val anchor =
+    if (file.selectionStart == file.selectionEnd) null
+    else if (file.selectionStart == caret) file.selectionEnd else file.selectionStart
+  var preferredColumn by remember(file.path) { mutableIntStateOf(0) }
+  var dragAnchor by remember(file.path) { mutableIntStateOf(0) }
+  var focused by remember { mutableStateOf(false) }
+  var caretOn by remember { mutableStateOf(true) }
+  val focusRequester = remember { FocusRequester() }
+  // Each file keeps its own scroll position, as each of IntelliJ's tabs does.
+  val listStates = remember { mutableMapOf<String, LazyListState>() }
+  val listState = listStates.getOrPut(file.path) { LazyListState() }
+  val stickyScroll = rememberCoroutineScope()
+  // The pointer handlers below live across recompositions; they must read the current text, not the
+  // first one.
+  val currentLines by rememberUpdatedState(lines)
+  val currentFile by rememberUpdatedState(file)
+  val currentLookup by rememberUpdatedState(lookup)
+
+  // IntelliJ hides the completion popup when the editor stops showing (LookupImpl's hideNotify).
+  // The
+  // popup is a window of its own, so on a phone held upright it would float over the tool window
+  // page the pager slid to; the editor loses focus then, and with it the popup. Tapping a popup row
+  // doesn't take focus, so choosing an item still works.
+  LaunchedEffect(focused) { if (!focused && lookup != null) actions.lookupKey(LookupKey.CANCEL) }
+
+  LaunchedEffect(caret, focused) {
+    caretOn = true
+    while (focused) {
+      delay(500)
+      caretOn = !caretOn
+    }
+  }
+
+  // The caret was put back (a reopened file) or the backend moved it (navigation, e.g. a symbol
+  // chosen in Search Everywhere): centre its line, as IntelliJ's navigation does. The backend sends
+  // no scroll message for it. ponytail: a reopened file in IntelliJ gets its exact scroll position
+  // back; the centred caret line is close enough.
+  LaunchedEffect(file.path, file.caretToShow) {
+    if (file.caretToShow == 0) return@LaunchedEffect
+    // A file opened by the navigation itself has no layout yet.
+    val height = snapshotFlow { listState.layoutInfo.viewportSize.height }.first { it > 0 }
+    val lineHeight =
+      listState.layoutInfo.visibleItemsInfo.firstOrNull()?.size ?: return@LaunchedEffect
+    listState.scrollToItem(maxOf(0, lines.lineOf(caret) - height / lineHeight / 2))
+  }
+
+  // Keep the caret's line on screen: after typing or arrows past an edge, and when the view gets
+  // shorter
+  // (on Android the soft keyboard takes the lower half of the screen).
+  val caretLine = lines.lineOf(caret)
+  var viewport by remember { mutableStateOf(IntSize.Zero) }
+  val viewportHeight = viewport.height
+  LaunchedEffect(caretLine, viewportHeight, focused) {
+    if (isConsole || !focused || viewportHeight == 0) return@LaunchedEffect
+    val layout = listState.layoutInfo
+    val item = layout.visibleItemsInfo.firstOrNull { it.index == caretLine }
+    val lineHeight = layout.visibleItemsInfo.firstOrNull()?.size ?: 0
+    when {
+      item == null && caretLine < listState.firstVisibleItemIndex ->
+        listState.scrollToItem(caretLine)
+      item == null -> {
+        listState.scrollToItem(caretLine)
+        listState.scrollBy(
+          -(layout.viewportEndOffset - layout.viewportStartOffset - lineHeight).toFloat(),
+        )
+      }
+      item.offset < layout.viewportStartOffset ->
+        listState.scrollBy((item.offset - layout.viewportStartOffset).toFloat())
+      item.offset + item.size > layout.viewportEndOffset ->
+        listState.scrollBy((item.offset + item.size - layout.viewportEndOffset).toFloat())
+    }
+  }
+
+  // A console follows its output while the view is at the end (IntelliJ's caret-at-end scrolling);
+  // scrolled up to read, it stays where it is. Read once a scroll ends, not on every layout, since
+  // new lines make the view "not at the end" until it has scrolled down to them.
+  var atEnd by remember { mutableStateOf(true) }
+  if (isConsole) {
+    LaunchedEffect(listState) {
+      snapshotFlow { listState.isScrollInProgress }
+        .collect { scrolling -> if (!scrolling) atEnd = !listState.canScrollForward }
+    }
+    // requestScrollToItem, not scrollToItem: that one measures the list at once, inside the effect,
+    // which can run while Compose applies changes ("pending composition has not been applied", seen
+    // in the live Build tree test when a step's console appears). This one scrolls at the next
+    // layout.
+    LaunchedEffect(lines.count) { if (atEnd) listState.requestScrollToItem(lines.count - 1) }
+  }
+
+  LaunchedEffect(longestLine, viewport.width, metrics) {
+    // Room for the widest line plus two columns, like IntelliJ's scrolling past the longest line.
+    scroll.max =
+      maxOf(0f, (longestLine + 2) * metrics.charWidth - (viewport.width - metrics.gutterWidth))
+    scroll.x = scroll.x.coerceIn(0f, scroll.max)
+  }
+  LaunchedEffect(file.path) { scroll.x = 0f }
+  LaunchedEffect(caret, viewport.width, focused) {
+    if (isConsole || !focused || viewport.width == 0) return@LaunchedEffect
+    val caretX = (caret - lines.starts[caretLine]) * metrics.charWidth
+    val textWidth = viewport.width - metrics.gutterWidth
+    scroll.x =
+      when {
+        caretX < scroll.x -> caretX
+        caretX > scroll.x + textWidth - 2 * metrics.charWidth ->
+          caretX - textWidth + 2 * metrics.charWidth
+        else -> scroll.x
+      }.coerceIn(0f, scroll.max)
+  }
+
+  // IntelliJ's IndentsModel.getCaretIndentGuide plus IndentGuideRenderer.isCaretOnGuide: the guide
+  // at the caret's column whose block holds the caret is drawn in the selected color.
+  val caretGuide =
+    remember(file.indentGuides, caret, lines) {
+      val column = caret - lines.starts[caretLine]
+      file.indentGuides.firstOrNull { guide ->
+        val firstNonSpace =
+          (lines.starts[guide.startLine] until lines.end(guide.startLine)).firstOrNull {
+            file.text[it] != ' ' && file.text[it] != '\t'
+          } ?: lines.starts[guide.startLine]
+        val end = if (guide.endLine < lines.count) lines.starts[guide.endLine] else file.text.length
+        column == guide.indentLevel && caret >= firstNonSpace && caret < end
+      }
+    }
+
+  fun moveTo(offset: Int, extend: Boolean, keepColumn: Boolean = false) {
+    val now = currentFile
+    val target = offset.coerceIn(0, now.text.length)
+    val currentAnchor =
+      if (now.selectionStart == now.selectionEnd) null
+      else if (now.selectionStart == now.caret) now.selectionEnd else now.selectionStart
+    actions.moveCaret(target, if (extend) (currentAnchor ?: now.caret) else target)
+    if (!keepColumn) preferredColumn = target - currentLines.starts[currentLines.lineOf(target)]
+  }
+
+  /**
+   * Typed characters. ponytail: key events, no IME; Android needs an InputConnection for its soft
+   * keyboard.
+   */
+  fun typeCharacter(event: KeyEvent): Boolean {
+    val character = event.utf16CodePoint
+    // Arrow and function keys report private-use or non-character codes (e.g. U+FFFF); those aren't
+    // text.
+    val isText =
+      !Character.isISOControl(character) &&
+        character != 0xFFFF &&
+        Character.getType(character) != Character.PRIVATE_USE.toInt()
+    if (!file.editable || event.isMetaPressed || event.isCtrlPressed || !isText) return false
+    actions.type(character.toChar())
+    return true
+  }
+
+  val clipboard = LocalClipboardManager.current
+
+  /** The selection, or the caret's whole line with its line break: what IntelliJ copies. */
+  fun copyRange(): Pair<Int, Int> {
+    val current = currentFile
+    if (current.selectionStart != current.selectionEnd)
+      return minOf(current.selectionStart, current.selectionEnd) to
+        maxOf(current.selectionStart, current.selectionEnd)
+    val line = currentLines.lineOf(current.caret)
+    val end =
+      if (line + 1 < currentLines.count) currentLines.starts[line + 1] else current.text.length
+    return currentLines.starts[line] to end
+  }
+
+  fun copy() {
+    val (start, end) = copyRange()
+    val copiedText = currentFile.text.substring(start, end)
+    clipboard.setText(AnnotatedString(copiedText))
+    actions.copied(copiedText)
+  }
+
+  fun paste() {
+    clipboard.getText()?.text?.takeIf { it.isNotEmpty() }?.let(actions.paste)
+  }
+
+  fun pasteSimple() {
+    clipboard.getText()?.text?.takeIf { it.isNotEmpty() }?.let(actions.pasteSimple)
+  }
+
+  fun cut() {
+    val (start, end) = copyRange()
+    if (start == end) return
+    copy()
+    actions.moveCaret(end, start)
+    actions.key(EditorKey.BACKSPACE)
+  }
+
+  // The soft keyboard's side of the same edits (Android); read at call time, so always current.
+  // The local copy/cut/paste are reached through these, since the object's own members share names.
+  val copySelection = { copy() }
+  val cutSelection = { cut() }
+  val pasteFromClipboard = { paste() }
+  val keyboardTarget =
+    object : EditorTextTarget {
+      override fun type(character: Char) {
+        if (currentFile.editable) actions.type(character)
+      }
+
+      // Like a hardware Enter: with the completion popup open it takes the selected item.
+      override fun enter() {
+        if (currentLookup != null) actions.lookupKey(LookupKey.ACCEPT)
+        else if (currentFile.editable) actions.key(EditorKey.ENTER)
+      }
+
+      override fun backspace() {
+        if (currentFile.editable) actions.key(EditorKey.BACKSPACE)
+      }
+
+      override fun delete() {
+        if (currentFile.editable) actions.key(EditorKey.DELETE)
+      }
+
+      override fun paste(text: String) {
+        if (currentFile.editable && text.isNotEmpty()) actions.paste(text)
+      }
+
+      override fun pasteClipboard() {
+        if (currentFile.editable) pasteFromClipboard()
+      }
+
+      override fun copy() = copySelection()
+
+      override fun cut() {
+        if (currentFile.editable) cutSelection()
+      }
+
+      override fun selectAll() = actions.moveCaret(currentFile.text.length, 0)
+
+      override fun undo() = actions.undo()
+
+      override fun redo() = actions.redo()
+
+      override fun textBeforeCaret(count: Int): String {
+        val caretNow = currentFile.caret
+        return currentFile.text.substring(maxOf(0, caretNow - count), caretNow)
+      }
+
+      override fun textAfterCaret(count: Int): String {
+        val caretNow = currentFile.caret
+        return currentFile.text.substring(
+          caretNow,
+          minOf(currentFile.text.length, caretNow + count),
+        )
+      }
+
+      override fun selectedText(): String {
+        val start = minOf(currentFile.selectionStart, currentFile.selectionEnd)
+        val end = maxOf(currentFile.selectionStart, currentFile.selectionEnd)
+        return currentFile.text.substring(start, end)
+      }
+    }
+
+  fun onKey(event: KeyEvent): Boolean {
+    val key = event.key
+    val shift = event.isShiftPressed
+    val meta = event.isMetaPressed
+    val line = lines.lineOf(caret)
+    if (usages != null) {
+      when (key) {
+        Key.DirectionUp -> actions.usagesKey(LookupKey.UP)
+        Key.DirectionDown -> actions.usagesKey(LookupKey.DOWN)
+        Key.Enter -> actions.usagesKey(LookupKey.ACCEPT)
+        Key.Escape -> actions.usagesKey(LookupKey.CANCEL)
+        else -> null
+      }?.let {
+        return true
+      }
+    }
+    if (lookup != null) {
+      when (key) {
+        Key.DirectionUp -> {
+          actions.lookupKey(LookupKey.UP)
+          return true
+        }
+        Key.DirectionDown -> {
+          actions.lookupKey(LookupKey.DOWN)
+          return true
+        }
+        Key.Enter,
+        Key.Tab -> {
+          actions.lookupKey(LookupKey.ACCEPT)
+          return true
+        }
+        Key.Escape -> {
+          actions.lookupKey(LookupKey.CANCEL)
+          return true
+        }
+      }
+    }
+    if ((meta || event.isCtrlPressed) && key == Key.C) {
+      copy()
+      return true
+    }
+    if (isConsole) return false
+    navigationAction(event)?.let { actionId ->
+      actions.runAction(actionId)
+      return true
+    }
+    if (file.editable && event.isCtrlPressed && key == Key.Spacebar) {
+      actions.complete()
+      return true
+    }
+    if (file.editable) {
+      when {
+        key == Key.Enter -> {
+          actions.key(EditorKey.ENTER)
+          return true
+        }
+        key == Key.Backspace -> {
+          actions.key(EditorKey.BACKSPACE)
+          return true
+        }
+        key == Key.Delete -> {
+          actions.key(EditorKey.DELETE)
+          return true
+        }
+        (meta || event.isCtrlPressed) && key == Key.V -> {
+          paste()
+          return true
+        }
+        (meta || event.isCtrlPressed) && key == Key.X -> {
+          cut()
+          return true
+        }
+        // IntelliJ's $Undo and $Redo: ⌘Z and ⇧⌘Z on a Mac, Ctrl+Z and Ctrl+Shift+Z elsewhere.
+        (if (IS_MAC) meta else event.isCtrlPressed) && key == Key.Z -> {
+          if (shift) actions.redo() else actions.undo()
+          return true
+        }
+      }
+    }
+    fun lineOffset(targetLine: Int) =
+      lines.starts[targetLine] +
+        minOf(preferredColumn, lines.end(targetLine) - lines.starts[targetLine])
+    when (key) {
+      Key.DirectionLeft -> moveTo(if (meta) lines.starts[line] else caret - 1, shift)
+      Key.DirectionRight -> moveTo(if (meta) lines.end(line) else caret + 1, shift)
+      Key.DirectionUp ->
+        if (line > 0) moveTo(lineOffset(line - 1), shift, keepColumn = true) else moveTo(0, shift)
+      Key.DirectionDown ->
+        if (line + 1 < lines.count) moveTo(lineOffset(line + 1), shift, keepColumn = true)
+        else moveTo(file.text.length, shift)
+      Key.MoveHome -> {
+        // IntelliJ's smart Home: the first non-space character, then column 0 when already there.
+        val start = lines.starts[line]
+        val firstNonSpace =
+          (start until lines.end(line)).firstOrNull { !file.text[it].isWhitespace() } ?: start
+        moveTo(if (file.caret == firstNonSpace) start else firstNonSpace, shift)
+      }
+      Key.MoveEnd -> moveTo(lines.end(line), shift)
+      Key.A -> if (meta) actions.moveCaret(file.text.length, 0) else return typeCharacter(event)
+      else -> return typeCharacter(event)
+    }
+    return true
+  }
+
+  fun offsetAt(position: Offset): Int {
+    val visible = listState.layoutInfo.visibleItemsInfo
+    val item = visible.firstOrNull { position.y >= it.offset && position.y < it.offset + it.size }
+    val line = item?.index ?: if (position.y < 0) 0 else currentLines.count - 1
+    val column =
+      ((position.x - metrics.gutterWidth + scroll.x) / metrics.charWidth)
+        .roundToInt()
+        .coerceAtLeast(0)
+    val offset = minOf(currentLines.starts[line] + column, currentLines.end(line))
+    if (System.getenv("CLIENT_EDIT_DEBUG") != null)
+      println(
+        "[edit] pointer $position -> line ${line + 1} column $column offset $offset (first visible item offset ${visible.firstOrNull()?.offset})",
+      )
+    return offset
+  }
+
+  // IntelliJ's editor context menu (EditorPopupMenu), what Ideate can do enabled, the rest greyed
+  // out (docs/intellij-look.md, section 13).
+  fun menu(): List<MenuEntry> {
+    val current = currentFile
+    val hasSelection = current.selectionStart != current.selectionEnd
+    if (isConsole)
+      return listOf(
+        MenuItem(
+          "Copy",
+          shortcut("⌘C", "Ctrl+C"),
+          enabled = hasSelection,
+          iconPath = "expui/general/copy.svg",
+          onClick = ::copy,
+        ),
+      )
+    return listOf(
+      MenuItem(
+        "Show Context Actions",
+        shortcut("⌥⏎", "Alt+Enter"),
+        enabled = false,
+        iconPath = "expui/codeInsight/intentionBulb.svg",
+      ),
+      SubMenu(
+        "Copy / Paste Special",
+        listOf(
+          MenuItem("Copy Absolute Path", shortcut("⇧⌘C", "Ctrl+Shift+C")) {
+            clipboard.setText(AnnotatedString(current.path))
+          },
+          MenuItem("Copy File Name") { clipboard.setText(AnnotatedString(current.name)) },
+          MenuItem("Copy Reference", shortcut("⌥⇧⌘C", "Ctrl+Alt+Shift+C"), enabled = false),
+          MenuSeparator,
+          MenuItem("Copy as Plain Text", enabled = hasSelection) { copy() },
+          MenuItem("Copy as Rich Text", enabled = false),
+          MenuSeparator,
+          MenuItem("Paste from History…", shortcut("⇧⌘V", "Ctrl+Shift+V"), enabled = false),
+          MenuItem(
+            "Paste as Plain Text",
+            shortcut("⌥⇧⌘V", "Ctrl+Alt+Shift+V"),
+            enabled = current.editable,
+            onClick = ::pasteSimple,
+          ),
+        ),
+      ),
+      MenuItem(
+        "Cut",
+        shortcut("⌘X", "Ctrl+X"),
+        enabled = current.editable,
+        iconPath = "expui/general/cut.svg",
+        onClick = ::cut,
+      ),
+      MenuItem(
+        "Copy",
+        shortcut("⌘C", "Ctrl+C"),
+        iconPath = "expui/general/copy.svg",
+        onClick = ::copy,
+      ),
+      MenuItem(
+        "Paste",
+        shortcut("⌘V", "Ctrl+V"),
+        enabled = current.editable,
+        iconPath = "expui/general/paste.svg",
+        onClick = ::paste,
+      ),
+      MenuItem("Column Selection Mode", shortcut("⇧⌘8", "Alt+Shift+Insert"), enabled = false),
+      MenuSeparator,
+      MenuItem("Find Usages", shortcut("⌥F7", "Alt+F7"), enabled = false),
+      SubMenu("Go To", emptyList(), enabled = false),
+      SubMenu("Folding", emptyList(), enabled = false),
+      SubMenu("Refactor", emptyList(), enabled = false),
+      MenuItem("Generate…", shortcut("⌘N", "Alt+Insert"), enabled = false),
+      MenuSeparator,
+      MenuItem(
+        "Run…",
+        shortcut("⌃⇧R", "Ctrl+Shift+F10"),
+        enabled = false,
+        iconPath = "expui/run/run.svg",
+      ),
+      MenuItem(
+        "Debug…",
+        shortcut("⌃⇧D", "Ctrl+Shift+F9"),
+        enabled = false,
+        iconPath = "expui/run/debug.svg",
+      ),
+      SubMenu("More Run/Debug", emptyList(), enabled = false),
+      MenuSeparator,
+      SubMenu("Open In", emptyList(), enabled = false),
+      SubMenu("Local History", emptyList(), enabled = false),
+      SubMenu("Git", emptyList(), enabled = false),
+      MenuSeparator,
+      MenuItem("Compare with Clipboard", enabled = false),
+    )
+  }
+
+  /**
+   * The backend's items, with its Cut, Copy and Paste replaced by Ideate's own: those go through
+   * the system clipboard and the clipboard sync (docs/edit-protocol.md, "Paste and the clipboard").
+   */
+  fun withLocalClipboard(entries: List<MenuEntry>): List<MenuEntry> = entries.map { entry ->
+    when (entry) {
+      is MenuItem ->
+        when (entry.id) {
+          "\$Cut",
+          "EditorCut" -> entry.copy(enabled = currentFile.editable, onClick = ::cut)
+          "\$Copy",
+          "EditorCopy" -> entry.copy(enabled = true, onClick = ::copy)
+          "\$Paste",
+          "EditorPaste" -> entry.copy(enabled = currentFile.editable, onClick = ::paste)
+          "EditorPasteSimple" -> entry.copy(enabled = currentFile.editable, onClick = ::pasteSimple)
+          else -> entry
+        }
+      is SubMenu -> entry.copy(entries = withLocalClipboard(entry.entries))
+      MenuSeparator -> entry
+    }
+  }
+
+  // IntelliJ's console color key; schemes without it use the editor's background.
+  val background =
+    if (isConsole) scheme.color("CONSOLE_BACKGROUND_KEY") ?: scheme.background
+    else scheme.background
+
+  ContextMenuArea(
+    entries = {
+      if (backendMenu == null) menu() else backendMenu()?.let(::withLocalClipboard)
+    },
+    modifier = modifier.onSizeChanged { viewport = it },
+    // Like IntelliJ: a right click outside the selection moves the caret there first.
+    onOpen = { position ->
+      val offset = offsetAt(position)
+      val current = currentFile
+      val start = minOf(current.selectionStart, current.selectionEnd)
+      val end = maxOf(current.selectionStart, current.selectionEnd)
+      if (start == end || offset !in start..end) moveTo(offset, extend = false)
+      actions.openMenu()
+    },
+  ) {
+    LazyColumn(
+      state = listState,
+      modifier =
+        Modifier.fillMaxSize()
+          .scrollable(scroll.scrollable, Orientation.Horizontal, reverseDirection = true)
+          .background(Color(background))
+          .drawWithContent {
+            drawContent()
+            if (isConsole) return@drawWithContent
+            // The gutter's border line, the editor's full height (New UI,
+            // EditorGutterComponentImpl.paint): 1 px in the scheme's INDENT_GUIDE color at
+            // getWhitespaceSeparatorOffset() = gutter width - 3, over the caret row.
+            scheme.color("INDENT_GUIDE")?.let { separatorColor ->
+              val separatorX = metrics.gutterWidth - 3.dp.toPx() + 0.5.dp.toPx()
+              drawLine(
+                Color(separatorColor),
+                Offset(separatorX, 0f),
+                Offset(separatorX, size.height),
+                strokeWidth = 1.dp.toPx(),
+              )
+            }
+          }
+          .focusRequester(focusRequester)
+          .onFocusChanged { focused = it.hasFocus }
+          .then(LocalEditorTextInput.current(keyboardTarget))
+          .focusable()
+          .onPreviewKeyEvent { event ->
+            // Letting go of ⌘ (Ctrl) drops the underline, as in IntelliJ.
+            if (
+              event.type == KeyEventType.KeyUp &&
+                !(if (IS_MAC) event.isMetaPressed else event.isCtrlPressed)
+            ) {
+              link = null
+            }
+            event.type == KeyEventType.KeyDown && onKey(event)
+          }
+          .pointerHoverIcon(
+            when {
+              link != null -> PointerIcon.Hand
+              overGutter -> PointerIcon.Default
+              else -> PointerIcon.Text
+            },
+          )
+          .pointerInput(file.path, metrics) {
+            // ⌘ (Ctrl) held over a symbol: ask the backend for its range and underline it. Starts
+            // on
+            // the next pointer move after the key goes down.
+            awaitPointerEventScope {
+              var asked = -1
+              while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.first()
+                overGutter = change.position.x < metrics.gutterWidth
+                val modifiers = event.keyboardModifiers
+                val held = if (IS_MAC) modifiers.isMetaPressed else modifiers.isCtrlPressed
+                if (
+                  !held || change.type != PointerType.Mouse || event.type == PointerEventType.Exit
+                ) {
+                  asked = -1
+                  link = null
+                  continue
+                }
+                val offset = offsetAt(change.position)
+                if (offset == asked || link?.contains(offset) == true) continue
+                asked = offset
+                actions.linkAt(offset) { range -> if (asked == offset) link = range }
+              }
+            }
+          }
+          .pointerInput(file.path, metrics) {
+            // On tap, not on press: a swipe that starts on the editor (phone portrait) must not
+            // focus it and open the keyboard. A tap that only stops a fling doesn't move the caret.
+            var stoppedScroll = false
+            detectTapGestures(
+              onPress = {
+                stoppedScroll = listState.isScrollInProgress || scroll.scrollable.isScrollInProgress
+              },
+              onTap = { position ->
+                if (stoppedScroll) return@detectTapGestures
+                focusRequester.requestFocus()
+                moveTo(offsetAt(position), extend = false)
+              },
+            )
+          }
+          .pointerInput(file.path, metrics) {
+            // Drag to select with a mouse only: on touch a drag scrolls, and selecting there moved
+            // the caret to where a scroll started.
+            awaitEachGesture {
+              val down = awaitFirstDown()
+              if (down.type != PointerType.Mouse) return@awaitEachGesture
+              // ⌘-click (Ctrl-click off the Mac): IntelliJ's Declaration or Usages at the click.
+              // Consumed here so the tap handler doesn't move the caret back after the jump.
+              val modifiers = currentEvent.keyboardModifiers
+              if (
+                !isConsole && (if (IS_MAC) modifiers.isMetaPressed else modifiers.isCtrlPressed)
+              ) {
+                down.consume()
+                focusRequester.requestFocus()
+                moveTo(offsetAt(down.position), extend = false)
+                actions.runAction("GotoDeclaration")
+                return@awaitEachGesture
+              }
+              dragAnchor = offsetAt(down.position)
+              drag(down.id) { change ->
+                change.consume()
+                actions.moveCaret(offsetAt(change.position), dragAnchor)
+              }
+            }
+          },
+    ) {
+      items(lines.count) { line ->
+        // Plain values, and only for the lines they concern: lines whose parameters don't change
+        // are skipped when the caret blinks, moves or the selection changes.
+        val selectionStart = anchor?.let { minOf(it, caret) } ?: -1
+        val selectionEnd = anchor?.let { maxOf(it, caret) } ?: -1
+        val inSelection =
+          selectionStart >= 0 &&
+            selectionStart <= lines.end(line) &&
+            selectionEnd >= lines.starts[line]
+        val lineGuides = guidesByLine[line].orEmpty()
+        EditorLine(
+          line = line,
+          lines = lines,
+          highlights = highlightsByLine[line].orEmpty(),
+          guides = lineGuides,
+          selectedGuideLevel = caretGuide?.takeIf { it in lineGuides }?.indentLevel ?: -1,
+          gutterIconPath = gutterIconsByLine[line]?.firstOrNull()?.iconPaths?.firstOrNull(),
+          scheme = scheme,
+          metrics = metrics,
+          measurer = measurer,
+          textStyle = textStyle,
+          lineNumberStyle = lineNumberStyle,
+          caretColumn =
+            if (!isConsole && lines.lineOf(caret) == line) caret - lines.starts[line] else null,
+          caretVisible = !isConsole && focused && caretOn && line == caretLine,
+          showGutter = !isConsole,
+          selectionStart = if (inSelection) selectionStart else -1,
+          selectionEnd = if (inSelection) selectionEnd else -1,
+          scroll = scroll,
+        )
+      }
+    }
+    // Sticky lines (IntelliJ's StickyLinesPanel): the start lines of the scopes the top of the view
+    // is in, pinned over the text, with a border line and a shadow under them.
+    val stickyScopes =
+      remember(file.stickyRanges, lines) {
+        file.stickyRanges.map {
+          StickyScope(lines.lineOf(it.start), lines.lineOf(it.end), it.start)
+        }
+      }
+    val sticky by
+      remember(stickyScopes, metrics, viewportHeight) {
+        derivedStateOf {
+          stickyPanel(
+            stickyScopes,
+            listState.firstVisibleItemIndex * metrics.lineHeight +
+              listState.firstVisibleItemScrollOffset,
+            metrics.lineHeight,
+            viewportHeight.toFloat(),
+          )
+        }
+      }
+    val stickyShown = sticky.lines.isNotEmpty()
+    DisposableEffect(stickyShown) {
+      onStickyShown(stickyShown)
+      onDispose { onStickyShown(false) }
+    }
+    if (stickyShown) {
+      val stickyBackground = Color(scheme.color("STICKY_LINES_BACKGROUND") ?: scheme.background)
+      // StickyLineColors: STICKY_LINES_BORDER_COLOR, else RIGHT_MARGIN_COLOR, else the background.
+      val borderColor =
+        Color(
+          scheme.color("STICKY_LINES_BORDER_COLOR")
+            ?: scheme.color("RIGHT_MARGIN_COLOR")
+            ?: scheme.background,
+        )
+      // Dark schemes: a shadow of 0.25 line heights, black at alpha 32 fading out.
+      val shadowHeight = (metrics.lineHeight * 0.25f).toInt().toFloat()
+      with(density) {
+        Box(Modifier.fillMaxWidth().height(sticky.height.toDp()).clipToBounds()) {
+          sticky.lines.forEachIndexed { row, pinned ->
+            val line = pinned.scope.primaryLine
+            Box(
+              Modifier.offset(y = pinned.y.toDp())
+                .fillMaxWidth()
+                .height(metrics.lineHeight.toDp())
+                .background(stickyBackground)
+                .pointerInput(pinned) {
+                  // StickyLineComponent: a click puts the caret at the scope's name and scrolls
+                  // it into view, here just under the pinned lines above it.
+                  detectTapGestures {
+                    val target = pinned.scope.navigateOffset
+                    actions.moveCaret(target, target)
+                    stickyScroll.launch {
+                      listState.scrollToItem(maxOf(0, line - row))
+                      // Focus only once the session has the new caret: gaining focus scrolls to
+                      // the caret, which would still be the old one.
+                      withTimeoutOrNull(1_000) {
+                        snapshotFlow { currentFile.caret }.first { it == target }
+                      }
+                      focusRequester.requestFocus()
+                    }
+                  }
+                },
+            ) {
+              EditorLine(
+                line = line,
+                lines = lines,
+                highlights = highlightsByLine[line].orEmpty(),
+                guides = guidesByLine[line].orEmpty(),
+                selectedGuideLevel = -1,
+                gutterIconPath = gutterIconsByLine[line]?.firstOrNull()?.iconPaths?.firstOrNull(),
+                scheme = scheme,
+                metrics = metrics,
+                measurer = measurer,
+                textStyle = textStyle,
+                lineNumberStyle = lineNumberStyle,
+                caretColumn = null,
+                caretVisible = false,
+                showGutter = !isConsole,
+                selectionStart = -1,
+                selectionEnd = -1,
+                scroll = scroll,
+              )
+            }
+          }
+        }
+        // StickyLineShadowBorder: LineBorder(1), one IntelliJ pixel as the gutter's line.
+        EditorBorder(borderColor, Modifier.offset(y = sticky.height.toDp()))
+        Box(
+          Modifier.offset(y = sticky.height.toDp() + 1.dp)
+            .fillMaxWidth()
+            .height(shadowHeight.toDp())
+            .background(
+              Brush.verticalGradient(listOf(Color(0, 0, 0, 32), Color(0, 0, 0, 0))),
+            ),
+        )
+      }
+    }
+    // The completion popup sits under the caret line, its item text lined up with the first letter
+    // of the prefix.
+    lookup
+      ?.takeIf { it.items.isNotEmpty() }
+      ?.let { current ->
+        val caretItem =
+          listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == caretLine } ?: return@let
+        val prefixColumn = caret - lines.starts[caretLine] - current.prefix.length
+        val textOffset = with(density) { LOOKUP_PREFIX_INSET.toPx() }
+        val x =
+          (metrics.gutterWidth + prefixColumn * metrics.charWidth - scroll.x - textOffset)
+            .roundToInt()
+            .coerceAtLeast(0)
+        AppPopup(
+          PopupPlacement(IntOffset(x, caretItem.offset + caretItem.size), caretItem.size),
+          focusable = false,
+        ) {
+          LookupPopup(current, actions.chooseLookupItem)
+        }
+      }
+    // The usages popup opens under the caret line, at the caret, like IntelliJ's.
+    usages?.let { current ->
+      val caretItem =
+        listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == caretLine } ?: return@let
+      val x =
+        (metrics.gutterWidth + (caret - lines.starts[caretLine]) * metrics.charWidth - scroll.x)
+          .roundToInt()
+          .coerceAtLeast(0)
+      AppPopup(
+        PopupPlacement(IntOffset(x, caretItem.offset + caretItem.size), caretItem.size),
+        onDismissRequest = actions.closeUsages,
+        focusable = false,
+      ) {
+        UsagesPopupView(current, actions.chooseUsage)
+      }
+    }
+  }
+}
+
+@Composable
+private fun EditorLine(
+  line: Int,
+  lines: Lines,
+  highlights: List<Highlight>,
+  guides: List<IndentGuide>,
+  selectedGuideLevel: Int,
+  gutterIconPath: String?,
+  scheme: EditorScheme,
+  metrics: EditorMetrics,
+  measurer: TextMeasurer,
+  textStyle: TextStyle,
+  lineNumberStyle: TextStyle,
+  caretColumn: Int?,
+  caretVisible: Boolean,
+  /** False in a console: no line number, no gutter icon. */
+  showGutter: Boolean,
+  selectionStart: Int,
+  selectionEnd: Int,
+  scroll: SidewaysScroll,
+) {
+  val density = LocalDensity.current
+  val lineStart = lines.starts[line]
+  val lineText = remember(lines, line) { lines.text(line) }
+  val annotated = remember(lineText, highlights) { styledLine(lineText, lineStart, highlights) }
+  val layout =
+    remember(annotated, textStyle) { measurer.measure(annotated, textStyle, softWrap = false) }
+  val lineNumber =
+    remember(line, lineNumberStyle) {
+      measurer.measure(AnnotatedString((line + 1).toString()), lineNumberStyle)
+    }
+  val height = with(density) { metrics.lineHeight.toDp() }
+  val gutterIcon = gutterIconPath?.let(LocalIcons.current::painter)
+
+  Canvas(Modifier.fillMaxWidth().height(height)) {
+    val isCaretLine = caretColumn != null
+    if (isCaretLine) scheme.color("CARET_ROW_COLOR")?.let { drawRect(Color(it)) }
+
+    val textLeft = metrics.gutterWidth
+    // Read here, in drawing: scrolling sideways redraws the visible lines without recomposing them.
+    val scrollX = scroll.x
+    fun x(column: Int) =
+      textLeft +
+        layout.getHorizontalPosition(
+          column.coerceIn(0, lineText.length),
+          usePrimaryDirection = true,
+        )
+
+    clipRect(left = textLeft) {
+      translate(left = -scrollX) {
+        // Selection: to the end of the text on the last line, to the right edge on lines it
+        // continues
+        // past.
+        if (selectionStart in 0 until selectionEnd) {
+          val from = maxOf(selectionStart, lineStart) - lineStart
+          val lineEnd = lineStart + lineText.length
+          if (selectionStart <= lineEnd && selectionEnd >= lineStart) {
+            val to =
+              if (selectionEnd > lineEnd) size.width + scrollX else x(selectionEnd - lineStart)
+            scheme.color("SELECTION_BACKGROUND")?.let {
+              drawRect(Color(it), Offset(x(from), 0f), Size(to - x(from), size.height))
+            }
+          }
+        }
+        // Highlight backgrounds (identifier under caret, search results, matched braces, …).
+        for (highlight in highlights) {
+          val background = highlight.style.background ?: continue
+          val from = maxOf(highlight.start - lineStart, 0)
+          val to = minOf(highlight.end - lineStart, lineText.length)
+          if (to > from)
+            drawRect(Color(background), Offset(x(from), 0f), Size(x(to) - x(from), size.height))
+        }
+        // Indent guides (IndentGuideRenderer): 1 px at the guide's column, moved left by
+        // EditorPainter.getIndentGuideShift = -round(5 × fontSize / 13) / 2, which is 2 px at size
+        // 12.
+        for (guide in guides) {
+          val key =
+            if (guide.indentLevel == selectedGuideLevel) "SELECTED_INDENT_GUIDE" else "INDENT_GUIDE"
+          val guideColor = scheme.color(key) ?: continue
+          val shift = (Math.round(5 * IslandsDark.EDITOR_FONT_SIZE / 13f) / 2).dp.toPx()
+          val guideX = textLeft + guide.indentLevel * metrics.charWidth - shift
+          drawLine(
+            Color(guideColor),
+            Offset(guideX, 0f),
+            Offset(guideX, size.height),
+            strokeWidth = 1.dp.toPx(),
+          )
+        }
+
+        drawText(layout, topLeft = Offset(textLeft, metrics.baseline - layout.firstBaseline))
+        for (highlight in highlights) drawEffect(
+          highlight,
+          lineStart,
+          lineText.length,
+          ::x,
+          metrics,
+        )
+
+        if (caretColumn != null && caretVisible) {
+          scheme.color("CARET_COLOR")?.let { caretColor ->
+            drawRect(
+              Color(caretColor),
+              Offset(x(caretColumn), metrics.caretTop),
+              Size(2.dp.toPx(), metrics.caretHeight),
+            )
+          }
+        }
+      }
+    }
+
+    if (!showGutter) return@Canvas
+    // Gutter: line number right-aligned on the editor's baseline, brighter on the caret line.
+    val numberColor =
+      scheme
+        .color(if (isCaretLine) "LINE_NUMBER_ON_CARET_ROW_COLOR" else "LINE_NUMBERS_COLOR")
+        ?.let { Color(it) } ?: Color.Gray
+    drawText(
+      lineNumber,
+      color = numberColor,
+      topLeft =
+        Offset(
+          metrics.lineNumbersRight - lineNumber.size.width,
+          metrics.baseline - lineNumber.firstBaseline,
+        ),
+    )
+    // Gutter icon (e.g. the green run marker), 14 px, centered in the 17 px icons area.
+    if (gutterIcon != null) {
+      val iconSize = 14.dp.toPx()
+      translate(
+        metrics.iconAreaLeft + (17.dp.toPx() - iconSize) / 2,
+        (size.height - iconSize) / 2,
+      ) {
+        with(gutterIcon) { draw(Size(iconSize, iconSize)) }
+      }
+    }
+  }
+}
+
+private fun DrawScope.drawEffect(
+  highlight: Highlight,
+  lineStart: Int,
+  lineLength: Int,
+  x: (Int) -> Float,
+  metrics: EditorMetrics,
+) {
+  val effect = highlight.style.effect ?: return
+  val color = Color(highlight.style.effectColor ?: return)
+  val from = maxOf(highlight.start - lineStart, 0)
+  val to = minOf(highlight.end - lineStart, lineLength)
+  if (to <= from) return
+  drawTextEffect(
+    effect,
+    color,
+    x(from),
+    x(to),
+    metrics.baseline,
+    metrics.lineHeight,
+    IslandsDark.EDITOR_FONT_SIZE,
+  )
+}
+
+/**
+ * The line's text with colors and font styles of the highlights over it; higher layers paint last
+ * and win.
+ */
+private fun styledLine(
+  lineText: String,
+  lineStart: Int,
+  highlights: List<Highlight>,
+): AnnotatedString {
+  val builder = AnnotatedString.Builder(lineText)
+  for (highlight in highlights) {
+    val style = highlight.style
+    if (style.foreground == null && style.fontType == 0) continue
+    val from = maxOf(highlight.start - lineStart, 0)
+    val to = minOf(highlight.end - lineStart, lineText.length)
+    if (to <= from) continue
+    builder.addStyle(
+      SpanStyle(
+        color = style.foreground?.let { Color(it) } ?: Color.Unspecified,
+        fontWeight = if (style.isBold) FontWeight.Bold else null,
+        fontStyle = if (style.isItalic) FontStyle.Italic else null,
+      ),
+      from,
+      to,
+    )
+  }
+  return builder.toAnnotatedString()
+}
+
+/**
+ * Highlights per line, in layer order. ponytail: one pass over all highlights; fine for files of a
+ * few thousand lines.
+ */
+private fun bucketByLine(highlights: List<Highlight>, lines: Lines): Map<Int, List<Highlight>> {
+  val result = HashMap<Int, MutableList<Highlight>>()
+  for (highlight in highlights) {
+    if (highlight.end <= highlight.start) continue
+    for (line in lines.lineOf(highlight.start)..lines.lineOf(highlight.end - 1)) result.getOrPut(
+      line,
+    ) {
+      mutableListOf()
+    } += highlight
+  }
+  return result
+}
+
+/**
+ * IntelliJ's navigation shortcuts, macOS keymap on a Mac and the default keymap elsewhere: ⌘B /
+ * Ctrl+B Declaration or Usages, ⌥⌘B / Ctrl+Alt+B Implementation(s), ⌘[ and ⌘] / Ctrl+Alt+← and →
+ * Back and Forward. Null for any other key.
+ */
+internal fun navigationAction(event: KeyEvent): String? {
+  val key = event.key
+  val alt = event.isAltPressed
+  return if (IS_MAC) {
+    if (!event.isMetaPressed || event.isCtrlPressed || event.isShiftPressed) return null
+    when {
+      key == Key.B -> if (alt) "GotoImplementation" else "GotoDeclaration"
+      alt -> null
+      key == Key.LeftBracket -> "Back"
+      key == Key.RightBracket -> "Forward"
+      else -> null
+    }
+  } else {
+    if (!event.isCtrlPressed || event.isMetaPressed || event.isShiftPressed) return null
+    when {
+      key == Key.B -> if (alt) "GotoImplementation" else "GotoDeclaration"
+      alt && key == Key.DirectionLeft -> "Back"
+      alt && key == Key.DirectionRight -> "Forward"
+      else -> null
+    }
+  }
+}

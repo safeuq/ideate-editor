@@ -25,7 +25,7 @@ Also sent, empty here: `GridAggregator`, `GridPosition`, `webDeployment.default.
 with no text and no icon is hidden, as IntelliJ hides its empty component.
 
 **Order.** Anchors are IntelliJ's `LoadingOrder` words: `first`, `last`, `before X`, `after X`, `ANY`, joined
-with commas. IDEate orders the widgets it has by them; an anchor naming a widget that isn't there
+with commas. Ideate orders the widgets it has by them; an anchor naming a widget that isn't there
 (`after PowerSaveMode`) is ignored, and arrival order breaks ties (`orderByAnchors`, `StatusBarTest`).
 
 **Clicks**, as the client sends them:
@@ -43,8 +43,8 @@ backend popups.
 
 JetBrains Client's `ThinClientNavBarModelExtension` calls `getNavBarElements(ActionTimestampSetModel)` with
 `ActionTimestampModelProvider.createTimestampModelSet("", dataContext)`: the focused editor's context.
-With only the project as context the answer is empty. IDEate sends the project plus
-`EditSession.actionTimestamps()` (editor, caret, selection). The answer goes from the caret out; IDEate shows
+With only the project as context the answer is empty. Ideate sends the project plus
+`EditSession.actionTimestamps()` (editor, caret, selection). The answer goes from the caret out; Ideate shows
 it from the project in:
 
 ```
@@ -53,7 +53,7 @@ bar               → gradle-smoke › app › src › main › java › demo �
 ```
 
 `NavBarElementModel`: `nodeId`, `text`, `icon`, `hasContainingFile`, `canNavigate`, `path`, `presentableUrl`.
-IDEate asks again when the backend fires `updateNavBar`, when the selected editor changes, and 300 ms after the
+Ideate asks again when the backend fires `updateNavBar`, when the selected editor changes, and 300 ms after the
 caret rests. A tap on a crumb lists its children (`getChildren(nodeId)`). A chosen item inside a file
 (`hasContainingFile`) opens (`navigate(NavBarNavigateArgs(nodeId, requestFocus = true))`); a folder lists its
 own children in the same place.
@@ -117,7 +117,7 @@ The line is drawn as the gutter's line is (`EditorLine`: a 1 dp stroke centred h
 The editor island has the same line under its tab row on every screen (`JBEditorTabsBorder`, new UI:
 `EditorTabs.underTabsBorderColor` = `editor-border` = `#26282C` in Islands Dark), faint against the editor. IntelliJ can place its editor breadcrumbs below the editor too (Settings › Editor ›
 General › Breadcrumbs › Bottom), but those are another component (`BreadcrumbsPanel`): only the code
-structure, in the editor's colours. IDEate keeps the status bar's crumbs, the path down to the member. It
+structure, in the editor's colours. Ideate keeps the status bar's crumbs, the path down to the member. It
 shows a notice or failure as info text, not the last log line, which the desktop keeps as a debugging aid.
 
 Checked: `DesktopDriverTest.statusBar` (1200 × 800 and 411 × 860) against the Mac backend with a small Gradle

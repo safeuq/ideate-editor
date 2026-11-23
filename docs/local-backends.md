@@ -39,9 +39,9 @@ SSH. `ShellHostTest` already runs them that way.
 No port forwarding: the backend already listens on `127.0.0.1`.
 
 Which IDE the commands use, and which projects are listed, depends on the **host's** operating system from
-`uname -sm` (`HostOs`), not on where IDEate runs. So a Mac reached over SSH gets the same lookups:
+`uname -sm` (`HostOs`), not on where Ideate runs. So a Mac reached over SSH gets the same lookups:
 
-| IDEate on | Backend machine | `uname -sm` | Mac lookups |
+| Ideate on | Backend machine | `uname -sm` | Mac lookups |
 |---|---|---|---|
 | Mac, This computer | the same Mac | `Darwin arm64` | yes |
 | Phone, SSH page | a Mac | `Darwin arm64` | yes |

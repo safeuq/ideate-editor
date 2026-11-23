@@ -1,8 +1,8 @@
-# Terminal and consoles (plan): what IDEate builds, phase by phase
+# Terminal and consoles (plan): what Ideate builds, phase by phase
 
-Plan, 2026-11-21. How IDEate gets the Terminal, Run, Debug, Build and Services tool windows. What IntelliJ
+Plan, 2026-11-21. How Ideate gets the Terminal, Run, Debug, Build and Services tool windows. What IntelliJ
 and JetBrains Client do is in `terminal-and-consoles-spec.md` (called "spec" below, e.g. "spec 7.1"); this
-document is only IDEate's side: which files change, in which order, how each step is checked.
+document is only Ideate's side: which files change, in which order, how each step is checked.
 
 Each phase is written to be handed to one implementer (a Sonnet subagent) with no other context than this
 document, the spec and the code. The coordinator (the session that wrote this plan) reviews each phase.
@@ -130,7 +130,7 @@ Test projects: Appendix B.
 ### 0.8 Live tests in-process
 
 Prefer a JUnit test that runs `ClientSession` (and, for UI, `runDesktopComposeUiTest`) in the test JVM over
-driving a window. The pattern is `desktop/src/test/kotlin/intellijandroid/client/desktop/DesktopDriverTest.kt`:
+driving a window. The pattern is `desktop/src/test/kotlin/io/github/safeuq/ideate/client/desktop/DesktopDriverTest.kt`:
 skipped unless `DRIVER_LINK` is set, writes PNGs and the semantics tree to `DRIVER_OUT`. Notes:
 
 - `runDesktopComposeUiTest` has no density parameter; provide `LocalDensity` instead. Its waits time out at
@@ -139,7 +139,7 @@ skipped unless `DRIVER_LINK` is set, writes PNGs and the semantics tree to `DRIV
 
 ### 0.9 Screenshots for the Before/After page
 
-Every UI change ends with a Before (IntelliJ or IDEate before the change) and an After PNG, same size and
+Every UI change ends with a Before (IntelliJ or Ideate before the change) and an After PNG, same size and
 content. Save them under `<scratchpad>/shots/<phase>/` and list the paths in the report; the coordinator
 publishes them.
 
@@ -147,10 +147,10 @@ publishes them.
 
 ## 1. Target structure
 
-New and changed IDEate parts, each named after the IntelliJ / JetBrains Client part it copies
-(paths under `compose/src/commonMain/kotlin/intellijandroid/client/`):
+New and changed Ideate parts, each named after the IntelliJ / JetBrains Client part it copies
+(paths under `compose/src/commonMain/kotlin/io/github/safeuq/ideate/client/`):
 
-| IDEate | Copies | Phase |
+| Ideate | Copies | Phase |
 |---|---|---|
 | `session/console/ConsoleDocuments.kt` | the client side of `FrontendConsoleViewImpl`: one console's text and highlights from document patches | 1 |
 | `ui/console/ConsoleEditor.kt` (a mode of `ui/EditorView.kt`) | `ConsoleViewUtil.setupConsoleEditor` (spec 5.1) | 1 |
@@ -337,7 +337,7 @@ Spec: 7, 8.2, 9.2.
       `executingConfigurations["Application.Main"]` goes to 1).
 - [ ] Switching tabs works when there are two runs.
 - [ ] "Projects and Files" unchanged.
-- [ ] Before/After PNGs (IntelliJ's Run window vs IDEate's) saved.
+- [ ] Before/After PNGs (IntelliJ's Run window vs Ideate's) saved.
 - [ ] `docs/tool-windows.md` gains a section on Run/Build tabs; spec 7.2 / 12 row 3 updated.
 
 ---
@@ -412,7 +412,7 @@ spec 3.1 says why IJent is out).
   `resize(TermSize)` sets `size`.
 - **Emulator**: per session, `JediTerminal(display, TerminalTextBuffer(columns, rows, StyleState(), 5000),
   styleState)` and `TerminalStarter(terminal, connector, TtyBasedArrayDataStream(connector), null,
-  executors)`, `start()` on its own thread (spec 4). `display` is IDEate's `TerminalDisplay`: records cursor
+  executors)`, `start()` on its own thread (spec 4). `display` is Ideate's `TerminalDisplay`: records cursor
   position, cursor shape and visibility, title, alternate-buffer flag, mouse mode, bracketed paste, and asks
   the UI to redraw.
 - **`session/terminal/TerminalScreen.kt`**: under `TerminalTextBuffer.lock()`, copies history + screen lines
@@ -451,7 +451,7 @@ spec 3.1 says why IJent is out).
   icons the same size as the SVG ones (16 dp in a 24 dp button, as the toolbar's icon buttons). Before
   building the bar, read how the soft keyboard is detected and where the tool window bar is drawn
   (`ui/ClientScreen.kt`, `ui/EditorTextTarget.kt`); ask the coordinator if the bar's place is unclear.
-- **`ui/terminal/TerminalToolWindow.kt`**: IDEate registers the window itself, as JetBrains Client does
+- **`ui/terminal/TerminalToolWindow.kt`**: Ideate registers the window itself, as JetBrains Client does
   (spec 1): add `ToolWindow.TERMINAL = ToolWindow("Terminal", "Terminal",
   "icons/expui/toolwindow/terminal.svg", Place.BOTTOM_LEFT)` to `ui/ToolWindows.kt` and include it in
   `toolWindowButtons` like `PROJECT` (it is already in `DEFAULT_LAYOUT`). Content: tab row with the titles of
@@ -504,7 +504,7 @@ results into spec 8, then plan.
 |---|---|---|---|
 | Probe | done 2026-11-21 | bd564bc | spec 11 |
 | 1 Console text controls | done 2026-11-21 | the commit "Consoles: read-only console editor…" | Output never stopped: the client dropped the changes (spec 6.2 addendum). `ConsoleEditor` has local selection and copy, follows output at the end, no caret. Live test also runs `Slow` (appendix B) |
-| 2 Run and Build tabs | done 2026-11-21 | the commit "Run and Build tabs: …" | Differs from the plan: tabs are chips in the tool window header (like Terminal), `HeaderTab` is shared; `LuxPanelHost` is in `session/` and `LuxPaneView` takes callbacks; Run, Debug and Build get stripe buttons; IDEate follows the backend's `ActiveAndFocused` for Run; icons of the backend's main window frames are kept (else the toolbar is blank); closing a tab removes it from `tabs` (CloseContent was disabled), with the Cancel limit in spec 8.2. No IntelliJ reference PNG |
+| 2 Run and Build tabs | done 2026-11-21 | the commit "Run and Build tabs: …" | Differs from the plan: tabs are chips in the tool window header (like Terminal), `HeaderTab` is shared; `LuxPanelHost` is in `session/` and `LuxPaneView` takes callbacks; Run, Debug and Build get stripe buttons; Ideate follows the backend's `ActiveAndFocused` for Run; icons of the backend's main window frames are kept (else the toolbar is blank); closing a tab removes it from `tabs` (CloseContent was disabled), with the Cancel limit in spec 8.2. No IntelliJ reference PNG |
 | 3 Build tree | done 2026-11-21 | the commit "Build tree: …" | Differs from the plan: the rows are `ProjectTreeView`'s with one new part, a right-aligned gray `TreeNode.trailing` (the duration; the name is cut before it). `BuildTreeApi` is reached through `SearchKernel` (no second Fleet client); `getNavigationFlow` and `onNavigationContextChange` are not called (`ponytail:` no source navigation or previous/next problem yet). The plan's live check "rows `hello` and `:app:hello`" can't hold: a finished successful step is hidden while `showSuccessful` is false (spec 9.3 addendum), so the live test shows `:app:hello` through the toolbar's "Show Successful Steps". Needed beyond the plan: `LuxPanelHost` honors `LxLocalComponent.visible` (a step has its own console). Icon layout: spec 9.3 addendum. Running icon: the eight `process/step_N.svg` frames. The package is `session/buildtree`, not `session/build`: `.gitignore` has `build/`, which hides any directory called `build` from `git add -A`. `ConsoleEditor` follows output with `requestScrollToItem` (the old `scrollToItem` measured the list inside a `LaunchedEffect` and made Compose fail with "pending composition has not been applied" when a step's console appeared). The live test's Terminate answer is the Enter key (the dialog's default button), not a click at fixed pixels; it needs the backend setting `processCloseConfirmation` at its default, since "Do not ask again" (`TERMINATE` in `options/ide.general.xml`) closes a running tab without the dialog. No IntelliJ reference PNG |
 | 4 Terminal | done 2026-11-21 (desktop checked live; device run left to the coordinator) | 515c149 | terminal keys in the keyboard bar, as icons (user, 2026-11-21). Differs from the plan: own canvas renderer (not `EditorView`'s `CONSOLE` mode); the bar sits between the tool window bar and the status bar in every layout; the soft keyboard is detected with `WindowInsets.ime`; tests also in `desktop/src/test` (`TerminalLiveTest`, `TerminalUiTest`); no IntelliJ reference PNG (this environment can't capture a window). Spec 3.4 and 4 have addenda |
 | 5 Services | needs a probe; later (user, 2026-11-21) | | |

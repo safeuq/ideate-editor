@@ -4,7 +4,7 @@ Legend: **[Seen]** = read in decompiled client code or verified against `capture
 Code read: `intellij.rd.client.jar` (`com.jetbrains.rdclient.*`), `intellij.rd.platform.jar` (`com.jetbrains.rd.ide.*`, `com.jetbrains.rd.platform.undo.RdCmdModelSupport`), `intellij.libraries.rd.core.jar` (`IncrementalHashKt`), `intellij.rd.ide.model.generated.jar` (field lists). Decompiled sources are not in the repo.
 All hash numbers below were recomputed in Python and match the trace exactly.
 
-> **2026-11-18:** the full code of both sides is now read: [`edit-protocol-client.md`](edit-protocol-client.md) (JetBrains Client, `FrontendAsyncRequestExecutorNew`) and [`edit-protocol-backend.md`](edit-protocol-backend.md) (backend). They correct sections 5 to 9 in 36 places (each listed in their section 8). The main ones: only `RdApplyPatchRequest` (caret moves) is checked against `expectedItemVersions`; typed keys and editor actions run at the backend's own caret, and editor actions check their timestamps instead. A request with an older retry timestamp is dropped without an answer. `RdFailureResponse` does not start a recovery. A retry has a limit of one resend. The initial editor version is `(-1, 0, -1)`, and request ids start at 0. What IDEate does with all this is in section 12.
+> **2026-11-18:** the full code of both sides is now read: [`edit-protocol-client.md`](edit-protocol-client.md) (JetBrains Client, `FrontendAsyncRequestExecutorNew`) and [`edit-protocol-backend.md`](edit-protocol-backend.md) (backend). They correct sections 5 to 9 in 36 places (each listed in their section 8). The main ones: only `RdApplyPatchRequest` (caret moves) is checked against `expectedItemVersions`; typed keys and editor actions run at the backend's own caret, and editor actions check their timestamps instead. A request with an older retry timestamp is dropped without an answer. `RdFailureResponse` does not start a recovery. A retry has a limit of one resend. The initial editor version is `(-1, 0, -1)`, and request ids start at 0. What Ideate does with all this is in section 12.
 
 ## 0. Summary of the model
 
@@ -228,13 +228,13 @@ Response (Seen, `requestId=90`): `RdSuccessResponse(patch=RdPatch(changes=[RdCmd
 * Backend side (`BackendAsyncRequestExecutor.executeRequests`, decompiled from `remdev-plugin/lib/modules/intellij.platform.backend.split.jar`, 2026.3) [Seen code]:
   * A request whose `retryTimestamp` is older than the backend's `globalRetryTimestamp` is **dropped silently: no response at all**.
   * `PatchEngineRetryException` → `RdRetryResponse(message, retryTimestamp = globalRetryTimestamp + 1)`; the backend's global value moves on with it. `PatchEngineFailedException` → `RdFailureResponse` (or `RdNoEditorFoundResponse` for a recently removed editor).
-  * So after one `RdRetryResponse` every later request sent with the old `(0,0)` goes unanswered. IDEate did exactly that until 2026-11-18: on the phone a held Backspace got `Request 79 not applied`, then no answers, and the editor ignored every key (it waits for pending answers before taking new edits).
-* JetBrains Client (`FrontendAsyncRequestExecutorOld.handleRetry`, `intellij.rd.client.jar`): `MAX_RETRY_TRIALS = 1`. The first retry sets the request back to PENDING and it is sent again with the new timestamp; a second one undoes it. `handleFailure` undoes only the refused request. IDEate now does the same: it keeps the last `retryTimestamp`, sends every request with it, re-sends the refused request and every later pending one once, and rolls back on a second retry.
+  * So after one `RdRetryResponse` every later request sent with the old `(0,0)` goes unanswered. Ideate did exactly that until 2026-11-18: on the phone a held Backspace got `Request 79 not applied`, then no answers, and the editor ignored every key (it waits for pending answers before taking new edits).
+* JetBrains Client (`FrontendAsyncRequestExecutorOld.handleRetry`, `intellij.rd.client.jar`): `MAX_RETRY_TRIALS = 1`. The first retry sets the request back to PENDING and it is sent again with the new timestamp; a second one undoes it. `handleFailure` undoes only the refused request. Ideate now does the same: it keeps the last `retryTimestamp`, sends every request with it, re-sends the refused request and every later pending one once, and rolls back on a second retry.
 * Recovery when the versions stay apart [Seen code; seen on the phone 2026-11-18]:
   * Seen: after a reconnect, request 33 got `RdRetryResponse("The offset was changed beyond recovering")`. From then on every edit and caret move got `RdRetryResponse("not matched expected versions")`; the backend logged `BackendEditorPatchItemHandler - Not matched versions … actual: RdEditorVersion(caretModelVersion = 32, documentHash = -6554…), expected: RdEditorVersion(caretModelVersion = 30, documentHash = -4111…)`. Re-sending can't fix that, and the backend never sends the state on its own.
   * JetBrains Client (`recoverWithModalDialog` in `intellij.rd.client.jar`, `TrustBackendRecoveringStrategy` in `remdev-plugin/lib/modules/intellij.platform.frontend.split.jar`): it marks every pending request failed ("Version mismatch"), then calls `requestResponseModel.dropAllRequests(Unit)` and `requestResponseModel.getEditorStates(List<TextControlId>) → RdPatch`, and applies that patch.
   * Backend side: `dropAllRequests` sets `globalRetryTimestamp` to `incrementGeneration()` = `(timestamp 0, generation + 1)`. The comparison is generation first, then timestamp, so a client still sending `(5, 0)` after that is ignored. `getEditorStates` (`BackendEditorHostKt`) records `PatchEngineDocumentSynchronizer.sendInitialTextChange` (an `RdResetDocumentChange` with the full text) and `BackendEditorSynchronizer.sendInitialCaretState` for each editor. That is the same patch a newly opened editor gets, and it also resends markup (`recoverMarkupState`).
-  * IDEate: on a second retry of the same request, `ClientSession.recoverEditors` drops every editor's pending edits (typing is ignored meanwhile), calls `dropAllRequests`, sets its timestamp to `(0, generation + 1)`, then applies `getEditorStates` to every editor.
+  * Ideate: on a second retry of the same request, `ClientSession.recoverEditors` drops every editor's pending edits (typing is ignored meanwhile), calls `dropAllRequests`, sets its timestamp to `(0, generation + 1)`, then applies `getEditorStates` to every editor.
 * In the capture-3 typing window there were **no** `backendPatches` records; every change came inside `responsesWithTime`. [Seen]
 
 ## 9. Minimal client for plain typing (no typing assists, no local speculation required)
@@ -284,7 +284,7 @@ JetBrains Client keeps the backend's clipboard in step through **`ClipboardModel
 | Part | What |
 |---|---|
 | `content: IProperty<ClipboardContent?>` | `ClipboardContent(text, remoteFiles, internal)`; `internal` = the client's own copy |
-| `blockOutgoingCopy: IProperty<Boolean>` | the backend can stop copies leaving it (not used by IDEate) |
+| `blockOutgoingCopy: IProperty<Boolean>` | the backend can stop copies leaving it (not used by Ideate) |
 
 What the client does (`FrontendCopyPasteManagerHolder` in `intellij.platform.frontend.split.jar`, decompiled):
 
@@ -300,9 +300,9 @@ client's local guess is replaced when the answer differs. `ClipboardHandlerReque
 `ClipboardTextConstant` exist in the model but no frontend class in `intellij.platform.frontend.split.jar` uses
 them.
 
-IDEate does the same: `ClientSession.paste(text)` sets `content` (line breaks as `\n`), then
+Ideate does the same: `ClientSession.paste(text)` sets `content` (line breaks as `\n`), then
 `EditSession.paste` sends `EditorPaste` with the plain insertion as its guess (command names `Paste`). A copy in
-IDEate sets `content` with `internal = true`. A `content` the backend sets goes to
+Ideate sets `content` with `internal = true`. A `content` the backend sets goes to
 `SessionState.backendClipboard`, and the editor island copies it to the system clipboard.
 
 Checked 2026-11-17 against the Mac backend (port 5992), `Main.java`, caret at the end of line 8:
@@ -341,7 +341,7 @@ What a keyboard paste would need:
   - `deleteSurroundingText(before, after)`, the keyboard's Backspace for text it committed;
   - `sendKeyEvent` for Enter and Delete.
 - **The text around the caret** for `getTextBeforeCursor`, `getTextAfterCursor` and `getExtractedText`. With
-  `TYPE_CLASS_TEXT` the keyboard asks for them, for suggestions and auto-capitalisation; IDEate has the
+  `TYPE_CLASS_TEXT` the keyboard asks for them, for suggestions and auto-capitalisation; Ideate has the
   document's text, so it can answer.
 - **Composing text.** With suggestions on, the keyboard first sends a word as composing text
   (`setComposingText`) and only commits it later. The editor would have to show that underlined word locally
@@ -409,11 +409,11 @@ Limits:
   way. Select all (`android.R.id.selectAll`) selects the whole document, caret at the end (not tried on a
   device).
 
-## 12. IDEate's edit queue (2026-11-18)
+## 12. Ideate's edit queue (2026-11-18)
 
 `EditSession` follows JetBrains Client's `FrontendAsyncRequestExecutorNew` and `SpeculativeQueueProcessor` (ideate-editor, after the phone report "every edit refused after a reconnect").
 
-| | JetBrains Client | IDEate before | IDEate now |
+| | JetBrains Client | Ideate before | Ideate now |
 |---|---|---|---|
 | Answer like the guess | complete; record the backend's versions as known, keep the local ones | took the answer's versions as its own, even with later edits pending: **its versions went back a few steps**, and the next caret move or action was refused | the same as JetBrains Client: the answer's versions are taken only when nothing later is pending |
 | Answer unlike the guess | rebase: undo pending edits, apply the answer (versions checked before and after), run the pending actions again | undid pending edits, then took the backend's answers for them one by one and **ignored typing** until they were all in | rebase like JetBrains Client. Each pending request remembers its action (key, Backspace, caret move, …) and runs it again on the new text |
@@ -422,16 +422,16 @@ Limits:
 | `RdRetryResponse` | resend **every** pending request once with the new timestamp; a second retry of the same request drops it (rollback, replay the rest, resend them) | resent the refused request and later ones | the same as JetBrains Client. Other editors' pending requests go again too, since the backend drops them as well |
 | `RdFailureResponse` / `RdNoEditorFoundResponse` | an answer without a patch: that edit is undone, the rest replayed | undid all pending edits | the same as JetBrains Client |
 | Recovery | modal progress; fail pending; generation + 1; `dropAllRequests`; `getEditorStates`; apply | (since b886130) on a second retry | on a version mismatch or an answer out of order. Typing is ignored until the state arrives, as in JetBrains Client |
-| Undo | undone locally first (`FrontendUndoManager`); stack sizes after the undo | no local change; sizes before the undo (the backend logged "stack size … not match" every time) | no local change (IDEate has no undo history); sizes as expected after the undo: undo stacks − 1, redo stacks + 1 |
+| Undo | undone locally first (`FrontendUndoManager`); stack sizes after the undo | no local change; sizes before the undo (the backend logged "stack size … not match" every time) | no local change (Ideate has no undo history); sizes as expected after the undo: undo stacks − 1, redo stacks + 1 |
 
 Checked on the emulator against the Mac backend (2026-11-18), typing fast with `adb shell input text`:
 - `int x = (1+(2*3));`, `foo("ab", [1]);`, `if (x>1) {`, with Enter between: 101 answers, 1 unlike the guess, no retry, no recovery.
 - `y=(2);`: `(` came back as `()`, and `2` was replayed inside. `)` came back as a caret step over the closing bracket, and `;` was replayed after it. 51 answers, 2 unlike the guess.
-- After each run, reconnecting gave the same text as IDEate showed.
+- After each run, reconnecting gave the same text as Ideate showed.
 
 Not done:
 - Local undo (JetBrains Client's speculative undo).
-- The "equivalent" answer case. JetBrains Client keeps the text and only re-derives versions; IDEate treats it as a different answer and rebases. That takes more work but gives the same text.
+- The "equivalent" answer case. JetBrains Client keeps the text and only re-derives versions; Ideate treats it as a different answer and rebases. That takes more work but gives the same text.
 - More than one caret.
 
 Tests: `EditRetryTest`. A small model of the backend builds answers with the backend's version rules (a caret snapshot before and after each change, one editor step per caret item).

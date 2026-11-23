@@ -1,6 +1,6 @@
 # Code completion over Fleet RPC (JetBrains Client 263.7307.200, IntelliJ split mode)
 
-Read from the decompiled client jars and checked against a recorded session (2026-11-15). Our implementation: `compose/src/commonMain/kotlin/intellijandroid/client/session/FleetRpc.kt` and `Completion.kt`; results in section 6.
+Read from the decompiled client jars and checked against a recorded session (2026-11-15). Our implementation: `compose/src/commonMain/kotlin/io/github/safeuq/ideate/client/session/FleetRpc.kt` and `Completion.kt`; results in section 6.
 
 Tags: **[Seen]** = read in decompiled code or bytecode (class/method named). **[Inferred]** = reasoned from code, the backend side is not in the client jars.
 
@@ -287,12 +287,12 @@ Autopopup is started by the **host**, not the frontend: `FrontendNewRdCompletion
    - The frontend blocks (`awaitAllItemsReceivedBlocking`) until `CompletionItemsFinished`/`CompletionFinished` before it finalises the first lookup UI.
 5. User keeps typing a letter that still fits: `PrefixChanged{requestId, Append{char}}` (sent by `FrontendCompletionPrefixChangeListener.afterAppend`), host answers with `NewArrangement` (and possibly new `NewItems`). No new `StartRequest` unless the prefix breaks a watched condition (`AddWatchedPrefix`) or a cached result can't serve it. Backspace: `PrefixChanged{Truncate}`. [Seen]
    - Backspace follows IntelliJ's lookup, which JetBrains Client runs on its side (`lookup/impl/BackspaceHandler`, `LookupOffsets.truncatePrefix`, `BaseCompletionLookupArranger.prefixTruncated`). `Truncate` goes out only for a character typed while the popup was open (`afterTruncate` fires only then). Past those, completion restarts while the caret is still after the prefix's start, and the popup hides once the caret reaches it. [Source]
-   - Example: `psvm`, with the popup opened after `p`: three Backspaces send `Truncate` (prefix `p`). The fourth deletes `p` and closes the popup. Before the fix for pending item 22, IDEate kept truncating to an empty prefix and listed `clone()`, `equals()`, ….
-   - Example: Ctrl+Space after `psvm`: each Backspace starts a new request for `psv`, `ps` and `p`; the next one closes it. IDEate opens a new session for that, where IntelliJ restarts in place.
+   - Example: `psvm`, with the popup opened after `p`: three Backspaces send `Truncate` (prefix `p`). The fourth deletes `p` and closes the popup. Before the fix for pending item 22, Ideate kept truncating to an empty prefix and listed `clone()`, `equals()`, ….
+   - Example: Ctrl+Space after `psvm`: each Backspace starts a new request for `psv`, `ps` and `p`; the next one closes it. Ideate opens a new session for that, where IntelliJ restarts in place.
 6. Selection moves (up/down): `LookupEvent{LookupStateChanged{requestId, selectedItemId:{value}, focusDegree?, sortedItemIds?}}` (from `uiRefreshed` and `currentItemChanged`; only sent when something changed). Also `ScheduleModCommand` for the newly selected item if `hasModCommand`. [Seen]
 7. Accept item: see 2.6 (`LookupEvent{ItemSelected}`); then the session ends: `CloseSession{sessionId}` is sent by `unregisterSession -> unregisterSessionOnBackend` when the session scope completes (lookup item selected / cancelled). [Seen]
 8. Dismiss (Esc, caret moved away): `LookupEvent{Cancel{projectId, requestId}}` (`lookupCanceled`), then `CloseSession{sessionId}`. [Seen]
-   IDEate also cancels when the editor loses focus (2026-11-17), the closest thing it has to IntelliJ's
+   Ideate also cancels when the editor loses focus (2026-11-17), the closest thing it has to IntelliJ's
    `LookupImpl` hiding on `hideNotify` (the editor no longer showing). On a phone held upright the pager slides
    the editor away and clears its focus; the popup is a window of its own and used to stay on screen over the
    tool window page. Tapping a popup row doesn't take focus, so choosing still works.

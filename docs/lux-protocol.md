@@ -116,7 +116,7 @@ All input goes through `LuxEventSynchronizer` (a Swing listener attached to the 
 | `LxInputMethodEvent` | `type: Text/Caret`, `text, committedCount, caretPos, selectPreviousCharacter` (IME, macOS dead keys) |
 | `LxWindowEvent` | `type: Activated/Deactivated/GainedFocus/LostFocus/Closing`, `oppositeWindow: LxWindowRef?`. The client maps AWT id 202 (WINDOW_CLOSED) to `Closing` (`EventsKt.toLx`), and `windowClosing` itself does nothing |
 
-Key detail: `LuxFrontendPanel.processKeyEvent` sends keys to the backend; the backend sends keys it did not use back in `unprocessedKeyEvents` so the client can run its own shortcuts. Typing text is `Pressed` + `Typed(keyChar)` + `Released`. Clipboard: on a paste shortcut the client first calls `FrontendCopyPasteManagerHolder.syncClipboard()` (**Seen in code**, `syncClipboardIfNeeded`), a separate clipboard channel that IDEate would also need for Ctrl+V.
+Key detail: `LuxFrontendPanel.processKeyEvent` sends keys to the backend; the backend sends keys it did not use back in `unprocessedKeyEvents` so the client can run its own shortcuts. Typing text is `Pressed` + `Typed(keyChar)` + `Released`. Clipboard: on a paste shortcut the client first calls `FrontendCopyPasteManagerHolder.syncClipboard()` (**Seen in code**, `syncClipboardIfNeeded`), a separate clipboard channel that Ideate would also need for Ctrl+V.
 
 ### Backend receive side
 
@@ -136,7 +136,7 @@ Key detail: `LuxFrontendPanel.processKeyEvent` sends keys to the backend; the ba
 
 `LuxHostConnection.attached` becomes true only in `RemoteGraphicsEnvironment.Companion.handleNewSession`, after `remoteControl.graphicsDevices` is set by the client. `remoteControl` is `RemoteControlSession`, which lives at `CodeWithMeUnattendedHostControlModel.session: RdProperty<RemoteControlSession>` (a root ext, `getCodeWithMeUnattendedHostControlModel(IProtocol)`). Members of `RemoteControlSession` the client fills: `graphicsDevices: Prop<List<RemoteGraphicsDeviceModel(idString, configurations: List<RemoteGraphicsConfigurationModel>, defaultConfigurationIndex)>>`, `textRenderingProperties: Prop<RemoteTextRenderingProperties(uiAntiAliasingMode, uiFractionalMetrics, editorAntiAliasingMode, editorFractionalMetrics, fontMetrics)>`, `clientOsInfo: Prop<ClientOSInfo(os, waylandToolkit, windowRoundedCorners)>`, plus `additionalFontMetrics`, `subscribeOnWindowDeactivation`, `windowDeactivated`, `closeAllPopups`.
 **Inferred**: a split JetBrains Client is the backend's `CONTROLLER` client type, because every Lux class is gated by `session.isController()` and the Lux client listener is in the split frontend. `AttachConnection` also logs "Lux can not work only with single controller connection" for anything else.
-**Unknown**: whether IDEate already publishes `RemoteControlSession`. If not, Lux dialogs will never be bound, and the dialog stays unbound on the backend.
+**Unknown**: whether Ideate already publishes `RemoteControlSession`. If not, Lux dialogs will never be bound, and the dialog stays unbound on the backend.
 
 ### Order of events for a modal Rename (Inferred from the classes above; not recorded)
 
@@ -183,7 +183,7 @@ else                                                                    -> RdDia
 
 `lux.localComponents` defaults to `beControls`. **Seen in code**: `LuxBackendLocalBeControlBinder.accept` swaps in an `LxLocalBeControl(toBeModel(component))` only for (a) components flagged `RemoteTransferUIManager.setWellBeControlizable` (the only caller in 263 is `SplitComponentId`), (b) `ConsoleViewImpl`, (c) `EditorComponentImpl` **only when neither the window nor an ancestor is modal** and not inside a scroll pane or diff, (d) JCEF browser panels. So a modal Rename dialog contains no `LxLocalBeControl`: even its name field (an `EditorTextField`) is painted as pixels. Non-modal Lux windows with editors or consoles will have local BeControls (this is where Find Usages options is a registry exception, `lux.localComponents.becontrolizationException = findUsages,cmake-console`).
 
-## 5. Minimal plan for IDEate
+## 5. Minimal plan for Ideate
 
 ### Which route first
 
@@ -191,9 +191,9 @@ Lux. The BeDialog route is easier to render but, per section 4, is not what a re
 
 ### Messages to bind
 
-| # | Model / call | What IDEate does |
+| # | Model / call | What Ideate does |
 |---|---|---|
-| 1 | `protocol.codeWithMeUnattendedHostControlModel.session` (`RemoteControlSession`) | Set `graphicsDevices` (one `RemoteGraphicsDeviceModel` with one `RemoteGraphicsConfigurationModel`: bounds of the phone window, `defaultTransform`/`normalizingTransform` as identity or the density scale), `clientOsInfo`, `textRenderingProperties`. This attaches Lux on the backend. Check first whether IDEate already sets it. |
+| 1 | `protocol.codeWithMeUnattendedHostControlModel.session` (`RemoteControlSession`) | Set `graphicsDevices` (one `RemoteGraphicsDeviceModel` with one `RemoteGraphicsConfigurationModel`: bounds of the phone window, `defaultTransform`/`normalizingTransform` as identity or the density scale), `clientOsInfo`, `textRenderingProperties`. This attaches Lux on the backend. Check first whether Ideate already sets it. |
 | 2 | `protocol.luxModel.components` (`RdMap<Int, LxAbstractComponent>`) `view` | On add: if `LxDialog` (or `LxWindow` with `typePopup` for dropdown popups later), open a Compose dialog. On remove: close it. Ignore `LxFrame` with `isMainWindow`, and `LxPanel` for now. |
 | 3 | `component.title`, `.resizable`, `.visible`, `.preferredSize`, `.minimumSize`, `.position`, `.cursor` | title bar text; show/hide; dialog size from `preferredSize` |
 | 4 | `component.size`, `.position`, `.graphicsConfiguration` (client writes) | write the canvas size in backend pixels as soon as the dialog opens; write a position; write graphics config |
@@ -225,7 +225,7 @@ Types you can skip: gradients beyond linear, `LxTexturePaint`, `LxXorComposite`,
 ### What cannot be known without a recorded live session
 
 1. Whether Rename, New > Java Class and Delete really arrive as `LxDialog` (and not `BeDialog` or the split "SplitComponent" path). Record `luxModel.components` and `uiAutomationInteractionModel.activeDialogs/modalCWMDialogs` during one run.
-2. Whether the backend needs `RemoteControlSession.graphicsDevices` from IDEate before it binds, and which values (scale, bounds) give a correctly sized dialog.
+2. Whether the backend needs `RemoteControlSession.graphicsDevices` from Ideate before it binds, and which values (scale, bounds) give a correctly sized dialog.
 3. Real operation sequence and size: first batch, caret blink rate, hover redraws, whether `size` must be written before the first draw batch.
 4. Whether closing the client window sends `LxWindowEvent(Closing)` and whether the backend then cancels the dialog, or whether only Esc/key events do.
 5. Which `keyCode` values the backend needs for typed characters (for example whether `Typed` alone fills a text field).
@@ -270,7 +270,7 @@ session; the client fills it once it appears.
 
 - Colors are IntelliJ theme keys with fallbacks, not RGB: `LxColorPaint(NamedColor("Panel.background"))`,
   `LxGradientPaint(NamedColor("Button.default.startBackground", fallback "Button.darcula.defaultStartColor"
-  → RgbaColor(56, 79, 107)), …)`. The client resolves them from its theme, so IDEate resolves them from the
+  → RgbaColor(56, 79, 107)), …)`. The client resolves them from its theme, so Ideate resolves them from the
   Islands Dark keys in `ui/theme` (with the `RgbaColor` fallback when a key is unknown).
 - Fonts by name: `LxPlainFont("Inter", style 0, size 13)`.
 - Text with its box: `LxDrawTextCommand("Rename file 'smoke.iml' and its usages to:", x = 0, y = 13, width = 255.0,
@@ -307,7 +307,7 @@ platform's `pngDecoder` (set at startup: Skia on the desktop, `BitmapFactory` on
   a later transform doesn't move it. A null shape removes the clip.
 - **Text.** `LxDrawTextCommand(text, x, y, width, height)`: drawn at the baseline `y`. The client's default
   `lux.fonts.transform.bounds=shrink` scales text down only when it measures wider than the backend's box;
-  IDEate does the same sideways, with 0.3 px of slack.
+  Ideate does the same sideways, with 0.3 px of slack.
   - Fonts: a name with "Mono" in it uses `fonts.editor`, anything else `fonts.ui`.
   - AWT style bits: 1 bold, 2 italic. A sub-family (`SemiBold`, `Medium`, …) refines the weight.
 - **Images.** `LxDrawImageCommand(image, dst, transform)`: the command's transform is added, then the image is
@@ -349,15 +349,15 @@ platform's `pngDecoder` (set at startup: Skia on the desktop, `BitmapFactory` on
   recorded texts, text boxes, keys and button geometry (`desktop/…/LuxGallerySample.kt`).
 
 
-## 8. IDEate shows backend dialogs (2026-11-17)
+## 8. Ideate shows backend dialogs (2026-11-17)
 
 `session/LuxDialogs.kt` and `ui/lux/LuxDialogView.kt`, on the painter from section 7.
 
-- **Attach:** once the backend creates `codeWithMeUnattendedHostControlModel.session`, IDEate sets
+- **Attach:** once the backend creates `codeWithMeUnattendedHostControlModel.session`, Ideate sets
   `graphicsDevices` to one 1920 × 1200 screen at scale 1, so a backend pixel is a dp.
 - **Which windows:** every `LxDialog`, and every `LxWindow` that isn't a frame (popups; none seen yet, see
   New below).
-  - On the first `preferredSize`, IDEate writes `size` back, then a position and
+  - On the first `preferredSize`, Ideate writes `size` back, then a position and
     `graphicsConfiguration`.
   - On `visible = true` it sends `LxWindowEvent(Activated)` and `(GainedFocus)`. Without them there's
     no caret and no typing.
@@ -373,10 +373,10 @@ platform's `pngDecoder` (set at startup: Skia on the desktop, `BitmapFactory` on
       (Refactoring's "Error", e.g. "File …/jackson-databind-2.22.0.jar!/…/HandlerInstantiator.class is
       located in a read-only container") and `RenameDialog`'s "Rename class '…' and its usages to:" are
       plain `JLabel`s. `DialogWrapperPeerImpl` only trims the dialog to the screen
-      (`ScreenUtil.fitToScreen`), so a long path makes it 1920 dp, the screen IDEate reports. Reporting
+      (`ScreenUtil.fitToScreen`), so a long path makes it 1920 dp, the screen Ideate reports. Reporting
       the phone's own width instead would only cut the text off at the phone's edge. IntelliJ's
       alerts (`AlertMessagesManager`) do wrap, at 450 px.
-    - A pan doesn't click: once the content scrolls under the finger, IDEate drags the press off the
+    - A pan doesn't click: once the content scrolls under the finger, Ideate drags the press off the
       window to (-10000, -10000) and releases it there, as dragging off a Swing button before letting
       go does. An `Exited` alone doesn't disarm the button, since it reaches the window, not the
       button. Mouse drags don't pan; they stay the backend's (text selection).
@@ -399,7 +399,7 @@ platform's `pngDecoder` (set at startup: Skia on the desktop, `BitmapFactory` on
 
 **New ▸ File, Java Class, …** don't use Lux. Their name popup arrives as
 `uiAutomationInteractionModel.activePopups[1] = BeAbstractPopup`, the semantic BeControl popup route, and
-`NewFile` returns at once (the popup isn't modal). IDEate shows them since section 10.
+`NewFile` returns at once (the popup isn't modal). Ideate shows them since section 10.
 
 **Tested** against the isolated Mac backend:
 
@@ -422,7 +422,7 @@ isolated backend. Its Scope combo opens a list window.
 | The dialog | `LxDialog`, owner `LxIdeFrameRef`, `position` (282, 242), 459 × 283 |
 | The Scope list | `LxWindow` (`HeavyWeightWindow`), `typePopup = true`, owner `LxNonLuxWindowRef`, `position` (290, 467), 423 × 268, `focusableWindowState = true` |
 
-The backend places windows on the screen IDEate reported. The list's offset from the dialog, here (8, 225),
+The backend places windows on the screen Ideate reported. The list's offset from the dialog, here (8, 225),
 puts it just under the combo. JetBrains Client does the same: `LuxFrontendWindowAdapter` moves each window to
 its `position`, and `unwrapLxRef` gives a `LxNonLuxWindowRef` popup the focused window as parent.
 
@@ -443,7 +443,7 @@ The backend trace for a tap on "Open Files" after the change:
 `MOUSE_ENTERED (53,140)`, `MOUSE_MOVED (52,140)`, `MOUSE_MOVED (53,140)`, `MOUSE_PRESSED`, `MOUSE_RELEASED`,
 `MOUSE_CLICKED`, `MOUSE_EXITED`, then Scope reads "Open Files".
 
-**How IDEate shows a popup:** over the top dialog, inside its window, as a Compose `Popup` at the backend's
+**How Ideate shows a popup:** over the top dialog, inside its window, as a Compose `Popup` at the backend's
 offset from the dialog, scaled like the dialog. A popup with no dialog open still gets a window of its own.
 A popup gets no `Activated` / `GainedFocus` (a real OS leaves the focus with the dialog, so the combo keeps
 handling keys; Down moved the list's selection that way) and opens no soft keyboard. Back or a tap outside
@@ -477,19 +477,19 @@ activePopups[1] = BeAbstractPopup(
 
 | Panel property | Set to |
 |---|---|
-| `graphicsConfiguration` | IDEate's one screen (`LuxDialogs.CONFIGURATION`) |
+| `graphicsConfiguration` | Ideate's one screen (`LuxDialogs.CONFIGURATION`) |
 | `position` | `(0, 0)` |
 | `visible` | `true` |
 | `size` | each `preferredSize` the backend sends, e.g. `291 × 25`, even though `layoutSource` is `Backend` (the client sets it unconditionally) |
 
-Its colors are `ValidationTooltip.errorBackground` / `errorBorderColor`, which `ThemeKeys` now resolves as Islands Dark does (`#56272B` / `#80383E`; without them the painter used the light fallback, a pale pink). IDEate shows the hint under the name popup, and cancelling the name popup cancels the hint too (the backend doesn't close it on its own).
+Its colors are `ValidationTooltip.errorBackground` / `errorBorderColor`, which `ThemeKeys` now resolves as Islands Dark does (`#56272B` / `#80383E`; without them the painter used the light fallback, a pale pink). Ideate shows the hint under the name popup, and cancelling the name popup cancels the hint too (the backend doesn't close it on its own).
 
-**New ▸ Java Class** wraps the name field in a `BeGrid` (its `items` are `BeGridElement(content)`), next to a `BeTreeGrid` listing the kinds (Class, Interface, Enum, …). IDEate shows both. Each kind is a `BeTreeGridLine` under the grid's `fakeRoot`, made of `BeStyleControl` → `BeGrid` [`BeIcon(expui/nodes/class.svg)`, `BeLabel("Class")`], with an `isSelected` property (Class starts selected).
+**New ▸ Java Class** wraps the name field in a `BeGrid` (its `items` are `BeGridElement(content)`), next to a `BeTreeGrid` listing the kinds (Class, Interface, Enum, …). Ideate shows both. Each kind is a `BeTreeGridLine` under the grid's `fakeRoot`, made of `BeStyleControl` → `BeGrid` [`BeIcon(expui/nodes/class.svg)`, `BeLabel("Class")`], with an `isSelected` property (Class starts selected).
 
 | Input | What happens |
 |---|---|
-| Up / Down (also Ctrl+P / Ctrl+N) in the name field | the name field has `BeShortcutListener`s for `pressed UP` and `pressed DOWN`; IDEate fires them and the backend moves `isSelected` |
-| a tap on a kind | IDEate sets that line's `isSelected` to true and the others' to false |
+| Up / Down (also Ctrl+P / Ctrl+N) in the name field | the name field has `BeShortcutListener`s for `pressed UP` and `pressed DOWN`; Ideate fires them and the backend moves `isSelected` |
+| a tap on a kind | Ideate sets that line's `isSelected` to true and the others' to false |
 | Enter | the name field's Enter listener creates the selected kind |
 
 Tested: Down moved the selection from Class to Interface; a tap on Enum, then `Kind` and Enter, created `src/Kind.java` with `public enum Kind`.
@@ -500,7 +500,7 @@ Tested: Down moved the selection from Class to Interface; a tap on Enum, then `K
 
 **The soft keyboard opens only for a text field.** The backend reports where the focused text field's caret
 is in `LxPanel.inputLocation` (an `LxRect`), and null when the focus isn't on text. JetBrains Client turns
-input methods on and off with it (`LuxEventSynchronizer`: `panel.enableInputMethods(it != null)`). IDEate
+input methods on and off with it (`LuxEventSynchronizer`: `panel.enableInputMethods(it != null)`). Ideate
 connects the Android keyboard while it's set, and disconnects it when it goes back to null.
 
 | Dialog | `inputLocation` | Keyboard |
@@ -531,16 +531,16 @@ DialogWrapper - The size of the dialog 'JetBrains Decompiler - …String.class' 
 set width = 555, height = 158, now width = 555, height = 389, resetting it back
 ```
 
-IDEate wrote `size` back only for the first `preferredSize` and drew the dialog at `size`. JetBrains Client
+Ideate wrote `size` back only for the first `preferredSize` and drew the dialog at `size`. JetBrains Client
 (`LuxFrontendPanelAdapter`, [Seen code]) handles every `preferredSize`: `panel.setPreferredSize`, then, for a
 window, `pack()`, `ScreenUtil.fitToScreen` and `setBounds`; the resized panel writes its size back
-(`updateSizeForModel`). It never takes its window size from `size`. IDEate now does the same: each
+(`updateSizeForModel`). It never takes its window size from `size`. Ideate now does the same: each
 `preferredSize` sets the drawn width and height and is written back as `size`; `size` from the backend no
 longer resizes the dialog.
 
 Checked 2026-11-19 on the Mac backend: ⌘-click on `greeting.length()` opened the licence dialog in full,
 text and the three buttons (Decide later, Decline and disable, Accept). The backend logged the same
-"has changed after showing … 158 … 389" warning; IDEate first showed 555 × 158 and grew it to 389 on the next
+"has changed after showing … 158 … 389" warning; Ideate first showed 555 × 158 and grew it to 389 on the next
 `preferredSize`. "Decide later" closed it and `String.class` opened; no setting was saved.
 
 How the decompiler asks ([Seen code], `IdeaDecompiler.LegalBurden`, a `FileEditorManagerListener.Before`):
@@ -561,8 +561,8 @@ found; use a fresh folder when a test needs the decompiler's question.
 **Cause of the blinking popups.** Hovering a button in a backend-painted panel (e.g. Rerun in the Run
 window's toolbar) makes the backend open its tooltip as an `LxWindow` that is not an `LxDialog`
 (`typePopup = true`, `focusableWindowState = true`, owner `LxIdeFrameRef`, position `LxPoint(431, 594)` in
-window dp, 127 × 34, text "Rerun 'Main' ⌘R"). IDEate showed it in a Compose `Dialog`, which covers the
-whole window. The panel under the still mouse got a pointer exit, IDEate sent `LxMouseEvent Exited`, the
+window dp, 127 × 34, text "Rerun 'Main' ⌘R"). Ideate showed it in a Compose `Dialog`, which covers the
+whole window. The panel under the still mouse got a pointer exit, Ideate sent `LxMouseEvent Exited`, the
 backend hid the tooltip, the panel got `Entered` again and the backend showed a new tooltip about 0.5 s
 later. This repeated about every 0.75 s (log: `Exited 15:54:05.021`, popup hidden `15:54:05.178`,
 `Entered 15:54:05.214`, popup shown `15:54:05.730`).
@@ -602,15 +602,15 @@ popup but a backend list popup (`BackendPopups`).
 
 ## Addendum (2026-11-22): screen scale and blurry images
 
-**Why Lux icons are blurry on a Retina Mac.** IDEate reports one screen at scale 1 (`LuxDialogs.CONFIGURATION`: both transforms identity), so the backend sends every image as a 1x PNG and the 2x screen stretches it. JetBrains Client reports its real AWT screen instead (`ThinClientUnattendedHostControlHostKt.toModel(GraphicsConfiguration)`): id, bounds, `getDefaultTransform()` (scale 2 on Retina) and `getNormalizingTransform()`.
+**Why Lux icons are blurry on a Retina Mac.** Ideate reports one screen at scale 1 (`LuxDialogs.CONFIGURATION`: both transforms identity), so the backend sends every image as a 1x PNG and the 2x screen stretches it. JetBrains Client reports its real AWT screen instead (`ThinClientUnattendedHostControlHostKt.toModel(GraphicsConfiguration)`): id, bounds, `getDefaultTransform()` (scale 2 on Retina) and `getNormalizingTransform()`.
 
 **Why simply reporting scale 2 is not enough.** Tried live on the Mac (`gradle-smoke`, Run window of the `hello` task): with both transforms at `[2, 0, 0, 2, 0, 0]` the Run toolbar's icons (Rerun, Run, Stop, the eye) came out twice their size and overlapped the tree. The backend's transforms then include the screen scale: `LxTransformStateChange` replaces the whole transform (AWT `setTransform`), as it does in a Graphics2D whose base transform is the 2x default transform. `LuxPainter.paint` scales the canvas by the density first, so the 2x counts twice.
 
-**The fix (2026-11-22).** IDEate now reports the real scale, as JetBrains Client does: `luxScreenScale` (`ui/lux/LuxImages.kt`) is set at startup from the default screen's `defaultTransform` on the desktop (2 on a Retina Mac) and from `displayMetrics.density` on Android, and `LuxDialogs.CONFIGURATION` sends it as both transforms. `LuxPainter.paint` scales the canvas by `density / luxScreenScale` instead of `density`, so the backend's transforms carry the scale and its images are drawn at full resolution. Component bounds, positions and events stay in backend pixels (dp), as AWT keeps them in user space, so input and layout are unchanged. Checked on the Mac at 2x: the Run toolbar icons are sharp and the normal size, the Rename dialog looks the same as before (its shapes and text were already vector drawing), and clicks land on the right controls. A window moved to a screen of another density keeps the scale reported at startup; the factor `density / luxScreenScale` keeps the size right, only the sharpness differs. Not yet checked on Android (fractional densities such as 2.625).
+**The fix (2026-11-22).** Ideate now reports the real scale, as JetBrains Client does: `luxScreenScale` (`ui/lux/LuxImages.kt`) is set at startup from the default screen's `defaultTransform` on the desktop (2 on a Retina Mac) and from `displayMetrics.density` on Android, and `LuxDialogs.CONFIGURATION` sends it as both transforms. `LuxPainter.paint` scales the canvas by `density / luxScreenScale` instead of `density`, so the backend's transforms carry the scale and its images are drawn at full resolution. Component bounds, positions and events stay in backend pixels (dp), as AWT keeps them in user space, so input and layout are unchanged. Checked on the Mac at 2x: the Run toolbar icons are sharp and the normal size, the Rename dialog looks the same as before (its shapes and text were already vector drawing), and clicks land on the right controls. A window moved to a screen of another density keeps the scale reported at startup; the factor `density / luxScreenScale` keeps the size right, only the sharpness differs. Not yet checked on Android (fractional densities such as 2.625).
 
 ## Addendum (2026-11-23): dialogs fit the phone screen
 
-**What was wrong.** IDEate always reported a 1920 × 1200 screen (`LuxDialogs.CONFIGURATION`, and the same screen in `graphicsDevices`), so on a phone the backend laid dialogs out for a desktop, and IDEate wrote every preferred size back as the window size with no limit.
+**What was wrong.** Ideate always reported a 1920 × 1200 screen (`LuxDialogs.CONFIGURATION`, and the same screen in `graphicsDevices`), so on a phone the backend laid dialogs out for a desktop, and Ideate wrote every preferred size back as the window size with no limit.
 
 **What JetBrains Client does** (`LuxFrontendPanelAdapter`, in `intellij.platform.frontend.split.jar`): on each `preferredSize` it sets the Swing panel's preferred size, packs the window, calls `ScreenUtil.fitToScreen(bounds)` (move onto the screen, then crop to it) and writes the panel's real size back to `size`. On the backend, `LuxComponentAdapter.receiveSize` calls `Window.setSize`, `validate` and `repaint`, so the dialog is laid out again at that size.
 
@@ -627,13 +627,13 @@ popup but a backend list popup (`BackendPopups`).
 
 **Dialogs opened after the client connects** fit the phone on the backend side too: the backend picks a new window's screen from the client's `graphicsDevices` (`LuxComponentAdapter.guessInitialGraphicsConfiguration` → `IdeGraphicsEnvironment.findGraphicsConfigurationFor`), `DialogWrapper.fitToScreen` fits the window to that screen, and `DialogWrapperPeerImpl.MyDialog.validate` caps the window's minimum size at it.
 
-**Dialogs opened before any client connects stay wide.** Example: "Trust and Open Project", which remote-dev-server shows when it opens the project at startup. With no client, the backend's screen is `HeadlessDummyGraphicsEnvironment`'s fixed 1024 × 768 (there is no setting for it). The dialog was packed there with a minimum of 637 × 201. `MyDialog.validate` caps the minimum again only when the root pane's own minimum changes (`myLastMinimumSize`), and a new screen doesn't change it. So the client can't shrink it (checked on the Pixel 3a emulator: preferred 637 × 201, minimum 637 × 201). IDEate draws it at 637 dp, scaled to 0.75 and pannable (`dialogFit`), as before.
+**Dialogs opened before any client connects stay wide.** Example: "Trust and Open Project", which remote-dev-server shows when it opens the project at startup. With no client, the backend's screen is `HeadlessDummyGraphicsEnvironment`'s fixed 1024 × 768 (there is no setting for it). The dialog was packed there with a minimum of 637 × 201. `MyDialog.validate` caps the minimum again only when the root pane's own minimum changes (`myLastMinimumSize`), and a new screen doesn't change it. So the client can't shrink it (checked on the Pixel 3a emulator: preferred 637 × 201, minimum 637 × 201). Ideate draws it at 637 dp, scaled to 0.75 and pannable (`dialogFit`), as before.
 
 ponytail: the screen is reported once per connection; a rotation is not re-sent.
 
 ## Addendum (2026-11-23): a dialog that is cut off turns the phone sideways
 
-For a dialog the client can't shrink (the startup trust dialog above), IDEate now turns the screen to landscape while the dialog is open and turns it back when it closes.
+For a dialog the client can't shrink (the startup trust dialog above), Ideate now turns the screen to landscape while the dialog is open and turns it back when it closes.
 
 | Dialog on a 393 × 785 dp phone | Width | At the least scale (0.75) | Room on the short side (393 − 16) | Turns? |
 |---|---|---|---|---|

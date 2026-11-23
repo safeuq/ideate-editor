@@ -1,10 +1,10 @@
 # SSH connections (plan)
 
-Goal: an **SSH** page on the connect screen that works like JetBrains Gateway's, so IDEate can replace Gateway for
+Goal: an **SSH** page on the connect screen that works like JetBrains Gateway's, so Ideate can replace Gateway for
 any backend reachable over SSH, including a Mac backend shown on the phone:
 
 1. Add a host (address, port, user, how to log in).
-2. IDEate lists the IntelliJ installs on that host.
+2. Ideate lists the IntelliJ installs on that host.
 3. The host appears in the SSH page with its recent projects under it, also ones opened from Gateway or another
    client. Tapping one opens it, starting the backend when it isn't running.
 
@@ -107,7 +107,7 @@ Gateway connection to the phone immediately listed "smoke" with the date from th
    stderr between `###FailureReason###` and `###FailureReasonEnd###`.
    A running backend that doesn't have the project open yet counts as "not running" for that project: the launch
    hands the project to the running backend (the launcher exits 0 at once), and the poll waits until the project
-   is in `projects[]`. IDEate did that from 2026-11-19; before, it connected to the running backend and showed its
+   is in `projects[]`. Ideate did that from 2026-11-19; before, it connected to the running backend and showed its
    first project ([`split-protocol.md`](split-protocol.md), "One backend, several projects, one connection").
 4. **The join link** comes from that status.
 5. **Port forwarding:** Gateway listens on `127.0.0.1` at the backend's port if that's free (5990), else on a
@@ -128,9 +128,9 @@ every 10 s for reachable hosts and every 30 s for unreachable ones.
 
 | Question | Answer |
 |---|---|
-| Log-in methods | all four: a key IDEate generates; password; an imported private key file; on the desktop, `~/.ssh/config` and the agent |
+| Log-in methods | all four: a key Ideate generates; password; an imported private key file; on the desktop, `~/.ssh/config` and the agent |
 | Host systems | Linux, Termux and macOS (Windows later) |
-| Commands on the host | Gateway's worker when it is already on the host, else IDEate's own shell commands. We don't ship JetBrains' worker in the app: it's their proprietary binary |
+| Commands on the host | Gateway's worker when it is already on the host, else Ideate's own shell commands. We don't ship JetBrains' worker in the app: it's their proprietary binary |
 | Projects not in the recent list | a folder browser, like Gateway's |
 
 ## Design
@@ -139,7 +139,7 @@ every 10 s for reachable hosts and every 30 s for unreachable ones.
 has (`bcpkix-jdk18on 1.82`). A spike checks it on Android first (step 1): BouncyCastle as provider, Ed25519, and
 the APK size.
 
-**Code** in `:compose`, package `intellijandroid.client.ssh`. The platform parts come in through interfaces, like
+**Code** in `:compose`, package `io.github.safeuq.ideate.client.ssh`. The platform parts come in through interfaces, like
 `Termux` and `StoredText` today:
 
 | Piece | What |
@@ -189,7 +189,7 @@ the way Termux entries do now.
 `SshSession` (SSHJ 0.41.2) opens a connection with a password or an OpenSSH private key. It asks a
 `HostKeyCheck` about every host key, giving the type and OpenSSH's SHA-256 fingerprint. It runs commands
 directly, or through the login shell with Gateway's marker line, and forwards a local port Gateway's way.
-`SshKeys.generateEd25519` makes the key pair IDEate offers: the OpenSSH private key and an `authorized_keys`
+`SshKeys.generateEd25519` makes the key pair Ideate offers: the OpenSSH private key and an `authorized_keys`
 line.
 
 Checked on 2026-11-17 against a Linux test host, `lscr.io/linuxserver/openssh-server` in Docker on the Mac:
@@ -199,7 +199,7 @@ Checked on 2026-11-17 against a Linux test host, `lscr.io/linuxserver/openssh-se
 | Password log-in, `uname -sm` in the login shell | `Linux aarch64` | `Linux aarch64` |
 | Login-shell output after the marker, quoting | `echo one; echo 'it'\''s'` gives `one`, `it's` | |
 | Existing key file log-in | ok | |
-| Log-in with a key IDEate generated, after adding it to `authorized_keys` | ok | ok |
+| Log-in with a key Ideate generated, after adding it to `authorized_keys` | ok | ok |
 | Forward to the host's loopback (its own SSH port) | banner `SSH-2.0-OpenSSH_10.3` | local 2222, same banner |
 | Host key fingerprint | | `SHA256:sXrwbXg8SMoVJG1Nyj3CNK+CqAeD5MnUk8KYDOq33dY`, the same as `ssh-keyscan … \| ssh-keygen -lf -` |
 
@@ -323,7 +323,7 @@ Not tested yet:
 | `SshHosts`, `SshHostEntry` | the SSH page's hosts, as JSON in `StoredText` | `{"id":"586e…","host":"192.168.0.107","port":8022,"user":"u0_a404","method":"GENERATED_KEY"}`, shown as `u0_a404@192.168.0.107:8022` (Gateway's `user@host`, `:port` unless 22) |
 | `LoginMethod` | `GENERATED_KEY`, `KEY_FILE`, `PASSWORD`, `OPEN_SSH` (desktop) | |
 | `SecretStore` | keys and passwords, encrypted | Android: `AndroidSecretStore`, AES-GCM under an Android Keystore key, values in the `ssh-secrets` preferences. Desktop: `FileSecretStore`, files in `~/.ideate/secrets/` readable by the user only |
-| `IdeateKey` | one Ed25519 key for the app, made on first use | public line `ssh-ed25519 AAAA… IDEate on Pixel 3a` for the user to add to `~/.ssh/authorized_keys` |
+| `IdeateKey` | one Ed25519 key for the app, made on first use | public line `ssh-ed25519 AAAA… Ideate on Pixel 3a` for the user to add to `~/.ssh/authorized_keys` |
 | `KnownHosts` | OpenSSH `known_hosts` lines in `StoredText`, checked with SSHJ's parser. `KNOWN` passes; `UNKNOWN` asks the user with the fingerprint; `CHANGED` is refused unless the user accepts it (`forget`, then `trust`) | `[192.168.0.107]:8022 ssh-ed25519 AAAA…`. On the desktop `~/.ssh/known_hosts` also counts, read only |
 | `SshLogins.resolve` | a saved host into host, port, user and the methods to try. A missing password or key raises `MissingSecret`, so the UI asks and calls again | |
 | OPEN_SSH | `~/.ssh/config` (`Host` patterns with `*`, `?`, `!`; `HostName`, `Port`, `User`, `IdentityFile`; first value wins), then the agent (`SSH_AUTH_SOCK`, SSHJ's `AgentProxy`), then the identity files, by default `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`. A port typed for the host wins, like `ssh -p`. Keys that can't be read (encrypted, unknown format) are skipped, as OpenSSH does | `Host phone` with `HostName 192.168.0.107`, `Port 8022` gives `192.168.0.107:8022` |
@@ -344,7 +344,7 @@ The SSH page copies Gateway 2026.3's, captured from the user's Gateway window on
 texts are Gateway's own, from `messages/GatewayBundle.properties` in `intellij.gateway.core.jar`; the host-key
 questions come from IntelliJ's `messages/SshBundle.properties`.
 
-| Part | Gateway | IDEate |
+| Part | Gateway | Ideate |
 |---|---|---|
 | Sidebar | Connections: SSH (`expui/nodes/ssh.svg`), then Link | This phone (an inlined phone outline; IntelliJ has no phone icon) or This computer (`expui/nodes/desktop.svg`), SSH, Link. Portrait: three bottom tabs |
 | Header | "Recent SSH Projects", **New Project** split button | the same, without the drop-down |
@@ -357,11 +357,11 @@ questions come from IntelliJ's `messages/SshBundle.properties`.
 
 Dialogs, drawn like IntelliJ's (the folder chooser's frame: 475 dp wide, 32 dp title):
 
-| Dialog | Gateway | IDEate |
+| Dialog | Gateway | Ideate |
 |---|---|---|
-| Connect to SSH | Username, Host, Port (22), "Specify private key", **Check Connection and Continue** | the same fields, then the log-in method: IDEate key (its public line and **Copy Public Key**), Specify private key (paste the key and its passphrase), Password (with Save password), and on the desktop "OpenSSH config and authentication agent". The host is saved only once it logs in |
+| Connect to SSH | Username, Host, Port (22), "Specify private key", **Check Connection and Continue** | the same fields, then the log-in method: Ideate key (its public line and **Copy Public Key**), Specify private key (paste the key and its passphrase), Password (with Save password), and on the desktop "OpenSSH config and authentication agent". The host is saved only once it logs in |
 | Host key, unknown | "The authenticity of host '{0}' cannot be established. {1} key fingerprint is {2}. Are you sure you want to continue connecting?" | Gateway's dialog: "Connecting To Remote Host", OK / Cancel, Cancel focused (see "Host key question as Gateway shows it") |
-| Host key, changed | "Warning: remote host identification has changed! …" | the same; accepting replaces IDEate's entry |
+| Host key, changed | "Warning: remote host identification has changed! …" | the same; accepting replaces Ideate's entry |
 | Choose IDE and Project | "IDE version:" (installed ones marked "installed"), "Project directory:" with a browse button, **Start IDE and Connect** | the installed IDEs only (no downloads), the path (`~` allowed), **…** opens the folder browser |
 | Choose Remote Project | the remote file browser from `/` | the shared FolderChooser with `root` `/` (or Termux's files folder when `$HOME` is in Termux) and Home = the host's `$HOME` |
 | Authentication | "Authenticating to:", "Password:" or "Key passphrase for the file:", **Authenticate** | the same |
@@ -419,7 +419,7 @@ is gone after a restart.
 
 Storage: on the desktop, `~/.ideate/ssh-hosts.json`, `~/.ideate/known_hosts` and `~/.ideate/secrets/`. On
 Android, the `ssh` preferences (`hosts`, `known_hosts`) and the Keystore-encrypted `ssh-secrets`. The key's
-comment is the device: `IDEate on Pixel 3a` (Android `Build.MODEL`), or the computer's host name.
+comment is the device: `Ideate on Pixel 3a` (Android `Build.MODEL`), or the computer's host name.
 
 Checked on 2026-11-17:
 - **Desktop, against the Docker test host:**
@@ -466,12 +466,12 @@ Test hosts:
 
 ## Step 5: opening a project end to end (done, 2026-11-17)
 
-Tested from IDEate desktop against this Mac over its own sshd (Remote Login), `safeuq@127.0.0.1:22`, logging in
-with IDEate's generated key (added to `~/.ssh/authorized_keys`). The flow, as Gateway's:
+Tested from Ideate desktop against this Mac over its own sshd (Remote Login), `safeuq@127.0.0.1:22`, logging in
+with Ideate's generated key (added to `~/.ssh/authorized_keys`). The flow, as Gateway's:
 
 | Step | What happened |
 |---|---|
-| Connect to SSH | IDEate key `ssh-ed25519 AAAAC3…aCrpG IDEate on Safeuqs-MacBook-Pro-M5`; host key question for `SHA256:1cqIIjvMAkHA74RCulfxLHBTSoesotqO3/xCQus8u4E` (the Mac's `/etc/ssh/ssh_host_ed25519_key.pub`), Continue |
+| Connect to SSH | Ideate key `ssh-ed25519 AAAAC3…aCrpG Ideate on Safeuqs-MacBook-Pro-M5`; host key question for `SHA256:1cqIIjvMAkHA74RCulfxLHBTSoesotqO3/xCQus8u4E` (the Mac's `/etc/ssh/ssh_host_ed25519_key.pub`), Continue |
 | Probe | macOS, RemoteDev folder `~/Library/Caches/JetBrains/RemoteDev`, two IDEs from `userProvidedDist/`, recent projects from `recent/` |
 | Start IDE and Connect | `remote-dev-server.sh run <project>` started; status polled until ready; join link `tcp://127.0.0.1:5991#jt=…` |
 | Port forward | 5991 was taken on the client side (the backend runs on the same machine), so the forward took a free port, `127.0.0.1:49401`, as Gateway does |
@@ -495,7 +495,7 @@ click:
 |---|---|
 | 7 | `SshSession.open` starts (logins resolved) |
 | 390 | host key callback: TCP connect and key exchange on loopback, BouncyCastle's first use about 150 of it |
-| 571 | question in state: `KnownHosts.check` over IDEate's and `~/.ssh/known_hosts` (84 lines) and the fingerprint |
+| 571 | question in state: `KnownHosts.check` over Ideate's and `~/.ssh/known_hosts` (84 lines) and the fingerprint |
 | 590 | the message dialog drawn |
 
 The 8 s was the test tool: on this Mac, cmux's clicks and window screenshots lag behind the app by seconds.
@@ -505,7 +505,7 @@ How the test kept the user's running IntelliJ out of it: `remote-dev-server.sh r
 folders would reach the IntelliJ the user has open. The test added a wrapper "IDE" (a folder with
 `bin/remote-dev-server.sh` that sets `IJ_JAVA_OPTIONS` to separate config, system, log and plugin folders and
 `--port 5991`, plus a copy of `Resources/product-info.json` with the version marked `2026.3 ISOLATED-TEST`), linked
-for the test only from `userProvidedDist/`. IDEate lists it like any IDE; it was chosen in Choose IDE and Project.
+for the test only from `userProvidedDist/`. Ideate lists it like any IDE; it was chosen in Choose IDE and Project.
 A recent-project row reuses the IDE path from its status file (the real IntelliJ), so the test didn't open rows.
 
 ### The same from Android (2026-11-17)
@@ -515,7 +515,7 @@ Repeated from the Pixel 3a emulator (API 34) at c54ac36, against the same Mac at
 
 | Step | Android part it exercised | Result |
 |---|---|---|
-| Connect to SSH | IDEate key generated and kept by `AndroidSecretStore` (Keystore AES-GCM): `ssh-ed25519 AAAAC3…Xe8r IDEate on sdk_gphone64_arm64` | key shown in the dialog; added to the Mac's `authorized_keys` for the test only |
+| Connect to SSH | Ideate key generated and kept by `AndroidSecretStore` (Keystore AES-GCM): `ssh-ed25519 AAAAC3…Xe8r Ideate on sdk_gphone64_arm64` | key shown in the dialog; added to the Mac's `authorized_keys` for the test only |
 | Host key question | the message dialog on a phone screen | same fingerprint as on the desktop, `SHA256:1cqIIjvM…` |
 | Log-in and probe | the full BouncyCastle swapped in as "BC" | logged in; both IDEs and the recent project listed |
 | Start IDE and Connect | launch, status polling, local port forward on the phone | the isolated backend started (5991) and the project opened in the portrait layout |
@@ -529,12 +529,12 @@ keeps its `active/` file, which `remote-dev-server.sh status` reads.
 ### Taking over a running backend (2026-11-17)
 
 As on the Termux page: when Start IDE and Connect finds the project's backend already running and its
-live status (`remote-dev-server.sh status`) says `"controllerConnected": true` for the project, IDEate asks
+live status (`remote-dev-server.sh status`) says `"controllerConnected": true` for the project, Ideate asks
 in the message dialog: "Another device is connected to this backend (for example Gateway on a laptop). Take
 over? It will be disconnected." Cancel ends quietly; Take over forwards the port and connects, and the backend
-drops the other client. A backend IDEate has just started isn't asked about.
+drops the other client. A backend Ideate has just started isn't asked about.
 
-Tested: a desktop IDEate connected to the isolated Mac backend by join link, then the emulator opened the same
+Tested: a desktop Ideate connected to the isolated Mac backend by join link, then the emulator opened the same
 project over SSH. The question came up; Cancel left the desktop client connected; Take over opened the project
 on the emulator, and the desktop client got "Backend terminated the wire".
 
@@ -546,7 +546,7 @@ The status file in `RemoteDev/active/` lagged: it still said `"controllerConnect
 - Where the `recents.json` that `remove-recent-project` deletes lives: not under `RemoteDev/` on the phone or the
   Mac.
 - Which marker file makes an IDE in `dist/` "properly installed" (`GetExpandSucceededMarkerPath`, name not
-  readable). It doesn't matter until IDEate downloads IDEs, which it won't.
+  readable). It doesn't matter until Ideate downloads IDEs, which it won't.
 - The exact command line `host-launch` uses. `ShellHost` uses Gateway's older shell form, which the phone's
   `intellij-backend` wrapper also accepts.
 - ~~Whether `controllerConnected` should offer "Take over?" for SSH hosts too~~: yes, done 2026-11-17 (see
@@ -556,7 +556,7 @@ The status file in `RemoteDev/active/` lagged: it still said `"controllerConnect
 
 Compared with Gateway's dialog for the phone's Termux SSH (screenshot from the user):
 
-| Part | Gateway | IDEate before | IDEate now |
+| Part | Gateway | Ideate before | Ideate now |
 | --- | --- | --- | --- |
 | Title | Connecting To Remote Host | SSH | Connecting To Remote Host |
 | Key type | `ssh-ed25519` | `ED25519` | `ssh-ed25519` (`SshSession.keyType`) |

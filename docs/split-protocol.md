@@ -557,7 +557,7 @@ The models it creates: `SolutionModel`, `HighlighterRegistrationHostModel` (sets
 | 2 | (connected; then our side failed) | rd's `UnsafeBuffer(256)` is native memory and `getArray()` throws; use `UnsafeBuffer(ByteArray(256))`. `Protocol` calls `startDeliveringMessages()` itself; calling it again throws. |
 | 3 | `Declining invalid token from safeuq` → we get `USER_DECLINED` | The join token `jt` works once. After a client has connected with it, a new client id with the same `jt` is refused. Restart the backend, or keep the client id ([step 7](#connect-screen-and-reconnecting-step-7)), for a new attempt. |
 | 4 | `Expected to get frame of type: <SystemFrame>, but received: <Message Frame>` | After `ACCEPTED`, both sides send `CURRENT_CONFIRMED_FRAME_ACK` (status 11, int32 = last frame number received from the other side, `0` for a new wire) and read the other's, before any message frame (`ServiceMessageProcessor.resendUnconfirmedFrames`). |
-| 5 | `null cannot be cast to non-null type T of …ProtocolMarkupExtensionsKt.getExtension`, `lineMarkerActionModel is null`; no highlighters | Every markup model the client creates must carry the extensions JetBrains Client puts there, looked up by key (`TOOLTIP_PROVIDER_MODEL_KEY`, `LINE_MARKER_ACTIONS_KEY`, `MARKUP_REVALIDATION_KEY`, … 20 for an editor, 13 for a document). See `compose/src/commonMain/kotlin/intellijandroid/client/session/MarkupExtensions.kt`. |
+| 5 | `null cannot be cast to non-null type T of …ProtocolMarkupExtensionsKt.getExtension`, `lineMarkerActionModel is null`; no highlighters | Every markup model the client creates must carry the extensions JetBrains Client puts there, looked up by key (`TOOLTIP_PROVIDER_MODEL_KEY`, `LINE_MARKER_ACTIONS_KEY`, `MARKUP_REVALIDATION_KEY`, … 20 for an editor, 13 for a document). See `compose/src/commonMain/kotlin/io/github/safeuq/ideate/client/session/MarkupExtensions.kt`. |
 
 The client creates three markup models: one for the editor (`textControls[…].extensions[MarkupTextControlExtension].markup`) and two for the document (`markups[RdMarkupKey(null)]` and `markups[RdMarkupKey(projectId)]`). Syntax highlighting arrives in the editor's model. Errors and warnings from code analysis ("daemon" results) are expected in the per-project document model (**Inferred**; the client doesn't show them yet).
 
@@ -876,7 +876,7 @@ The desktop client keeps identities the same way, in its history (`~/.ideate/`, 
 
 A client connected with that link gets both as entries of `solutionModel.solutions`; each solution's `RdOpenSolution.description` is an `RdCodeWithMeProject` whose `hostProjectBasePath` is the project folder. The JetBrains Client opens a window per solution. Its project drop-down (`RecentProjectListActionProvider`, `RemoteRecentProjectAction`) gets its list from Gateway through `station-plugin` (`RecentProjectsRequest.OpenProject`); Gateway runs its usual open steps for the new path, so the project arrives as one more solution on the connection the client already has, and nobody is taken over. `controllerConnected` is the same for every project: one controller connection serves them all.
 
-IDEate shows one project per screen: `ClientSession(project = …)` binds the solution whose `hostProjectBasePath` is that project (the first one when none is given) and leaves the others alone. Checked with the desktop client on 5991 with both projects open: asking for `xtool-copy` showed the xtool tree although `smoke` was added first; asking for `smoke` showed smoke.
+Ideate shows one project per screen: `ClientSession(project = …)` binds the solution whose `hostProjectBasePath` is that project (the first one when none is given) and leaves the others alone. Checked with the desktop client on 5991 with both projects open: asking for `xtool-copy` showed the xtool tree although `smoke` was added first; asking for `smoke` showed smoke.
 
 ### Not done yet
 
@@ -897,7 +897,7 @@ is the **frontend's** own: the backend sends nothing for it.
 | Frontend `EditorsSplitters` (`intellij.platform.ide.impl.jar`) | the usual `FileEditorManager` state, kept by JetBrains Client | what Gateway reopens |
 | `DeferredCompositeModel.isInitializationRequired` | `true` only for editors the backend opens by itself (`!isFrontendRequested` in `BackendFileEditorHost.sendDeferredComposite`) | none arrived on reconnect, checked on the 5991 backend |
 
-So IDEate keeps the list itself (`session/OpenEditors.kt`): one JSON object per device, keyed by
+So Ideate keeps the list itself (`session/OpenEditors.kt`): one JSON object per device, keyed by
 project, written on every open, close and selection, and read when the project has loaded
 (`Solution.isLoaded`). Each file reopens through the normal open path (`vfsModel.findFile` by path,
 then `requestComposite`); only the saved selected one is selected. A file the backend no longer has
@@ -912,7 +912,7 @@ is skipped and dropped from the list.
 **Editors are kept by the backend's project id (2026-11-19), as JetBrains Client does.**
 - Before, the key was the connection, and a join link's key names only the backend. One backend on one port
   can open different projects: started without a project folder, it opens `~/IdeaProjects/IdeaHome` when a
-  client joins, and IDEate then reopened the `smoke` tabs saved for the same port.
+  client joins, and Ideate then reopened the `smoke` tabs saved for the same port.
 - JetBrains Client keys this state by `Solution.projectId`:
   - `ThinClientProjectUtil.createProjectDir(RdProjectId)` (`intellij.platform.frontend.split.base.jar`)
     calls `createLightProjectStoreDir`, which uses `<config>/projects/<sha1 of the id>/` while the registry
@@ -924,12 +924,12 @@ is skipped and dropped from the list.
   - The part after the colon was different for `smoke` and IdeaHome on the same backend, and the same for
     `smoke` over 17 connections across backend restarts.
   - The part before it differs between backend instances, so each backend has its own state for a project.
-- IDEate now keeps the editors under `project:<id>`, for links, SSH and Termux alike. The same project
+- Ideate now keeps the editors under `project:<id>`, for links, SSH and Termux alike. The same project
   reached through another address or tunnel finds its tabs.
 - Pane sizes stay under the connection's key, because the screen reads them before the backend names the
   project.
 - Tabs saved under the old connection keys aren't reopened any more (once).
-- IDEate doesn't write into JetBrains Client's folders: the phone can't reach them, the tab list's place there
+- Ideate doesn't write into JetBrains Client's folders: the phone can't reach them, the tab list's place there
   is unknown, and both programs would write the same `workspace.xml`.
 
 Example entry: `{"files": ["…/Other.java", "…/Util.kt", "…/Main.java"], "selected": "…/Util.kt"}`.

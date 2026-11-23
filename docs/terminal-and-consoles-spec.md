@@ -3,7 +3,7 @@
 Spec, 2026-11-21. What IntelliJ IDEA 2026.3 (263.7307.200) and JetBrains Client 263.7307.200 do in the five
 places that show process output: the Terminal, Run, Debug, Build and Services tool windows. It covers both
 the UI (what IntelliJ draws, with which settings) and the split-mode wire (what the backend sends a client).
-IDEate's plan to build the same is a separate document: `terminal-and-consoles-plan.md`.
+Ideate's plan to build the same is a separate document: `terminal-and-consoles-plan.md`.
 
 Sources:
 
@@ -167,7 +167,7 @@ The 16 keys inherit: the eight base ones fall back to `CONSOLE_NORMAL_OUTPUT`, e
 `\e[?1049h` switches to the alternate screen (full-screen programs); `TerminalViewImpl` shows the alternate
 editor (no scroll bars, no history), and `\e[?1049l` switches back with the regular history intact.
 
-**Addendum 2026-11-21 (phase 4, how IDEate draws it):** IDEate has its own small renderer
+**Addendum 2026-11-21 (phase 4, how Ideate draws it):** Ideate has its own small renderer
 (`ui/terminal/TerminalView.kt`), not the editor's: a Compose canvas over a copy of JediTerm's buffer
 (`session/terminal/TerminalScreen.kt`). Seen working against the live backend (PNGs in the phase 4 report):
 colors from the scheme keys of 2.4, the 6 dp space above the first line and below the last, a cell grid in the
@@ -175,7 +175,7 @@ editor font (JetBrains Mono 12, line height = font height rounded up, line spaci
 with the character under it in the background color, scrolling the history, drag selection, Copy / Paste /
 Select All / Clear Buffer. Not done yet (marked `ponytail:` in the code): mouse reports to programs, the
 terminal font and spacing settings, the editor's caret blink period (500 ms is used), find in the terminal,
-IntelliJ's two-step Clear Buffer (IDEate drops the history only). The alternate buffer keeps the same grid as
+IntelliJ's two-step Clear Buffer (Ideate drops the history only). The alternate buffer keeps the same grid as
 the regular one (IntelliJ gives it no 6 dp space), so entering vim doesn't resize the shell. The Escape,
 Ctrl, Tab and arrow keys of a phone's keyboard are the keyboard bar (plan 6.1); the tab title rule of 2.2 is
 `terminalTabTitle`.
@@ -263,10 +263,10 @@ TtyBasedArrayDataStream, …)` reads the connector and feeds `JediEmulator` (sec
 |---|---|
 | `echo $$` in the tab, then sets `closed = true` and nothing else | the shell process (the pid it printed) was gone within 5 s: **`closed = true` ends the shell** |
 | then removes the map entry | nothing more to end; the entry is only bookkeeping |
-| types `exit` in a tab | within 5 s the tab was gone from the client: the backend closes the session itself (it sets `closed` or removes the entry; the test could not tell which, because IDEate drops the tab on either) |
+| types `exit` in a tab | within 5 s the tab was gone from the client: the backend closes the session itself (it sets `closed` or removes the entry; the test could not tell which, because Ideate drops the tab on either) |
 | types text while the login shell is still printing its banner (this Mac's zsh prints a long banner and a two-line prompt) | the text is lost: the shell clears typed-ahead input before its first prompt. A client has nothing to fix; a test must wait until the screen stops changing |
 
-IDEate's `TerminalSessions.close(id)` therefore sets `closed = true` and then removes the entry, as JetBrains
+Ideate's `TerminalSessions.close(id)` therefore sets `closed = true` and then removes the entry, as JetBrains
 Client does when its widget goes away. Row 4 of section 12 is answered. Opening the Terminal window before
 the project is bound has to wait: the `terminalModel` extension exists only on the bound solution
 (`SessionState.terminalsReady`).
@@ -297,7 +297,7 @@ the project is bound has to wait: the `terminalModel` extension exists only on t
 
 - `TerminalStarter`'s fifth constructor parameter (the type-ahead manager) is annotated non-null, and a
   `null` there fails to compile unless the call has `@Suppress("NULL_FOR_NONNULL_TYPE")`. It is only used
-  when `sendBytes` / `sendString` get `userInput = true`, which would throw a `NullPointerException`; IDEate
+  when `sendBytes` / `sendString` get `userInput = true`, which would throw a `NullPointerException`; Ideate
   passes `false` always, so no manager is needed.
 - `com.jediterm.core.input.KeyEvent` (`VK_UP = 38`, `VK_ENTER = 10`, `VK_ESCAPE = 27`, `VK_F1 = 112`, …) and
   `com.jediterm.core.input.InputEvent` (`SHIFT_DOWN_MASK = 64`, `CTRL_DOWN_MASK = 128`, `META_DOWN_MASK = 256`,
@@ -332,7 +332,7 @@ the project is bound has to wait: the `terminalModel` extension exists only on t
 | Highlighter | `NullEditorHighlighter` (colors come only from the printed content types) |
 | Scroll bar | background = the editor background |
 
-**Addendum 2026-11-21 (IDEate's `ConsoleEditor`, `EditorView(kind = CONSOLE)`):** no line numbers, gutter icons,
+**Addendum 2026-11-21 (Ideate's `ConsoleEditor`, `EditorView(kind = CONSOLE)`):** no line numbers, gutter icons,
 folding, indent guides, sticky lines, caret or caret row; background `CONSOLE_BACKGROUND_KEY` (editor background
 when the scheme has none); typing does nothing. Text can be selected and copied (selection kept in the composable,
 not in an edit session). The view follows the output while it is scrolled to the end and stays put when the user
@@ -457,7 +457,7 @@ likely way, since `ConsoleContentTypeHandler` maps highlighters), with which att
 
 ## 7. Lux panels with client-drawn controls
 
-Lux = the backend paints a Swing component and the client replays the draw operations (IDEate's
+Lux = the backend paints a Swing component and the client replays the draw operations (Ideate's
 `docs/lux-protocol.md`). In a tool window, a Lux component is a `BeneluxView(luxId)` control pointing at
 `luxModel.components[luxId]: LxPanel`.
 
@@ -503,21 +503,21 @@ after layout.
 and it gets two values: first `LxRect(x=39, y=35, width=0, height=127)` when the entry is added, then
 `LxRect(x=39, y=35, width=314, height=177)` about 0.1 s later. `x` and `y` are in backend pixels (dp) from
 the panel's top left; the Run window's toolbars take the strip above and left of that rectangle, so the
-console is not at the panel's origin. IDEate advises `bounds` and moves the console when it changes
+console is not at the panel's origin. Ideate advises `bounds` and moves the console when it changes
 (`LuxPanelHost`). The panel's own size is its `preferredSize` (the layout source is not the frontend), and the
 backend paints everything else of the panel itself (the toolbars, the Performance side panel). Both
 `BeGrid` items (port bar, console) get the grid's bounds; the empty port bar draws nothing.
 
 **Addendum 2026-11-21 (phase 2, images) [Seen run]:** the backend sends an icon's pixels once
 (`LxCacheableImage`) in the first frame that draws it, then refers to it as `LxCachedImage(id)`. For the Run
-toolbar the first frame was one of a component IDEate does not draw (the backend's main window, with its
-toolbar), so the toolbar's icons were "unknown cached images" and stayed blank. IDEate now keeps the pixels of
+toolbar the first frame was one of a component Ideate does not draw (the backend's main window, with its
+toolbar), so the toolbar's icons were "unknown cached images" and stayed blank. Ideate now keeps the pixels of
 every component's frames (`LuxDialogs.bind`), and the toolbars draw.
 
 **Addendum 2026-11-21 (phase 3, `visible`) [Seen run]:** `LxLocalComponent.visible` (`IOptProperty<Boolean>`)
 is set by the backend. A Run window with a Build tree keeps one console per tree step and shows one: when a
 step is selected the shown console gets `visible = true` (and a new `bounds` of width 0, then its size) and
-the earlier one `visible = false`. IDEate (`LuxPanelHost`) draws only the locals that are not `visible =
+the earlier one `visible = false`. Ideate (`LuxPanelHost`) draws only the locals that are not `visible =
 false`; without that the old console stayed on top of the new one.
 
 ---
@@ -564,20 +564,20 @@ Gradle tasks also report to `solution.cWMExternalSystemModel` (read by JetBrains
 `StartEventModel`, `OutputBuildEventModel`, `MessageEventModel`, `FinishEventModel`, `FinishBuildEventModel`),
 `onTaskOutput(text, stdOut)`, `onSuccess`, `onEnd`. The Lux panel and the Build tree carry the same. [Seen run]
 
-**Addendum 2026-11-21 (phase 2, what IDEate does with the Run window) [Seen run]:**
+**Addendum 2026-11-21 (phase 2, what Ideate does with the Run window) [Seen run]:**
 
 - *Stripe button.* Run and Build were in `availableToolWindows` (available) but `isVisibleOnLargeStripe` stays
-  null, so they sat under the ⋯ button. IDEate puts Run, Debug and Build on the bottom stripe after Services
+  null, so they sat under the ⋯ button. Ideate puts Run, Debug and Build on the bottom stripe after Services
   (`DEFAULT_LAYOUT`); a button shows only while the backend lists the window as available, as for the other
   backend windows. The order after Services is a guess.
 - *The backend asks for the window.* When a run starts, the backend registers the Run window with
   `BeToolWindow.state = ActiveAndFocused` (log line `Tool window Run state ActiveAndFocused`), as IntelliJ's
-  "Activate tool window" does. IDEate follows it: a state other than Hidden that IDEate did not set itself shows
+  "Activate tool window" does. Ideate follows it: a state other than Hidden that Ideate did not set itself shows
   the window (`SessionState.showRequest`). A Gradle build sent no state for Build, so Build only opens with its
   button.
 - *A new run can take a finished run's tab.* Running `Slow` after `Main` finished made no second tab: the
   backend replaced the tab's content (a new `BeneluxView`) and renamed the tab (`tabName.text` Main to Slow).
-  IDEate follows the selected tab's name. A second tab came when the first process was still running
+  Ideate follows the selected tab's name. A second tab came when the first process was still running
   (`Forever`, then `Slow`: tabs `[Forever, Slow]`). The backend builds a tab's content when it is selected,
   and rebuilds it on each selection (a new Lux panel each time).
 - *Closing a tab, which paths work.* `BeTab` has no close signal.
@@ -585,7 +585,7 @@ Gradle tasks also report to `solution.cWMExternalSystemModel` (read by JetBrains
      the backend closes the content. For a running process the backend opens its own dialog, `Process 'Forever'
      Is Running`, with Cancel, Disconnect and Terminate; it arrives through the existing backend dialog path.
      Terminate ends the process and the tab stays gone. After the backend removes a tab it keeps the old
-     selected index, so IDEate selects the neighbour itself (without it the remaining tab was never built).
+     selected index, so Ideate selects the neighbour itself (without it the remaining tab was never built).
      Limit: after Cancel the process keeps running but the backend does not give the tab back, and hiding and
      showing the window (`BeToolWindow.state`) does not either; the client shows no tab until the next run.
   2. The action `CloseContent` through `ActionMenus.runAction`: tried with place `ToolwindowPopup` and
@@ -705,8 +705,8 @@ then         byte 1, int 12 + "com.intellij" in UTF-16LE (the icon's class loade
 ```
 
 Examples: `expui/status/info.svg` (a warning or info node), `expui/run/testPassed.svg` (a finished step or
-build). IDEate reads only the kind and the path (`BuildTreeClient.decodeIcon`); an unknown kind gives no icon,
-so one odd icon doesn't break the tree. The running icon has no path: IDEate draws the eight frames of
+build). Ideate reads only the kind and the path (`BuildTreeClient.decodeIcon`); an unknown kind gives no icon,
+so one odd icon doesn't break the tree. The running icon has no path: Ideate draws the eight frames of
 `process/step_1.svg` to `process/step_8.svg` (the icons of `AnimatedIcon.Default`), 100 ms each; there is no
 `expui/status/running.svg` in the icons jar.
 
@@ -719,11 +719,11 @@ More about the events, seen on `gradle-smoke` (task `hello`) [Seen run]:
   Available`, `visibleAsWarning`). So IntelliJ's own Build tree shows `:app:hello` only while it runs, unless
   the panel toolbar's eye button ▸ "Show Successful Steps" is on. That choice comes as a new
   `BuildTreeFilteringState(showSuccessful = true)` and the row shows (with its console).
-- Rule IDEate uses: a node shows when `visibleAlways`, or `showSuccessful && visibleAsSuccessful`, or
+- Rule Ideate uses: a node shows when `visibleAlways`, or `showSuccessful && visibleAsSuccessful`, or
   `showWarnings && visibleAsWarning`, or something below it shows.
 - A node's JSON can carry `"duration": null`; `title` and `hint` are `null` or text; `navigatables` is
   `[{"serializedValue": {"id": 1, "canNavigate": true, "canNavigateToSource": true}}]` for a warning with a
-  link. IDEate ignores them (no source navigation yet).
+  link. Ideate ignores them (no source navigation yet).
 - Durations read as ICU short lists, like `NlsMessages.formatDuration`: `11 ms`, `1 sec, 251 ms`,
   `1 min, 5 sec` (the keys `nls.duration.ms.short`, `sec.short`, `min.short`, `hr.short` in
   `intellij.platform.ide.core.jar`).
@@ -763,7 +763,7 @@ How the [Seen run] facts were recorded, so they can be checked again:
   `plugins { java }` and a `hello` task that prints `hello`; a shared run configuration
   `.idea/runConfigurations/hello.xml` of type `GradleRunConfiguration` for `:app:hello`) and `smoke` (one Java
   module `smoke.iml`, `src/demo/Main.java` printing two lines, a temporary Application configuration `Main`).
-- Client: IDEate's `ClientSession` in a headless JUnit test (no window), with a temporary logging class.
+- Client: Ideate's `ClientSession` in a headless JUnit test (no window), with a temporary logging class.
   Steps: open a terminal session at 5 s, run a configuration at 25 s, run the action `CompileDirty`
   (Build Project) at 70 s, dump tool window contents and Lux local controls with rd's `printToString()`.
 - The probe code is listed in the plan, appendix A.
@@ -782,12 +782,12 @@ How the [Seen run] facts were recorded, so they can be checked again:
 
 ## Addendum (2026-11-22): the terminal on a Termux backend
 
-Seen with xtool on the phone (backend 263.7307.200 started by the app, IDEate on the Mac over SSH and on the
+Seen with xtool on the phone (backend 263.7307.200 started by the app, Ideate on the Mac over SSH and on the
 phone, Gateway on the Mac):
 
 | Client | What happens | Cause (backend `idea.log`, process environment) |
 |---|---|---|
-| IDEate (classic `TerminalModel` path) | the tab never shows a shell | `Failed to start [/bin/sh] in …/xtool` ← `PtyHelpers: Cannot load native pty executor library` ← `UnsatisfiedLinkError: Unable to locate JNA native support library`. The backend starts the shell through pty4j, whose `libpty.so` and JNA's `libjnidispatch.so` in the install are glibc builds |
+| Ideate (classic `TerminalModel` path) | the tab never shows a shell | `Failed to start [/bin/sh] in …/xtool` ← `PtyHelpers: Cannot load native pty executor library` ← `UnsatisfiedLinkError: Unable to locate JNA native support library`. The backend starts the shell through pty4j, whose `libpty.so` and JNA's `libjnidispatch.so` in the install are glibc builds |
 | Gateway / JetBrains Client (IJent path) | a shell starts, but `/bin/sh` (Android's), not zsh | IJent is static, so it runs; it inherits the backend's environment, which has no `SHELL`, and Android's `/etc/passwd` has no entry for `u0_a404` |
 
 Why `/bin/sh` in both: the app started the backend through Termux's RUN_COMMAND, which reads no profile, so the
@@ -817,7 +817,7 @@ Cause: Compose's `TextMeasurer` caches layouts by text and the attributes that c
 
 ## Addendum (2026-11-23): the screen after a reconnect
 
-A session that was open before the connection (IDEate reconnected, or Android restarted the app in the background) came back empty until the shell printed something new. The backend sends the screen so far in the session's `initialState` (`BeTerminalScreenState`: `historyLines`, `screenLines` of styled entries, `cursorX`, `cursorY`); JetBrains Client's `setInitialState` (intellij.platform.frontend.split.jar, `TerminalWidgetControlKt`) clears JediTerm's buffers, adds those lines, moves the cursor, and sets `initialState` back to null. `TerminalTab` now does the same, before it reads the output. Style entries: `optionsMask` bit n = `TextStyle.Option` number n; a color with `index` ≥ 0 is a palette color, else RGB. Switching apps through Recents keeps the connection, so the screen was never lost there.
+A session that was open before the connection (Ideate reconnected, or Android restarted the app in the background) came back empty until the shell printed something new. The backend sends the screen so far in the session's `initialState` (`BeTerminalScreenState`: `historyLines`, `screenLines` of styled entries, `cursorX`, `cursorY`); JetBrains Client's `setInitialState` (intellij.platform.frontend.split.jar, `TerminalWidgetControlKt`) clears JediTerm's buffers, adds those lines, moves the cursor, and sets `initialState` back to null. `TerminalTab` now does the same, before it reads the output. Style entries: `optionsMask` bit n = `TextStyle.Option` number n; a color with `index` ≥ 0 is a palette color, else RGB. Switching apps through Recents keeps the connection, so the screen was never lost there.
 
 
 ## Addendum (2026-11-23): a blank "Local" tab after the app restarts

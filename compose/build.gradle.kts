@@ -23,7 +23,7 @@ kotlin {
     compilerOptions { jvmTarget = JvmTarget.JVM_21 }
   }
   android {
-    namespace = "intellijandroid.client.compose"
+    namespace = "io.github.safeuq.ideate.client.compose"
     compileSdk = 37
     // java.util.HexFormat (client certificate fingerprints) needs 34.
     minSdk = 34

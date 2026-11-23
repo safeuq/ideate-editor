@@ -300,7 +300,7 @@ The node names come from `getPresentableText()` (and `ShortTextProvider.getShort
 leave it empty and draw their text another way, so they arrive as `""`. Seen on the phone (user's screenshot,
 2026-11-17): a nameless root, a nameless node with an icon, then "Injects" and "Injected In".
 
-In IDEate: a nameless root shows the file's name. The other nameless nodes stay nameless, and the Physical view
+In Ideate: a nameless root shows the file's name. The other nameless nodes stay nameless, and the Physical view
 isn't available until the backend offers a way to choose the view. Not checked against a Spring project here:
 the Mac test project has no Spring setup, and a Gradle sync for xtool would download its dependencies.
 
@@ -323,21 +323,21 @@ the Mac test project has no Spring setup, and a Gradle sync for xtool would down
 
 | Path | Builds | Why |
 |---|---|---|
-| rd `CodeStructureTreeModel` (`BackendFileStructureHost`, what IDEate uses) | the composite's `getTreeModel()` = its first view = **Logical** when the file has one, else Physical | it only ever calls `createStructureView(…).getTreeModel()` |
+| rd `CodeStructureTreeModel` (`BackendFileStructureHost`, what Ideate uses) | the composite's `getTreeModel()` = its first view = **Logical** when the file has one, else Physical | it only ever calls `createStructureView(…).getTreeModel()` |
 | Fleet RPC `StructureTreeApi.createStructureViewModel` (`BackendStructureTreeService`) | always **Physical** | `treeModelContext$1` calls `PhysicalAndLogicalStructureViewBuilder.createPhysicalStructureView` when the builder is the wrapper; also sends the sorters and filters (`actions`, `setTreeActionState`) |
 | Lux (Swing drawn by the backend) | the whole tool window, tabs included | `BackendToolWindowModeProvider.getDefaultMode`: for the controlling client, Structure is `PROJECTOR_INSTANCING` when `remoteDev.toolwindow.structure.lux.enabled` is true, else `FALLBACK` |
 
 So JetBrains Client gets the tabs, sorters and filters because its Structure window is Lux, drawn by the backend.
 
-**How IDEate could offer the switch:**
+**How Ideate could offer the switch:**
 - Logical from the rd tree, as now.
 - Physical from `StructureTreeApi`. The same call also gives Sort Alphabetically and the filters for the header.
 
-IDEate can't tell from the rd tree alone whether it got Logical. One way to tell is to compare it with the
+Ideate can't tell from the rd tree alone whether it got Logical. One way to tell is to compare it with the
 Physical tree: when they differ, show the switch. Not built yet.
 
 ## The delayed hide and a timing line (2026-11-19)
 
-- On a phone held upright, every swipe to the editor hid Structure, and the backend rebuilt the tree when the user came back. IDEate now sets `toolWindowVisible = false` 30 s after Structure leaves the screen (`STRUCTURE_HIDE_DELAY_MS` in `ClientScreen.kt`).
-- IDEate logs `Structure tree: <n> nodes for <path>, <ms> ms after showing` for the first tree after each show. On the Mac backend `Main.java` took 124 ms.
+- On a phone held upright, every swipe to the editor hid Structure, and the backend rebuilt the tree when the user came back. Ideate now sets `toolWindowVisible = false` 30 s after Structure leaves the screen (`STRUCTURE_HIDE_DELAY_MS` in `ClientScreen.kt`).
+- Ideate logs `Structure tree: <n> nodes for <path>, <ms> ms after showing` for the first tree after each show. On the Mac backend `Main.java` took 124 ms.
 - The phone's log of 2026-11-19 (pid 19639) showed four `Nothing received for 15 s` disconnects from 08:32 to 08:38 IST. Each reconnect rebuilds the tree, which would explain the slow loads seen there; not measured yet.

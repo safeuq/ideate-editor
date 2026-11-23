@@ -1,6 +1,6 @@
 # Mobile layout: phone, tablet, portrait, landscape
 
-How the main window (`compose/src/commonMain/kotlin/intellijandroid/client/ui/ClientScreen.kt`, `ToolWindows.kt`) arranges
+How the main window (`compose/src/commonMain/kotlin/io/github/safeuq/ideate/client/ui/ClientScreen.kt`, `ToolWindows.kt`) arranges
 the editor, the tool windows and the bars on each screen shape. From the user's brainstorm of 2026-11-16
 (`optimize-for-portrait.md` next to the repo) and the answers to its questions; the pane layout below was redone on
 2026-11-18 from the user's spec, reviewed as a preview first (https://claude.ai/artifact/ChLM2aSm57qt7EESoPh3zR,
@@ -60,12 +60,12 @@ across a rotation.
     `SquareStripeButtonLook` does: hover `#FFFFFF17`, pressed `#FFFFFF29` (the selected colour). Before, Compose's
     default press mark covered the whole square button.
   - A button's icon can come wrapped: with a badge (`BadgeIconModel`), an overlay (`IconWithOverlayModel`), an
-    indicator, a tint, an offset, a crop or a rotation. IDEate shows the icon inside and leaves the extra out;
+    indicator, a tint, an offset, a crop or a rotation. Ideate shows the icon inside and leaves the extra out;
     before, such an icon was blank.
   - The backend can also set a window's icon to null after naming it. With xtool on the phone backend
     (2026-11-18 15:19 IST) Structure, Problems View, Bookmarks, Database Changes and Pull Requests each got
     `ImageIconModel(path = "expui/toolwindows/structure.svg", …)` and 0.2 s later `null`; their bar buttons
-    were blank. IDEate keeps the last icon named (`BackendToolWindows`). JetBrains Client does the same:
+    were blank. Ideate keeps the last icon named (`BackendToolWindows`). JetBrains Client does the same:
     `FrontendToolWindowHost` calls `ToolWindow.setIcon` only for a non-null icon.
     - Why the backend sends null (`com.jetbrains.rdserver.toolWindow.BackendToolWindowHost`,
       `intellij.platform.backend.split.jar`, decompiled): these five are the tool windows the backend makes per
