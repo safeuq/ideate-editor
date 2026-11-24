@@ -2,10 +2,16 @@
 // with Islands Dark. Don't edit; regenerate (docs/lux-protocol.md).
 package io.github.safeuq.ideate.client.ui.theme
 
-/** The table, in parts that each fit in a class file's string constant. */
-internal val ISLANDS_DARK_UI_COLORS: List<String> = listOf(PART_1, PART_2, PART_3)
+internal val ISLANDS_DARK =
+  UiTheme(
+    id = "Islands Dark",
+    name = "Islands Dark",
+    isDark = true,
+    editorSchemeId = "Islands Dark",
+    colorTable = listOf(ISLANDS_DARK_PART_1, ISLANDS_DARK_PART_2, ISLANDS_DARK_PART_3),
+  )
 
-private const val PART_1 =
+private const val ISLANDS_DARK_PART_1 =
   """Abbreviation.background	21FFFFFF
 Abbreviation.foreground	FF9FA2A8
 ActionButton.focusedBorderColor	FF3871E1
@@ -803,7 +809,7 @@ Lesson.shortcutBackground	FF4E5157
 Lesson.stepNumberForeground	FFFEFEFE
 """
 
-private const val PART_2 =
+private const val ISLANDS_DARK_PART_2 =
   """LicenseDialog.LicenseList.licenseDetailsForeground	FF9FA2A8
 LicenseDialog.LicenseList.licenseIdForeground	FF73767C
 LicenseDialog.LicenseList.separatorColor	FF26282C
@@ -1529,7 +1535,7 @@ UIDesigner.Panel.background	FF191A1C
 UIDesigner.Placeholder.background	FF191A1C
 """
 
-private const val PART_3 =
+private const val ISLANDS_DARK_PART_3 =
   """UIDesigner.Placeholder.borderColor	FF26282C
 UIDesigner.Placeholder.foreground	FFD1D3D9
 UIDesigner.Placeholder.selectedForeground	FF9CCDFF

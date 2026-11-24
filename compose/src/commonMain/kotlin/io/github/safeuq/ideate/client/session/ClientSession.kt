@@ -121,6 +121,8 @@ import io.github.safeuq.ideate.client.ui.IconJar
 import io.github.safeuq.ideate.client.ui.MenuEntry
 import io.github.safeuq.ideate.client.ui.MenuItem
 import io.github.safeuq.ideate.client.ui.SubMenu
+import io.github.safeuq.ideate.client.ui.theme.LafManager
+import io.github.safeuq.ideate.client.ui.theme.UiTheme
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Base64
@@ -899,11 +901,11 @@ class ClientSession(
     // its own entries.
     registry.colorsScheme.advise(lifetime) { scheme ->
       schemes[scheme.name] = scheme
-      val resolved = EditorScheme.resolve(EDITOR_SCHEME, schemes) ?: return@advise
-      if (mutableState.value.scheme == null) log("Color scheme ${resolved.name} ready")
-      mutableState.update { it.copy(scheme = resolved) }
-      documentTexts.keys.forEach(::publishDocument)
+      applyEditorScheme(LafManager.currentTheme)
     }
+    // A theme brings its editor scheme along (the theme JSON's `editorScheme`), as IntelliJ's
+    // LafManager does when the theme changes. On the rd thread, with the schemes.
+    lifetime.onTermination(LafManager.addListener { theme -> onRd { applyEditorScheme(theme) } })
 
     val documentsModel = protocol.documentsOperationModel
     val requestResponseModel = documentsModel.requestResponseModel
@@ -1990,11 +1992,17 @@ class ClientSession(
     val modelName: String,
   )
 
+  /** The scheme [theme] brings along, once the backend has sent it. */
+  private fun applyEditorScheme(theme: UiTheme) {
+    val resolved = EditorScheme.resolve(theme.editorSchemeId, schemes) ?: return
+    if (mutableState.value.scheme?.name != resolved.name) log("Color scheme ${resolved.name} ready")
+    mutableState.update { it.copy(scheme = resolved) }
+    documentTexts.keys.forEach(::publishDocument)
+  }
+
   private companion object {
     val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
 
-    /** The user's IntelliJ uses Islands Dark (its theme and its editor scheme). */
-    const val EDITOR_SCHEME = "Islands Dark"
     const val PROJECT_PANE = "ProjectPane"
 
     /** `ActionPlaces.KEYBOARD_SHORTCUT`: where an action run by its shortcut comes from. */

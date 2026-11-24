@@ -951,3 +951,28 @@ either.
 
 Not changed: hot reload (`hotRun`) runs on JAVA_HOME's runtime, which has the old layout (2 pt high in full
 screen).
+
+## Addendum (2026-11-24): themes, step 1: Islands Light next to Islands Dark, and a current theme
+
+Request (user, via the runtime session): Ideate gets a light theme that follows the OS, built the way IntelliJ builds it. This first step adds the theme model. Ideate still shows Islands Dark. Following the OS is switched on once the app chrome (`IslandsDark.kt`) reads its colours from the current theme; until then a light OS would show light Lux panels inside dark chrome.
+
+| IntelliJ | Ideate (`ui/theme/UiTheme.kt`) |
+|---|---|
+| `UIThemeLookAndFeelInfo`: id, name, `isDark`, `editorSchemeId` | `UiTheme(id, name, isDark, editorSchemeId, colours)` |
+| the theme's `UIManager` table | the generated `ISLANDS_DARK` / `ISLANDS_LIGHT` (`IslandsDarkUiColors.kt`, `IslandsLightUiColors.kt`) |
+| `JBColor.namedColor(key, fallback)` | `ThemeKeys.color(key) ?: fallback`, which reads `LafManager.currentTheme.color(key)` |
+| `LafManager.getCurrentUIThemeLookAndFeel()` | `LafManager.currentTheme` (Compose snapshot state, so what reads it redraws) |
+| `LafManager.setCurrentLookAndFeel(…)` | `LafManager.setCurrentLookAndFeel(theme)` |
+| `LafManagerListener` | `LafManager.addListener { theme -> … }`, which returns the function that removes it |
+| `getDefaultDarkLaf()` / `getDefaultLightLaf()` | `LafManager.defaultDarkTheme` / `defaultLightTheme` |
+
+- **Values from JetBrains Client 263.7307.200:**
+
+  | Theme | id | `isDark` | editor scheme | `UIManager` colours | `*` suffixes |
+  |---|---|---|---|---|---|
+  | Islands Dark | "Islands Dark" | true | "Islands Dark" | 1,603 | 29 |
+  | Islands Light | "Islands Light" | false | "Light" (not "Islands Light") | 1,708 | 29 |
+
+  Examples in Islands Light: `Panel.background` #F7F8F9, `ActionButton.pressedBackground` #20000000, `Borders.color` #E9EAEE.
+- **The dump records the theme too.** Its first line is `#theme<TAB>id<TAB>name<TAB>isDark<TAB>editorSchemeId`, read from the client's own `LafManager`, so none of these values is copied by hand. To dump another theme, set it in the client's `options/laf.xml` (`<component name="LafManager"><laf themeId="Islands Light"/></component>`) before starting the client. Generate with `java tools/ui-colors/GenerateUiColors.java <table.tsv> <Out.kt> <build> <Kotlin val name>`, e.g. `ISLANDS_LIGHT`. A fresh Islands Dark dump matched the f48390d table line for line.
+- **Editor scheme:** `ClientSession` no longer names "Islands Dark". It picks `LafManager.currentTheme.editorSchemeId` from the schemes the backend sends, and again on each theme change, through a listener that is queued on the rd thread, where the schemes live.
