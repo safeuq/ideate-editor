@@ -670,7 +670,11 @@ class ConnectController(
       )
     current.identity = identity
     attempt = current
-    val shownTree = shownBeforeReconnect()?.tree
+    // A project switch starts from an empty screen: the other project's tree, tabs and tool
+    // windows are not this project's, and the new tree would never match the old one, so the old
+    // one would stay (seen live: beta's tree under alpha's name). [onAccepted] clears [switching].
+    val projectSwitch = switching != null
+    val shownTree = if (projectSwitch) null else shownBeforeReconnect()?.tree
     val accepted = CompletableDeferred<Boolean>()
     val candidate =
       ClientSession(
@@ -712,7 +716,7 @@ class ConnectController(
       candidate.stop()
       return false
     }
-    handOverFrom = shownBeforeReconnect()?.let { candidate to it }
+    handOverFrom = if (projectSwitch) null else shownBeforeReconnect()?.let { candidate to it }
     session?.stop()
     session = candidate
     return true

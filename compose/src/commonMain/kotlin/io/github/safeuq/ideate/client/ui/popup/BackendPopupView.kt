@@ -38,10 +38,14 @@ import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
@@ -118,6 +122,7 @@ private fun BackendPopupView(popup: BackendPopup, session: ClientSession) {
   val popupFocus = remember { FocusRequester() }
   if (popup.items.none { it is PopupTextField })
     LaunchedEffect(popup.id) { runCatching { popupFocus.requestFocus() } }
+  val list = popup.items.filterIsInstance<PopupList>().singleOrNull { it.listPopup }
   Column(
     Modifier.fillMaxWidth()
       .popupContainer(Look.radius)
@@ -126,6 +131,9 @@ private fun BackendPopupView(popup: BackendPopup, session: ClientSession) {
       .clickable(remember { MutableInteractionSource() }, indication = null) {}
       .onPreviewKeyEvent { event ->
         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+        // A list popup's keys stay in the client, as in IntelliJ's ListPopupImpl: its selection
+        // and its speed search are not sent to the backend.
+        if (list != null && listKey(list, event, session)) return@onPreviewKeyEvent true
         when (event.key) {
           Key.Enter,
           Key.NumPadEnter -> {
@@ -206,6 +214,32 @@ private object Look {
  * A list in a popup, e.g. New ▸ Java Class's kinds: icon and text per row, the selected one in
  * IntelliJ's list selection color. A tap selects a row; Enter in the name field then uses it.
  */
+/**
+ * A key in list popup [list]: Up and Down move the selection, Enter chooses the selected row, and
+ * with `isSearchEnabled` a typed character adds to the filter (Backspace takes one off, Escape
+ * clears it before a second Escape closes the popup, as `WizardPopup` resets its speed search).
+ */
+// ponytail: hardware keys only; an on-screen keyboard needs a text field, add one when the
+// project popup is used on a phone without a keyboard.
+private fun listKey(list: PopupList, event: KeyEvent, session: ClientSession): Boolean {
+  when (event.key) {
+    Key.DirectionUp -> list.move(-1)
+    Key.DirectionDown -> list.move(1)
+    Key.Enter,
+    Key.NumPadEnter -> list.rows.getOrNull(list.selected)?.let { session.popupSelect(list, it) }
+    Key.Escape -> if (list.filter.isEmpty()) return false else list.type("")
+    Key.Backspace -> if (list.filter.isEmpty()) return false else list.type(list.filter.dropLast(1))
+    else -> {
+      val typed = event.utf16CodePoint
+      val printable = typed >= ' '.code && typed != 127 && typed != 0xFFFF
+      if (!list.searchEnabled || !printable || event.isCtrlPressed || event.isMetaPressed)
+        return false
+      list.type(list.filter + typed.toChar())
+    }
+  }
+  return true
+}
+
 @Composable
 private fun PopupListView(list: PopupList, session: ClientSession) {
   val text = LocalClientFonts.current.label()
@@ -214,21 +248,35 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
   // icon of the same size, e.g. More Actions' Edit… lines up with "Run 'Forever'" above it.
   val iconSlot = list.rows.any { it.iconPath != null || it.avatar != null }
   Column {
-    list.rows.forEachIndexed { index, row ->
-      row.header?.let { header ->
-        Box(
-          Modifier.fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .height(1.dp)
-            .background(Islands.popupBorder),
-        )
-        if (header.isNotEmpty())
-          BasicText(
-            header,
-            Modifier.padding(horizontal = Look.rowInset),
-            style = text.copy(color = Islands.textSecondary),
-          )
+    // The typed text, where IntelliJ's AbstractPopup puts its speed search field: above the rows.
+    if (list.filter.isNotEmpty())
+      Row(
+        Modifier.fillMaxWidth().height(Look.rowHeight).padding(horizontal = Look.rowInset),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Look.iconGap),
+      ) {
+        icons.painter("expui/general/search.svg")?.let { Image(it, null, Modifier.size(16.dp)) }
+        BasicText(list.filter, style = text, maxLines = 1)
       }
+    list.rows.forEachIndexed { index, row ->
+      if (!list.shows(row)) return@forEachIndexed
+      // A filtered list has no separators.
+      row.header
+        ?.takeIf { list.filter.isEmpty() }
+        ?.let { header ->
+          Box(
+            Modifier.fillMaxWidth()
+              .padding(vertical = 4.dp)
+              .height(1.dp)
+              .background(Islands.popupBorder),
+          )
+          if (header.isNotEmpty())
+            BasicText(
+              header,
+              Modifier.padding(horizontal = Look.rowInset),
+              style = text.copy(color = Islands.textSecondary),
+            )
+        }
       // A project's row (name over path) is as tall as its two lines, with the 6 dp above and
       // below that the backend's BeStyleControl margin asks for.
       val description = row.description

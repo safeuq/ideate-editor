@@ -78,8 +78,41 @@ class PopupList(
    * tap chooses the row too.
    */
   internal val listPopup: Boolean = wizard != null,
+  /**
+   * The step's `isSearchEnabled`: typing filters the rows, as JetBrains Client's `PopupLineStep`
+   * answers `isSpeedSearchEnabled` for IntelliJ's `WizardPopup`. Nothing goes to the backend.
+   */
+  val searchEnabled: Boolean = false,
 ) : PopupItem {
   var selected by mutableStateOf(-1)
+
+  /** What was typed so far, e.g. `bet`; empty shows every row. */
+  var filter by mutableStateOf("")
+    private set
+
+  /**
+   * Whether [row] passes [filter], against its text and second line (`PopupLineStep.getTextFor`
+   * joins every text of the line), e.g. `bet` shows `beta` and a row whose path has `/beta-old`.
+   */
+  // ponytail: a substring check; IntelliJ's SpeedSearch uses its name matcher (camel humps, `*`).
+  fun shows(row: PopupRow): Boolean =
+    filter.isEmpty() ||
+      row.text.contains(filter, ignoreCase = true) ||
+      row.description?.contains(filter, ignoreCase = true) == true
+
+  /** [text] is the new [filter]; the first row it shows becomes the selected one. */
+  fun type(text: String) {
+    filter = text
+    selected = rows.indexOfFirst(::shows)
+  }
+
+  /** Up ([step] -1) or Down (1) over the rows the filter shows, round at both ends. */
+  fun move(step: Int) {
+    val visible = rows.indices.filter { shows(rows[it]) }
+    if (visible.isEmpty()) return
+    val at = visible.indexOf(selected)
+    selected = if (at < 0) visible.first() else visible[(at + step).mod(visible.size)]
+  }
 }
 
 /** One row of a [PopupList]: its icon (a path in the client's icon jar) and text. */
@@ -350,6 +383,7 @@ internal class BackendPopups(
         lines.map(::row),
         wizard,
         listPopup = true,
+        searchEnabled = step.isSearchEnabled.value,
       )
     val popup =
       BackendPopup(

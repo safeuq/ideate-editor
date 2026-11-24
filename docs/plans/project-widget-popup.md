@@ -662,3 +662,55 @@ popup 8 cancelled`). A click outside already worked (`Backend popup 5 cancelled`
 | a row under Recent Projects (`beta`, backend started with only `alpha`) | the backend opens it: `solutions` gets a new entry 320 ms after the choice, `switchTo` asks for it, the new session is accepted 540 ms later and shows `beta` |
 
 Still not tried: IntelliJ IDEA Home. Still not built: typing to filter the rows.
+
+## Addendum (2026-11-24, 10:18 IST): typing filters the rows, a switch starts from an empty screen, IntelliJ IDEA Home tried
+
+### Typing filters a list popup's rows
+
+Nothing goes to the backend: in JetBrains Client the filter is IntelliJ's own speed search over the
+rows it already has. `PopupLineStep` (`lib/intellij.rd.ui.jar`) answers `isSpeedSearchEnabled`
+with `StepPopupContent.isSearchEnabled.value` (true for the project widget's popup) and
+`getTextFor` with every text of the line joined, so a project row is found by its name or its path.
+
+| IntelliJ (`WizardPopup`, `ListPopupImpl`, `AbstractPopup`) | Ideate |
+|---|---|
+| a typed character goes to `mySpeedSearch` | `listKey` in `ui/popup/BackendPopupView.kt` calls `PopupList.type(filter + character)` |
+| `mySpeedSearchPatternField` is set as the popup's header while text is held | a 24 dp line above the rows: `expui/general/search.svg` and the text |
+| `ListPopupModel` keeps the rows `shouldBeShowing` accepts | `PopupList.shows(row)`: the text is in `row.text` or `row.description`, any case |
+| `onSpeedSearchPatternChanged` → `selectFirstSelectableItem` | `type` sets `selected` to the first shown row |
+| Escape resets a held filter; the next Escape closes | the same; Backspace takes one character off |
+| Up, Down, Enter act on the list in the client | `PopupList.move(-1 / 1)` over the shown rows, Enter chooses `rows[selected]` (before this, Up and Down did nothing in a list popup and Enter chose nothing) |
+
+Two known differences. `shows` is a substring check, where IntelliJ's `SpeedSearch` uses its name
+matcher (`bt` finds `beta` there, not here). Only hardware keys type: an on-screen keyboard needs
+a text field, which this popup does not have yet.
+
+Checked live (backend on 5997 with `alpha` and `beta`): `bet` leaves the `beta` row, selected;
+Escape brings every row back and the popup stays; `bet` + Enter switches to `beta`
+(`Backend list popup 1: chose 'beta'`). Test: `BackendPopupRowTest
+.typingKeepsTheRowsThatHaveTheTextAndSelectsTheFirst`.
+
+### After a switch back, the old project's tree stayed
+
+Seen live: `alpha` → `beta` → `alpha` showed `alpha` in the toolbar over `beta`'s Project tree,
+for good. A reconnect shows each panel of the old session until the new one has sent it
+(`session/HandOver.kt`); the tree counts as sent once the new tree shows what the old one showed
+(`new.tree.shows(old.tree)`). That is right for the same project after a lost connection, and never
+true for another project. Now `ConnectController.reconnectOnce` carries nothing over while
+`switching` is set: no `handOverFrom`, no expanded or selected paths of the other project. Checked:
+`beta`, `alpha`, `beta`, `alpha` in a row, each with its own name, tree and run configuration.
+
+### IntelliJ IDEA Home
+
+The row opens the welcome project, `<projects folder>/IdeaHome`. The projects folder is
+`GeneralLocalSettings.defaultProjectDirectory`, else the system property `idea.project.path`, else
+`~/IdeaProjects` (`WelcomeScreenProjectProvider.getProjectsBasePath`). A test backend must be
+started with `-Didea.project.path=<scratch folder>`, or it writes into `~/IdeaProjects/IdeaHome`,
+which the user's own IntelliJ uses.
+
+Checked with that option: the choice adds `…/projects/IdeaHome` to `solutions` 450 ms later,
+`switchTo` asks for it, and the new session is accepted 540 ms after that. Ideate then shows
+`IdeaHome` with the welcome project's "Projects and Files" pane (Open, New, Clone Repository, the
+two projects). `~/IdeaProjects/IdeaHome` kept its modification time.
+
+Nothing of this plan is open now.

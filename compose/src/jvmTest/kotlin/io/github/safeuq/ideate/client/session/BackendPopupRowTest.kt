@@ -82,4 +82,22 @@ class BackendPopupRowTest {
     assertEquals("beta", row.avatar)
     assertEquals(null, row.deferredIcon)
   }
+
+  // Typing in the project widget's popup: the rows that have the text in their name or path stay.
+  @Test
+  fun typingKeepsTheRowsThatHaveTheTextAndSelectsTheFirst() {
+    fun row(name: String, path: String?) =
+      PopupRow(null, name, BeTreeGridLine(listOf()), description = path)
+    val list =
+      PopupList(
+        listOf(row("Open…", null), row("alpha", "/work/beta-old"), row("beta", "/work/beta")),
+      )
+    list.type("BET")
+    assertEquals(listOf("alpha", "beta"), list.rows.filter(list::shows).map { it.text })
+    assertEquals(1, list.selected)
+    list.move(1)
+    assertEquals(2, list.selected)
+    list.move(1)
+    assertEquals(1, list.selected)
+  }
 }
