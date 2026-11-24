@@ -2,6 +2,8 @@ package io.github.safeuq.ideate.client
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -179,6 +181,14 @@ private fun IdeateWindow(
       onDispose { AgentMcp.unregister(window) }
     }
     SyncThemeWithOs()
+    // While the window is resized, AWT fills the newly uncovered strip with the window's own
+    // background before Compose has drawn the new size; AWT's default is white.
+    val windowBackground = Islands.windowBackground
+    SideEffect {
+      val awtBackground = java.awt.Color(windowBackground.toArgb())
+      window.background = awtBackground
+      window.contentPane.background = awtBackground
+    }
     IdeateLocals(
       window,
       clientLib,

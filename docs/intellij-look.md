@@ -1062,3 +1062,19 @@ when the press is in any window it doesn't own. Focusable popups still close on 
 | elsewhere in the editor or another pane | stays | closes, and the press also reaches what was clicked, as in IntelliJ |
 
 `PopupWindowTest.pressOutsideClosesAPopupWithoutFocus` checks both with posted events.
+
+## Addendum (2026-11-24, 19:15 IST): the window's own background follows the theme
+
+Dragging a desktop window's edge showed a white strip along the edge being dragged. While a window
+grows, AWT fills the newly uncovered area with the window's own background before Compose has drawn
+the new size, and AWT's default background is white.
+
+`IdeateWindow` in `desktop/.../Main.kt` now sets `window.background` and
+`window.contentPane.background` to `Islands.windowBackground` (theme key `MainWindow.background`,
+the colour behind the islands). It is set in a `SideEffect` that reads the colour during
+composition, so it is applied again when the theme changes (`SyncThemeWithOs`), for both the
+connections window and the editor window.
+
+Checked: the app started from Gradle with the change, and its window was resized to 1100 by 800 and
+back to 700 by 500 through System Events with no exception in the log. The strip's colour during a
+live drag was not looked at, because a screen capture cannot catch it.
