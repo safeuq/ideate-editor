@@ -262,3 +262,81 @@ the backend was killed did not become recent; closing it from the client did.
 
 New Project…, Open… and Clone Repository… were not chosen (each opens a dialog), and neither was
 IntelliJ IDEA Home.
+
+## Addendum (2026-11-24, third run): the three top rows, and a project row's exact layout
+
+Same setup (own backend on 5997, traced JetBrains Client, 07:22 to 07:25 IST), with window
+screenshots through cmux-cua. All **seen**.
+
+### New Project…, Open…, Clone Repository…
+
+Each is chosen like any row (`activePopups[n].content.step.items[i].signal`), and each answer is
+a Lux dialog, which Ideate already shows (`session/LuxDialogs.kt`):
+
+| Row | Arrives as | Title and size in the client |
+|---|---|---|
+| New Project… (`items[0]`) | `LuxModel.components[3] = LxDialog(modality = true, resizable = true, layoutSource = Backend)`, 316 ms after the choice | "New Project", 800 × 666 |
+| Open… | `LuxModel.components[6] = LxDialog` | "Open File or Project", 424 × 483 |
+| Clone Repository… | `LuxModel.components[9] = LxDialog` | "Clone Repository", 800 × 679 |
+
+So the top block needs nothing new once the popup's rows can be chosen. The dialogs were cancelled
+with Escape; nothing was created, opened or cloned.
+
+IntelliJ IDEA Home was left alone on purpose: it opens `~/IdeaProjects/IdeaHome`, the folder the
+user's own IntelliJ uses, and a test backend would write into its `.idea`
+(`local-test-backend.md`, "Without a project folder").
+
+### A project row as the backend sends it
+
+The row "beta" under the title "Open Projects" (`BeListPopupLine`, `hasSubstep = false`). It is
+`ProjectWidgetRenderer`'s UI DSL panel, translated control by control:
+
+```
+columnElements = [
+  BeStyleControl                                   // opacity 0.0
+    BeGrid (Vertical)
+      BeHeader(text = "Open Projects", headerStyle = SEPARATOR)     // only on a section's first row
+      BeGrid (Horizontal)
+        BeStyleControl(margin = left 16, top 6, right 16, bottom 6) // OnePx units
+          BeGridLayoutPanel
+            cell gridIndex 0, x 0, y 0, Top,    gaps top 2, right 8, bottom 2:
+              BeRichText(text = "", icon = DeferredIconModel(id = 63, baseIcon = EmptyIconModel(20 × 20)))
+            cell gridIndex 2, x 0, y 0, Center, gaps top 2, bottom 2:
+              BeRichText("beta", NamedColor("List.foreground"))
+            cell gridIndex 3, x 0, y 0, Center, gaps top 2, bottom 2:
+              BeRichText("…/widget-backend/beta", NamedColor("Label.infoForeground"))
+            grids: -1 the root; 0 at (1, 0) the text column; 1 at (0, 0) and (0, 1) its two lines
+]
+```
+
+- The numbers match `ProjectWidgetRenderer`: `JBUI.Borders.empty(6, 0)`, `rowGaps` 2, the icon's
+  right gap 8, the icon at the top.
+- No font size is sent for the path (`BeTextSettings.fontSize` and `fontStyle` are not set), though
+  IntelliJ draws it with `JBFont.smallOrNewUiMedium()`. Ideate has to apply the small font itself to
+  the lines under the name.
+- The icon comes in two parts. The row carries only an empty 20 × 20 placeholder; right after the
+  popup is loaded the backend fires `ShellModel.deferredIconReady(id = 63, icon =
+  AvatarIconModel(targetSize = 20, arcRatio = 0.4, FullProjectAvatarIconPresentationModel(name =
+  "beta", path = "…/beta")))`.
+
+### What Ideate's reader does with this today
+
+- `BackendPopups`' row reader (`BackendPopups.kt`, the walk at the end of the file) follows
+  `BeGrid`, `BeRichText` and the wrapper controls. `BeGridLayoutPanel` and `BeHeader` appear nowhere
+  in the sources, so a project row would come out without its texts and without its title.
+- `ClientSession` takes a `DeferredIconModel`'s `baseIcon` and never listens to
+  `deferredIconReady`, so the avatar would stay empty. `AvatarIconModel` is what
+  `projectAvatarBrush(name)` and `initials(name)` already draw for the toolbar's widget.
+
+### Added to the steps
+
+- Step 2 grows: read `BeGridLayoutPanel` (cells by grid and position: one icon, a first line, the
+  lines under it) and `BeHeader` (a section title); listen to `ShellModel.deferredIconReady` and
+  draw an `AvatarIconModel`.
+- The top rows need no step of their own.
+
+### Still unknown
+
+- Whether `getComponent` answers without the toolbar's `expandGroup` call before it. This can only
+  be tried from Ideate's own client, so it belongs to step 1.
+- IntelliJ IDEA Home (not chosen, see above).
