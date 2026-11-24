@@ -531,7 +531,14 @@ internal class BeRow(
             if (icon == null) icon = each.icon.valueOrNull?.let(iconPath)
             special(each.icon.valueOrNull)
           }
-          is BeLabel -> fragments += TextFragment(each.text.value, 0, null)
+          // JetBrains Client's PopupLineStep.getIconFor takes the first BeAbstractText (label or
+          // rich text) with an icon, e.g. More Actions' "Debug 'Forever'" label carries the debug
+          // icon.
+          is BeLabel -> {
+            if (icon == null) icon = each.icon.value?.let(iconPath)
+            special(each.icon.value)
+            fragments += TextFragment(each.text.value, 0, null)
+          }
           is BeRichText -> {
             // Gradle's rows carry the icon on the text, e.g. `icons/expui/gradle.svg` on
             // "gradle-smoke" and `expui/build/taskGroup.svg` on "Tasks".

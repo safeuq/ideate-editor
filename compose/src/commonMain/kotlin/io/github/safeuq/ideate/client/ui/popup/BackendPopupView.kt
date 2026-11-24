@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -202,6 +203,9 @@ private object Look {
 private fun PopupListView(list: PopupList, session: ClientSession) {
   val text = LocalClientFonts.current.label()
   val icons = LocalIcons.current
+  // As PopupFactoryImpl's ActionItem: once any row has an icon, a row without one gets an empty
+  // icon of the same size, e.g. More Actions' Edit… lines up with "Run 'Forever'" above it.
+  val iconSlot = list.rows.any { it.iconPath != null || it.avatar != null }
   Column {
     list.rows.forEachIndexed { index, row ->
       row.header?.let { header ->
@@ -244,7 +248,11 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
         // The avatar's cell: 20 dp (AvatarIconModel.targetSize), at the top with a 2 dp gap.
         if (avatar != null)
           ProjectAvatar(avatar, 20.dp, Modifier.align(Alignment.Top).padding(top = 2.dp))
-        else row.iconPath?.let(icons::painter)?.let { Image(it, null, Modifier.size(16.dp)) }
+        else {
+          val painter = row.iconPath?.let(icons::painter)
+          if (painter != null) Image(painter, null, Modifier.size(16.dp))
+          else if (iconSlot) Spacer(Modifier.size(16.dp))
+        }
         if (description == null)
           BasicText(row.text, style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         else

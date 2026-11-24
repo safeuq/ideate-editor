@@ -255,3 +255,21 @@ backend selects on Up and Down. A list popup (`PopupList.listPopup`) now follows
 | Width | at most 300 dp; "Profile 'xtool [spotlessApply]' with 'IntelliJ Profiler'" wrapped and was cut by the 24 dp row | the longest row (`IntrinsicSize.Max`, as `Menu`), at least the popup's `minimumSize` (`BeControlSizeCustom`, 310 for More Actions, `MINIMAL_POPUP_WIDTH`) |
 | Row text | could wrap | one line, ellipsis when the window is narrower |
 | Highlight | `isSelected` from the backend only | the hovered row becomes `selected`, so hover and Up/Down share one highlight |
+
+## Addendum (2026-11-24): list popup rows take their icon from a label too
+
+JetBrains Client's `PopupLineStep.getIconFor` returns the icon of the first `BeAbstractText`
+descendant of the line that has one, and `BeLabel` is a `BeAbstractText`. A More Actions row
+(`BeActionPopupLine`) carries its icon on an empty label, traced by intellij-fable for "Run 'Alpha'":
+
+```
+columnElements = [BeStyleControl → BeGrid → BeGrid → BeGrid[ BeStyleControl → BeLabel(text = "", icon = ImageIconModel("expui/run/run.svg")), BeSpacer ], BeGrid[ BeRichText("Run 'Alpha'") … ]]
+```
+
+`BeRow.of` read icons only from `BeIcon` and `BeRichText`, so these rows had none. It now reads a
+label's icon too.
+
+A row without an icon (Edit…, Delete) gets an empty 16 dp slot once any row of the list has an
+icon, as `PopupFactoryImpl.ActionItem` gives such an action `EmptyIcon.create(maxIconWidth,
+maxIconHeight)`. Its text then lines up with "Run 'Forever'" above it. The "Configuration" header
+stays at the left inset.
