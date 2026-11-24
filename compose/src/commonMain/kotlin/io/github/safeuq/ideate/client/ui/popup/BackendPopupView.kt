@@ -5,15 +5,18 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -82,6 +85,13 @@ fun BackendPopups(popups: List<BackendPopup>, session: ClientSession) {
   // A popup the backend placed next to something it paints (New ▾ under its button on the welcome
   // panel) goes there, kept inside the window; the others at the top, as IntelliJ shows New ▸ File.
   val anchor = popups.first().anchor
+  // A list popup (More Actions, the project widget's) is as wide as its longest row, as
+  // ListPopupImpl is, and at least the backend's minimumSize (More Actions: 310); the others keep
+  // New ▸ File's 300.
+  val width =
+    if (popups.all { popup -> popup.items.any { it is PopupList && it.listPopup } })
+      Modifier.width(IntrinsicSize.Max).widthIn(min = popups.maxOf { it.minimumWidth }.dp)
+    else Modifier.widthIn(max = Look.width)
   Box(
     Modifier.fillMaxSize().clickable(remember { MutableInteractionSource() }, indication = null) {
       if (top.cancelOnClickOutside) session.popupCancel(top)
@@ -89,9 +99,8 @@ fun BackendPopups(popups: List<BackendPopup>, session: ClientSession) {
     contentAlignment = Alignment.TopCenter,
   ) {
     Column(
-      if (anchor == null)
-        Modifier.padding(top = 48.dp, start = 16.dp, end = 16.dp).widthIn(max = Look.width)
-      else Modifier.anchoredAt(anchor.x.dp, anchor.y.dp).widthIn(max = Look.width),
+      if (anchor == null) Modifier.padding(top = 48.dp, start = 16.dp, end = 16.dp).then(width)
+      else Modifier.anchoredAt(anchor.x.dp, anchor.y.dp).then(width),
       verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
       popups.forEach { popup -> key(popup.id) { BackendPopupView(popup, session) } }
@@ -212,6 +221,11 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
       // A project's row (name over path) is as tall as its two lines, with the 6 dp above and
       // below that the backend's BeStyleControl margin asks for.
       val description = row.description
+      // In a list popup the row under the pointer is the selected one, as ListPopupImpl moves its
+      // selection with the mouse: one highlight for hover, Up and Down.
+      val interaction = remember { MutableInteractionSource() }
+      val hovered by interaction.collectIsHoveredAsState()
+      if (list.listPopup) LaunchedEffect(hovered) { if (hovered) list.selected = index }
       Row(
         Modifier.fillMaxWidth()
           .then(if (description == null) Modifier.height(Look.rowHeight) else Modifier)
@@ -219,7 +233,7 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
             if (index == list.selected) Islands.selectionBackground else Color.Transparent,
             RoundedCornerShape(Look.selectionRadius),
           )
-          .clickable(remember { MutableInteractionSource() }, indication = null) {
+          .clickable(interaction, indication = null) {
             session.popupSelect(list, row)
           }
           .padding(horizontal = Look.rowInset, vertical = if (description == null) 0.dp else 6.dp),
@@ -231,7 +245,8 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
         if (avatar != null)
           ProjectAvatar(avatar, 20.dp, Modifier.align(Alignment.Top).padding(top = 2.dp))
         else row.iconPath?.let(icons::painter)?.let { Image(it, null, Modifier.size(16.dp)) }
-        if (description == null) BasicText(row.text, style = text)
+        if (description == null)
+          BasicText(row.text, style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         else
           Column {
             BasicText(row.text, style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)

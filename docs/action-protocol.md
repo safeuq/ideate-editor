@@ -242,3 +242,16 @@ keep their shape, and only their known stroke colours change:
 Before this, Ideate tinted `run.svg` and `debug.svg` whole, so the pale inner fill (`#F2FCF3`) took
 the tint too and Run and Debug showed as solid green shapes. `IconButton` now loads the
 `_stroke.svg` file when it has a tint and the jar has one.
+
+## Addendum (2026-11-24): list popups fit their rows and highlight the row under the pointer
+
+More Actions (`ActionPopupContent`) and the project widget's popup go through `BackendPopups.showList`
+and `PopupListView`. That view was capped at New ▸ File's 300 dp and painted only the row the
+backend selects on Up and Down. A list popup (`PopupList.listPopup`) now follows IntelliJ's
+`ListPopupImpl`:
+
+| | Before | Now |
+|---|---|---|
+| Width | at most 300 dp; "Profile 'xtool [spotlessApply]' with 'IntelliJ Profiler'" wrapped and was cut by the 24 dp row | the longest row (`IntrinsicSize.Max`, as `Menu`), at least the popup's `minimumSize` (`BeControlSizeCustom`, 310 for More Actions, `MINIMAL_POPUP_WIDTH`) |
+| Row text | could wrap | one line, ellipsis when the window is narrower |
+| Highlight | `isSelected` from the backend only | the hovered row becomes `selected`, so hover and Up/Down share one highlight |

@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.toArgb
 import com.jetbrains.ide.model.uiautomation.BeBehaviorControl
 import com.jetbrains.ide.model.uiautomation.BeControl
 import com.jetbrains.ide.model.uiautomation.BeControlContainer
+import com.jetbrains.ide.model.uiautomation.BeControlSizeCustom
 import com.jetbrains.ide.model.uiautomation.BeEmptyData
 import com.jetbrains.ide.model.uiautomation.BeGrid
 import com.jetbrains.ide.model.uiautomation.BeGridLayoutPanel
@@ -124,6 +125,12 @@ class BackendPopup(
   internal val shortcuts: Map<String, List<BeShortcutListener>>,
 ) {
   var title by mutableStateOf(title)
+
+  /**
+   * The backend's `minimumSize` width in dp, e.g. 310 for the run widget's More Actions; else 0.
+   */
+  val minimumWidth: Int
+    get() = (model.minimumSize.value as? BeControlSizeCustom)?.width ?: 0
 
   /**
    * Where the popup's top-left corner goes, in window dp, when the backend placed it next to a Lux
