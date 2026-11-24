@@ -311,3 +311,36 @@ it gets no bar either.
 `"Island": { "arc": 20 }` (16 in compact mode; High Contrast 0), and the value is a diameter. So
 the corner radius is 10 dp (8 compact), the same as the islands. `ProjectTab` now uses
 `Islands.islandRadius` in place of the fixed `RoundedCornerShape(5.dp)`.
+
+## Addendum (2026-11-24, 12:20 IST): on a phone, a project switch slides
+
+On phone layouts (`ScreenLayout.PORTRAIT` and `ScreenLayout.COMPACT`) the project switched to
+slides in and the other one slides out, title bar included, as the island pages do when swiped but
+edge to edge, with no gap between the two screens. It applies to every switch there: a slide on
+the title bar and a project chosen in the project popup.
+
+- `ConnectController.switchProject` sets `switchedForward`: true when the new project comes later
+  in `openProjects` than the one shown (it slides in from the right), false otherwise (from the
+  left). A slide to the left on the title bar shows the next project, so the screen follows the
+  finger.
+- `EditorApp` (same file): `BoxWithConstraints` gives the layout with `screenLayout`. In
+  `ScreenLayout.WIDE` it calls `ClientScreen` as before (IntelliJ's tabs switch at once). Otherwise
+  `ClientScreen` sits in `AnimatedContent(session)` with `slideInHorizontally` and
+  `slideOutHorizontally`, both `spring(stiffness = Spring.StiffnessMedium)`: the spring
+  `SwipePager` moves its pages with (`Animatable.animateTo`'s default).
+- The session sliding out shows its own last state (`shownSession.state`); both screens share
+  the tool window state.
+
+Checked live at 420 × 800 dp with alpha and beta, frames taken about 0.1 s into each switch: both
+directions show the two screens side by side with no gap.
+
+Known limits:
+
+- The first switch to a project slides in its empty screen ("Connecting…"), because its session is
+  made at that moment; from the second switch on its real screen slides in.
+- The screen does not follow the finger during the slide on the title bar; it moves when the
+  finger lifts.
+- `ClientScreen` is now composed once per session on a phone, so what it remembers (the page
+  shown, the notice line) starts again on a switch: the project switched to opens on its editor.
+  A tablet turned between upright and sideways changes between the two branches, with the same
+  effect.

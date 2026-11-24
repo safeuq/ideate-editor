@@ -1,7 +1,15 @@
 package io.github.safeuq.ideate.client.connect
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.connection.ClientCertificate
 import io.github.safeuq.ideate.client.connection.JoinLink
@@ -27,9 +36,11 @@ import io.github.safeuq.ideate.client.session.handOver
 import io.github.safeuq.ideate.client.ui.ClientScreen
 import io.github.safeuq.ideate.client.ui.LocalBackHandler
 import io.github.safeuq.ideate.client.ui.LocalTitleBarArea
+import io.github.safeuq.ideate.client.ui.ScreenLayout
 import io.github.safeuq.ideate.client.ui.TitleBarSpacer
 import io.github.safeuq.ideate.client.ui.ToolWindowState
 import io.github.safeuq.ideate.client.ui.dialog.MessageKind
+import io.github.safeuq.ideate.client.ui.screenLayout
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.toolWindowButtons
@@ -583,8 +594,17 @@ class ConnectController(
     next.identity = attempt?.identity ?: current.identity
     attempt = next
     handOverFrom = null
+    val order = (shown ?: first).state.value.openProjects.map { it.hostPath }
+    switchedForward = order.indexOf(hostPath) >= order.indexOf(shown?.state?.value?.shownProject)
     session = target
   }
+
+  /**
+   * Whether the last project switch went to a project later in the open projects' order (its screen
+   * slides in from the right on a phone) or to an earlier one (from the left).
+   */
+  internal var switchedForward = true
+    private set
 
   /**
    * Which project a connection's editors belong to. E.g. `link:192.168.0.105:5990`,
@@ -1170,7 +1190,8 @@ fun EditorApp(
   fonts: ClientFonts,
   modifier: Modifier = Modifier,
 ) {
-  Box(Modifier.fillMaxSize().background(Islands.windowBackground)) {
+  BoxWithConstraints(Modifier.fillMaxSize().background(Islands.windowBackground)) {
+    val phone = screenLayout(maxWidth.value, maxHeight.value) != ScreenLayout.WIDE
     // collectAsState alone keeps the old session's last value for a frame after [session] changes,
     // which looked like "the new session has sent everything"; so read the value itself. Reading
     // the collected value is what makes this recompose on a change.
@@ -1223,7 +1244,30 @@ fun EditorApp(
       }
     }
     controller.windows = windows
-    ClientScreen(state, session, insets = modifier, windows = windows)
+    if (!phone) ClientScreen(state, session, insets = modifier, windows = windows)
+    else
+    // A phone has no project tabs: the project switched to slides in and the other slides out,
+    // as the pages of the islands do (SwipePager's spring), but edge to edge, with no gap.
+    // ponytail: a tablet turned between upright and sideways changes branch here, which resets
+    // what ClientScreen remembers (its page, the notice); movableContentOf if that matters.
+    AnimatedContent(
+        session,
+        transitionSpec = {
+          val forward = controller.switchedForward
+          val slide =
+            spring(
+              stiffness = Spring.StiffnessMedium,
+              visibilityThreshold = IntOffset.VisibilityThreshold,
+            )
+          slideInHorizontally(slide) { width -> if (forward) width else -width } togetherWith
+            slideOutHorizontally(slide) { width -> if (forward) -width else width }
+        },
+      ) { shownSession ->
+        // The session sliding out keeps showing its own last state.
+        val shownState =
+          if (shownSession === session) state else shownSession.state.collectAsState().value
+        ClientScreen(shownState, shownSession, insets = modifier, windows = windows)
+      }
     controller.reconnecting?.let { attemptNumber ->
       val project = controller.switching
       if (project != null)
