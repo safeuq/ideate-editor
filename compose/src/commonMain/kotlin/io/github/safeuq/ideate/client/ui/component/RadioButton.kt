@@ -55,7 +55,7 @@ fun RadioButtonRow(
 
 /**
  * The icon for a radio button or check box: `radio.svg`, `radioSelected.svg`,
- * `radioSelectedFocused.svg`, `radioDisabled.svg`, … as `IconJar.EXTRA_ICONS` holds them.
+ * `radioSelectedFocused.svg`, `radioDisabled.svg`, … as `IconJar.extra` serves them.
  */
 internal fun toggleIcon(kind: String, selected: Boolean, enabled: Boolean, focused: Boolean) =
   buildString {

@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.Density
 import io.github.safeuq.ideate.client.ui.IconJar
 import io.github.safeuq.ideate.client.ui.IconProvider
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
+import io.github.safeuq.ideate.client.ui.theme.LafManager
 import io.github.safeuq.ideate.client.ui.theme.UiDensity
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -122,12 +123,15 @@ object DesktopResources {
       byPath
     }
 
-    override fun painter(path: String): Painter? =
-      cache.computeIfAbsent(path) {
-        (jar.svg(it) ?: otherJars[it.removePrefix("/")]?.svg(it) ?: IconJar.EXTRA_ICONS[it])?.let {
-          svg ->
-          loadSvgPainter(svg.byteInputStream(), density)
-        }
+    /** Reads [LafManager.currentTheme], so a composable asking for an icon redraws on a switch. */
+    override fun painter(path: String): Painter? {
+      val theme = LafManager.currentTheme
+      return cache.computeIfAbsent("${theme.id}:$path") {
+        (jar.svg(path, theme)
+            ?: otherJars[path.removePrefix("/")]?.svg(path, theme)
+            ?: IconJar.extra(path, theme))
+          ?.let { svg -> loadSvgPainter(svg.byteInputStream(), density) }
       }
+    }
   }
 }

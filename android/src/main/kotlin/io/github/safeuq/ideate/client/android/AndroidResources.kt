@@ -15,6 +15,7 @@ import com.caverock.androidsvg.SVG
 import io.github.safeuq.ideate.client.ui.IconJar
 import io.github.safeuq.ideate.client.ui.IconProvider
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
+import io.github.safeuq.ideate.client.ui.theme.LafManager
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil
@@ -58,8 +59,13 @@ object AndroidResources {
   class SvgIcons(private val jar: IconJar, private val density: Float) : IconProvider {
     private val cache = ConcurrentHashMap<String, Painter?>()
 
-    override fun painter(path: String): Painter? =
-      cache.computeIfAbsent(path) { (jar.svg(it) ?: IconJar.EXTRA_ICONS[it])?.let(::render) }
+    /** Reads [LafManager.currentTheme], so a composable asking for an icon redraws on a switch. */
+    override fun painter(path: String): Painter? {
+      val theme = LafManager.currentTheme
+      return cache.computeIfAbsent("${theme.id}:$path") {
+        (jar.svg(path, theme) ?: IconJar.extra(path, theme))?.let(::render)
+      }
+    }
 
     private fun render(text: String): Painter {
       val svg = SVG.getFromString(text)
