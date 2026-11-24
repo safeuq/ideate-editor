@@ -98,3 +98,21 @@ opening the DMG on another Mac.
    `gh release create v1.0.0 desktop/build/dmg/Ideate-1.0.0.dmg`.
 6. **Backend version.** The bundled protocol jars are build 263.7307.200 and only talk to a backend
    of the same build, as in a Gradle run.
+
+## Addendum (24 Nov 2026, 19:08 IST): the version is 0.1.0
+
+The default version is now `0.1.0`, so the file is `desktop/build/dmg/Ideate-0.1.0.dmg`; where the
+text above says `1.0.0` or `Ideate-1.0.0.dmg`, read `0.1.0`. Open point 4 ("Version") is closed.
+
+`jpackage` 25 still refuses it: `--app-version 0.1.0` fails with "The first number in an app-version
+cannot be zero or negative". macOS itself accepts such a version. So the build gives `jpackage` the
+fixed version `1.0.0` (`jpackageVersion` in `desktop/build.gradle.kts`) and then writes the real one:
+
+| Where | Value with the default | Set by |
+|---|---|---|
+| `Info.plist` `CFBundleShortVersionString` and `CFBundleVersion` | `0.1.0` | `dmgAppImage`, with `PlistBuddy`, before signing |
+| DMG file name | `Ideate-0.1.0.dmg` | `packageDmg` renames `jpackage`'s `Ideate-1.0.0.dmg` |
+| `-Djpackage.app-version` in `Contents/app/Ideate.cfg` | `1.0.0` | `jpackage`; left as it is, nothing reads it |
+
+Checked on the rebuilt DMG: both `Info.plist` keys print `0.1.0`, `codesign --verify --deep
+--strict` passes, and the launcher still shows `sdk 26.0`.

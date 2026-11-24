@@ -173,8 +173,12 @@ tasks {
 // The macOS disk image (docs/release-dmg.md): `./gradlew :desktop:packageDmg` writes
 // build/dmg/Ideate-<version>.dmg. Compose's own packageDmg cannot be used: it builds the runtime
 // with jlink, and the JetBrains Runtime the app needs has no jlink and no jmods.
-// jpackage refuses a version that starts with 0 on macOS, so the first release is 1.0.0.
-val dmgVersion = providers.gradleProperty("ideateVersion").orElse("1.0.0")
+val dmgVersion = providers.gradleProperty("ideateVersion").orElse("0.1.0")
+
+// jpackage refuses a version that starts with 0 on macOS ("The first number in an app-version
+// cannot be zero or negative"), though macOS itself accepts one. So jpackage is given this version,
+// and dmgAppImage and packageDmg put the real one into Info.plist and the DMG's file name.
+val jpackageVersion = "1.0.0"
 val dmgFolder = layout.buildDirectory.dir("dmg")
 val clientRoot = file(jetbrainsClientLib).parentFile
 
@@ -277,7 +281,7 @@ val dmgAppImage by tasks.registering {
       "--name",
       "Ideate",
       "--app-version",
-      dmgVersion.get(),
+      jpackageVersion,
       "--mac-package-identifier",
       "io.github.safeuq.ideate",
       "--icon",
@@ -313,6 +317,14 @@ val dmgAppImage by tasks.registering {
       launcher,
       launcher,
     )
+    listOf("CFBundleShortVersionString", "CFBundleVersion").forEach { key ->
+      runCommand(
+        "/usr/libexec/PlistBuddy",
+        "-c",
+        "Set :$key ${dmgVersion.get()}",
+        app.resolve("Contents/Info.plist").path,
+      )
+    }
     runCommand("codesign", "--force", "--deep", "--sign", "-", app.path)
   }
 }
@@ -332,11 +344,13 @@ val packageDmg by tasks.registering {
       "--name",
       "Ideate",
       "--app-version",
-      dmgVersion.get(),
+      jpackageVersion,
       "--app-image",
       dmgFolder.get().dir("image/Ideate.app").asFile.path,
       "--dest",
       dmgFolder.get().asFile.path,
     )
+    val written = dmgFolder.get().file("Ideate-$jpackageVersion.dmg").asFile
+    check(written.renameTo(dmg.get().asFile)) { "Could not rename $written to ${dmg.get()}" }
   }
 }
