@@ -137,30 +137,15 @@ fun MainToolbar(
     val name = projectName ?: "…"
     // The project widget keeps its width (up to 200 dp); the run configurations give way first.
     ToolbarDropdown(control, Modifier.widthIn(max = 200.dp).padding(end = 8.dp)) {
-      // The project widget's avatar as AvatarUtils.generateColoredAvatar draws it: sized like the
-      // toolbar icons (RecentProject.Avatar.iconSize falls back to MainToolbar.Button.iconSize),
-      // corners of arcRatio 0.4 (an arc diameter, so a radius of 0.2 × size), the initials in
-      // JetBrains Mono SemiBold at 13/20 of the size (16 → 10, 20 → 13).
-      val avatarSize = Islands.toolbarIcon
-      Box(
-        Modifier.size(avatarSize)
-          .onGloballyPositioned { coordinates ->
-            onProjectIconCenter(coordinates.positionInWindow().x + coordinates.size.width / 2f)
-          }
-          .background(projectAvatarBrush(name), RoundedCornerShape(avatarSize * 0.2f)),
-        contentAlignment = Alignment.Center,
-      ) {
-        BasicText(
-          initials(name),
-          style =
-            TextStyle(
-              color = Color.White,
-              fontFamily = fonts.editor,
-              fontWeight = FontWeight.SemiBold,
-              fontSize = (avatarSize.value.toInt() * 13 / 20).sp,
-            ),
-        )
-      }
+      // Sized like the toolbar icons (RecentProject.Avatar.iconSize falls back to
+      // MainToolbar.Button.iconSize).
+      ProjectAvatar(
+        name,
+        Islands.toolbarIcon,
+        Modifier.onGloballyPositioned { coordinates ->
+          onProjectIconCenter(coordinates.positionInWindow().x + coordinates.size.width / 2f)
+        },
+      )
       BasicText(
         name,
         style = text.copy(fontWeight = FontWeight.SemiBold),
@@ -300,6 +285,30 @@ fun MainToolbar(
  * `chevronLeft.svg`.
  */
 class ToolbarBack(val pointsRight: Boolean, val onClick: () -> Unit)
+
+/**
+ * A project's avatar as `AvatarUtils.generateColoredAvatar` draws it: corners of arcRatio 0.4 (an
+ * arc diameter, so a radius of 0.2 × size), the initials in JetBrains Mono SemiBold at 13/20 of the
+ * size (16 → 10, 20 → 13). The main toolbar's is 16 dp, a row of the project widget's popup 20 dp.
+ */
+@Composable
+internal fun ProjectAvatar(name: String, size: Dp, modifier: Modifier = Modifier) {
+  Box(
+    modifier.size(size).background(projectAvatarBrush(name), RoundedCornerShape(size * 0.2f)),
+    contentAlignment = Alignment.Center,
+  ) {
+    BasicText(
+      initials(name),
+      style =
+        TextStyle(
+          color = Color.White,
+          fontFamily = LocalClientFonts.current.editor,
+          fontWeight = FontWeight.SemiBold,
+          fontSize = (size.value.toInt() * 13 / 20).sp,
+        ),
+    )
+  }
+}
 
 /**
  * IntelliJ's `AvatarUtils.initials`: `xtool` → `X`, `MyProject` → `MP`, `xtool-web-app` → `XA`. Two

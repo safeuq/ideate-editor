@@ -42,9 +42,11 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.safeuq.ideate.client.session.BackendPopup
 import io.github.safeuq.ideate.client.session.ClientSession
 import io.github.safeuq.ideate.client.session.LuxDialog
@@ -54,6 +56,7 @@ import io.github.safeuq.ideate.client.session.PopupLux
 import io.github.safeuq.ideate.client.session.PopupTextField
 import io.github.safeuq.ideate.client.ui.LocalBackHandler
 import io.github.safeuq.ideate.client.ui.LocalIcons
+import io.github.safeuq.ideate.client.ui.ProjectAvatar
 import io.github.safeuq.ideate.client.ui.component.TextField
 import io.github.safeuq.ideate.client.ui.component.popupContainer
 import io.github.safeuq.ideate.client.ui.lux.LuxPainter
@@ -205,9 +208,12 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
           style = text.copy(color = Islands.textSecondary),
         )
       }
+      // A project's row (name over path) is as tall as its two lines, with the 6 dp above and
+      // below that the backend's BeStyleControl margin asks for.
+      val description = row.description
       Row(
         Modifier.fillMaxWidth()
-          .height(Look.rowHeight)
+          .then(if (description == null) Modifier.height(Look.rowHeight) else Modifier)
           .background(
             if (index == list.selected) Islands.selectionBackground else Color.Transparent,
             RoundedCornerShape(Look.selectionRadius),
@@ -215,12 +221,27 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
           .clickable(remember { MutableInteractionSource() }, indication = null) {
             session.popupSelect(list, row)
           }
-          .padding(horizontal = Look.rowInset),
+          .padding(horizontal = Look.rowInset, vertical = if (description == null) 0.dp else 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Look.iconGap),
       ) {
-        row.iconPath?.let(icons::painter)?.let { Image(it, null, Modifier.size(16.dp)) }
-        BasicText(row.text, style = text)
+        val avatar = row.avatar
+        // The avatar's cell: 20 dp (AvatarIconModel.targetSize), at the top with a 2 dp gap.
+        if (avatar != null)
+          ProjectAvatar(avatar, 20.dp, Modifier.align(Alignment.Top).padding(top = 2.dp))
+        else row.iconPath?.let(icons::painter)?.let { Image(it, null, Modifier.size(16.dp)) }
+        if (description == null) BasicText(row.text, style = text)
+        else
+          Column {
+            BasicText(row.text, style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // The backend sends no font size; IntelliJ's renderer uses JBFont.smallOrNewUiMedium().
+            BasicText(
+              description,
+              style = text.copy(color = Islands.textSecondary, fontSize = 12.sp),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
       }
     }
   }

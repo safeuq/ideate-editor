@@ -9,6 +9,7 @@ import com.jetbrains.ide.model.uiautomation.BeControl
 import com.jetbrains.ide.model.uiautomation.BeControlContainer
 import com.jetbrains.ide.model.uiautomation.BeEmptyData
 import com.jetbrains.ide.model.uiautomation.BeGrid
+import com.jetbrains.ide.model.uiautomation.BeGridLayoutPanel
 import com.jetbrains.ide.model.uiautomation.BeHeader
 import com.jetbrains.ide.model.uiautomation.BeIcon
 import com.jetbrains.ide.model.uiautomation.BeLabel
@@ -24,18 +25,22 @@ import com.jetbrains.ide.model.uiautomation.ValidationStates
 import com.jetbrains.ide.model.uiautomation.uIAutomationInteractionModel
 import com.jetbrains.rd.framework.IProtocol
 import com.jetbrains.rd.ide.model.ActionPopupContent
+import com.jetbrains.rd.ide.model.AvatarIconModel
 import com.jetbrains.rd.ide.model.BeAbstractPopup
 import com.jetbrains.rd.ide.model.BeListPopupLine
 import com.jetbrains.rd.ide.model.BePopupPositionDirectTransferContext
 import com.jetbrains.rd.ide.model.BePopupPositionScreenPointContext
 import com.jetbrains.rd.ide.model.DefaultPopupContent
+import com.jetbrains.rd.ide.model.DeferredIconModel
 import com.jetbrains.rd.ide.model.FontStyle
+import com.jetbrains.rd.ide.model.FullProjectAvatarIconPresentationModel
 import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.LxPanel
 import com.jetbrains.rd.ide.model.LxPoint
 import com.jetbrains.rd.ide.model.StepPopupContent
 import com.jetbrains.rd.ide.model.WizardPopupContent
 import com.jetbrains.rd.ide.model.luxModel
+import com.jetbrains.rd.ide.model.shellModel
 import com.jetbrains.rd.util.lifetime.Lifetime
 import io.github.safeuq.ideate.client.ui.lux.resolveLuxColor
 
@@ -76,12 +81,21 @@ class PopupList(
 
 /** One row of a [PopupList]: its icon (a path in the client's icon jar) and text. */
 class PopupRow(
-  val iconPath: String?,
+  iconPath: String?,
   val text: String,
   internal val line: BeTreeGridLine,
   /** A separator with this title above the row, e.g. "Configuration" over More Actions' Edit…. */
   val header: String? = null,
-)
+  /** A second line under [text], e.g. a project's path in the project widget's popup. */
+  val description: String? = null,
+  /** [BeRow.deferredIcon]: the icon arrives later and replaces [iconPath] or sets [avatar]. */
+  internal val deferredIcon: Long? = null,
+) {
+  var iconPath by mutableStateOf(iconPath)
+
+  /** The project whose avatar is the row's icon, e.g. `beta` in the project widget's popup. */
+  var avatar by mutableStateOf<String?>(null)
+}
 
 /** A Lux panel the backend paints, e.g. New ▸ File's "already exists" hint. */
 class PopupLux(val surface: LuxDialog) : PopupItem
@@ -135,7 +149,43 @@ internal class BackendPopups(
 ) {
   private val shown = linkedMapOf<Int, BackendPopup>()
 
+  /**
+   * The icons the backend has computed for its `DeferredIconModel`s, by id, e.g. 63 → the avatar of
+   * `beta`. Kept because an icon can be ready before its popup is shown.
+   */
+  private val readyIcons = mutableMapOf<Long, IconModel>()
+
+  /** A row of a list, with its deferred icon if that is ready already. */
+  private fun row(line: BeTreeGridLine): PopupRow {
+    val row = BeRow.of(line, iconPath)
+    return PopupRow(row.icon, row.text, line, row.header, row.description, row.deferredIcon).also {
+      readyIcons[row.deferredIcon]?.let { icon -> showIcon(it, icon) }
+    }
+  }
+
+  /** [icon] is [row]'s real icon: a project's avatar, or an icon of the client's icon jar. */
+  private fun showIcon(row: PopupRow, icon: IconModel) {
+    val project =
+      (icon as? AvatarIconModel)?.presentation as? FullProjectAvatarIconPresentationModel
+    if (project != null) row.avatar = project.name else row.iconPath = iconPath(icon)
+  }
+
   fun bind() {
+    // As JetBrains Client: a DeferredIconModel shows its base icon (for a project row an empty
+    // 20×20) until the backend sends the real one here.
+    protocol.shellModel.deferredIconReady.adviseOn(lifetime, protocol.scheduler) { ready ->
+      val icon = ready.icon ?: return@adviseOn
+      readyIcons[ready.id] = icon
+      shown.values
+        .flatMap { it.items }
+        .filterIsInstance<PopupList>()
+        .flatMap { it.rows }
+        .filter { it.deferredIcon == ready.id }
+        .forEach { showIcon(it, icon) }
+    }
+    protocol.shellModel.deferredIconsReclaimed.adviseOn(lifetime, protocol.scheduler) { ids ->
+      ids.forEach(readyIcons::remove)
+    }
     protocol.uIAutomationInteractionModel.activePopups.view(lifetime) { popupLifetime, id, model ->
       val wizard = model.content as? WizardPopupContent
       val listStep = wizard?.step ?: (model.content as? ActionPopupContent)?.step
@@ -212,10 +262,7 @@ internal class BackendPopups(
         val lines = control.fakeRoot.children.toList()
         val list =
           PopupList(
-            lines.map { line ->
-              val row = BeRow.of(line, iconPath)
-              PopupRow(row.icon, row.text, line, row.header)
-            },
+            lines.map(::row),
           )
         lines.forEachIndexed { index, line ->
           line.isSelected.advise(popupLifetime) { selected ->
@@ -286,10 +333,7 @@ internal class BackendPopups(
     val lines = step.items.toList().filterIsInstance<BeListPopupLine>()
     val list =
       PopupList(
-        lines.map { line ->
-          val row = BeRow.of(line, iconPath)
-          PopupRow(row.icon, row.text, line, row.header)
-        },
+        lines.map(::row),
         wizard,
         listPopup = true,
       )
@@ -432,6 +476,10 @@ internal class BeRow(
   val icon: String?,
   val fragments: List<TextFragment>,
   val header: String? = null,
+  /** The text of a [BeGridLayoutPanel]'s cells after the first, e.g. a project's path. */
+  val description: String? = null,
+  /** The id of the row's [DeferredIconModel]: `ShellModel.deferredIconReady` brings the icon. */
+  val deferredIcon: Long? = null,
 ) {
   val text
     get() = fragments.joinToString("") { it.text }
@@ -440,16 +488,22 @@ internal class BeRow(
     fun of(line: BeTreeGridLine, iconPath: (IconModel) -> String?): BeRow {
       var icon: String? = null
       var header: String? = null
+      var description: String? = null
+      var deferredIcon: Long? = null
       val fragments = mutableListOf<TextFragment>()
       fun look(each: BeControl) {
         when (each) {
           is BeHeader -> header = each.text.value
-          is BeIcon -> if (icon == null) icon = each.icon.valueOrNull?.let(iconPath)
+          is BeIcon -> {
+            if (icon == null) icon = each.icon.valueOrNull?.let(iconPath)
+            (each.icon.valueOrNull as? DeferredIconModel)?.let { deferredIcon = it.id }
+          }
           is BeLabel -> fragments += TextFragment(each.text.value, 0, null)
           is BeRichText -> {
             // Gradle's rows carry the icon on the text, e.g. `icons/expui/gradle.svg` on
             // "gradle-smoke" and `expui/build/taskGroup.svg` on "Tasks".
             if (icon == null) icon = each.icon.value?.let(iconPath)
+            (each.icon.value as? DeferredIconModel)?.let { deferredIcon = it.id }
             each.text.valueOrNull?.parts.orEmpty().forEach { part ->
               fragments +=
                 TextFragment(
@@ -465,12 +519,27 @@ internal class BeRow(
             }
           }
           is BeGrid -> each.items.valueOrNull.orEmpty().forEach { look(it.content) }
+          // A row of the project widget's popup: cells [icon, "beta", "/projects/beta"], the path
+          // in a grid below the name's.
+          // ponytail: every text cell after the first is the second line; read `grids` (each
+          // grid's x and y) when a row lays its cells out another way.
+          is BeGridLayoutPanel ->
+            each.items.valueOrNull.orEmpty().forEach { cell ->
+              val named = fragments.any { it.text.isNotEmpty() }
+              val count = fragments.size
+              look(cell.content)
+              if (named && fragments.size > count) {
+                val added = fragments.subList(count, fragments.size)
+                description = description.orEmpty() + added.joinToString("") { it.text }
+                added.clear()
+              }
+            }
           is BeControlContainer -> look(each.content)
           else -> Unit
         }
       }
       line.columnElements.forEach(::look)
-      return BeRow(icon, fragments, header)
+      return BeRow(icon, fragments, header, description, deferredIcon)
     }
   }
 }

@@ -340,3 +340,224 @@ columnElements = [
 - Whether `getComponent` answers without the toolbar's `expandGroup` call before it. This can only
   be tried from Ideate's own client, so it belongs to step 1.
 - IntelliJ IDEA Home (not chosen, see above).
+
+## Addendum (2026-11-24, 14:50 IST): the rows are fixed; what a click needs; the build plan
+
+This section replaces "Design" and "Steps" above and every step list in the earlier addenda. An
+implementer reads this section and nothing else has to be decided.
+
+### Done in this commit: a project row reads and draws correctly
+
+Seen in a running Ideate against a 263.7307.200 backend with `alpha` and `beta` open (the widget's
+click was wired by hand for the check, see `What a click needs`):
+
+```
+New Project…
+Open…
+Clone Repository…
+⌂ IntelliJ IDEA Home
+Open Projects
+[B] beta     /private/tmp/…/widget-backend/beta
+[A] alpha    /private/tmp/…/widget-backend/alpha
+```
+
+| What | Where | How |
+|---|---|---|
+| A row's cells | `BeRow.of` in `session/BackendPopups.kt` | new branch `is BeGridLayoutPanel`: walks `items` (`BeControlWithGridConstraints.content`). The first cell with text gives `BeRow.fragments` (`beta`); the text of every later cell goes to the new `BeRow.description` (`/projects/beta`) |
+| A row's deferred icon | `BeRow.deferredIcon: Long?` | the `id` of a `DeferredIconModel` on a `BeRichText` or `BeIcon`, e.g. 63 |
+| The second line and the avatar | `PopupRow.description`, `PopupRow.avatar`, `PopupRow.iconPath` (now Compose state) | `BackendPopups.row(line)` builds every `PopupRow` |
+| The real icon | `BackendPopups.bind` | `protocol.shellModel.deferredIconReady.adviseOn(lifetime, protocol.scheduler)`: kept in `readyIcons` (an icon can be ready before its popup is shown) and given to the rows with that id by `showIcon`. An `AvatarIconModel` with a `FullProjectAvatarIconPresentationModel` sets `PopupRow.avatar` to its `name`; any other icon sets `iconPath`. `deferredIconsReclaimed` empties `readyIcons` |
+| Drawing | `PopupListView` in `ui/popup/BackendPopupView.kt` | a row with a `description` is two lines high with 6 dp above and below (the backend's `BeStyleControl` margin); the path is 12 sp in `Islands.textSecondary` (`JBFont.smallOrNewUiMedium()`, `Label.infoForeground`); the avatar is 20 dp (`AvatarIconModel.targetSize`), at the top with a 2 dp gap |
+| The avatar itself | `ProjectAvatar(name, size, modifier)` in `ui/MainToolbar.kt` | moved out of `MainToolbar` so the toolbar (16 dp) and the row (20 dp) draw the same thing |
+| Test | `BackendPopupRowTest` (jvmTest) | a `BeGridLayoutPanel` of `[icon with DeferredIconModel(63), "beta", "/projects/beta"]` gives text `beta`, description `/projects/beta`, deferredIcon 63 |
+
+`BeHeader` was already read (`BeRow.header`, added with the run toolbar's More Actions).
+
+### What a click needs (the open question of addendum 3, now answered)
+
+| Tried from Ideate | Result |
+|---|---|
+| `getComponent(ActionComponentRequest("main.toolbar.Project", "MainToolbar", 1, projectId))`, nothing before it | answers a `BeContextActionBehavior` whose `content` is a `BeToolbarComboButton` |
+| `content.doAction.fire(RectangleModel(80, 8, 87, 26))` on that component | **nothing happens**: no `activePopups` entry (tried twice, also 7 s after the answer) |
+| first `expandGroup(AsyncActionUpdateRequest("composite:MainToolbarGeneralActionsGroup;MainToolbarLeft;MainToolbarVCSGroup;ToolboxProjectPopupAction;UnattendedHostMenuGroup;main.toolbar.Project", ActionTimestampSetModel([ProjectTimestampModel(projectId)]), "MainToolbar", ToolbarKindModel(true), 1))`, then `getComponent`, then `doAction` 9 s later | the popup arrives 190 ms after the click: `Backend list popup '': New Project…, Open…, Clone Repository…, IntelliJ IDEA Home, beta, alpha` |
+
+So the backend acts on the widget's click only for a component asked for **after** the main
+toolbar's `expandGroup` with the same `factoryId`. The composite id is the one JetBrains Client
+sends (trace, 2026-11-24); `factoryId = 1` is the client's own number for this toolbar.
+
+Other facts found on the way:
+
+- `BeAbstractPopupSettings.adText` is `""` for this popup, and "Press F1 to toggle preview" is in no
+  rd message: JetBrains Client draws that line itself. Ideate leaves it out.
+- The popup's `context` is `BePopupPositionComponentContext(point = BePopupRelativePoint(ownerID =
+  UIElementId("44"), ownerAnchor = BOTTOM_LEFT, popupAnchor = TOP_LEFT), position = TOP)`.
+  `BackendPopups.place` does not know this context, so the popup shows at the top centre.
+- The separator before IntelliJ IDEA Home is a `BeHeader` with an empty text; `PopupListView` draws
+  an empty title line under it (a gap IntelliJ does not have).
+
+### The build plan
+
+Rules for the implementer (all standing rules of this repository):
+
+- Work in your own detached worktree from `origin/main`; never commit in the shared checkout; no
+  `git stash`, `git reset --hard` or `git clean`. Commit author `Safeuq Mohamed
+  <mohamedsafeuq@gmail.com>`, no Claude mention and no `Co-Authored-By` line.
+- Keep IntelliJ's names and sizes. No extra padding for touch (list rows stay 24 dp).
+- No abbreviated identifiers (`request`, not `req`). `./gradlew spotlessApply` before committing.
+- Never touch ports 5993 or 5996 or the user's own IntelliJ. Use your own backend on a free port
+  (5997) with its own `-Didea.*.path` folders. Stop what you started, by exact PID.
+- Do not choose the row IntelliJ IDEA Home in a test: it opens `~/IdeaProjects/IdeaHome`, which the
+  user's own IntelliJ uses.
+- If something here does not match what you see, stop and ask; do not guess.
+
+#### Step 1. `session/ProjectWidget.kt` (new file), the widget's click
+
+Mirror `session/RunToolbar.kt` (same package, same style of constructor).
+
+```kotlin
+/** The main toolbar's project widget (IntelliJ's ProjectToolbarWidgetAction, `main.toolbar.Project`). */
+internal class ProjectWidget(
+  private val model: AsyncActionsModel,
+  private val projectId: RdProjectId,
+  private val log: (String) -> Unit,
+) {
+  private var lifetime: Lifetime = Lifetime.Terminated
+  /** The backend's `BeToolbarComboButton`, asked for once after the first `expandGroup`. */
+  private var button: BeToolbarComboButton? = null
+  /** The widget's place in the window at the last click, dp. */
+  private var bounds: IntRect? = null
+  /** True once the widget was clicked in this session; see step 4. */
+  var clicked = false
+    private set
+
+  fun bind(solutionLifetime: Lifetime)            // lifetime = solutionLifetime; on termination button = null
+  fun click(bounds: IntRect)                      // see below
+  fun popupPlace(ownerId: String): LxPoint?       // see step 3
+}
+private const val ACTION = "main.toolbar.Project"
+private const val PLACE = "MainToolbar"
+private const val FACTORY = 1
+private const val TOOLBAR_GROUP =
+  "composite:MainToolbarGeneralActionsGroup;MainToolbarLeft;MainToolbarVCSGroup;ToolboxProjectPopupAction;UnattendedHostMenuGroup;main.toolbar.Project"
+```
+
+`click(bounds)`, called on the rd thread:
+
+1. `this.bounds = bounds; clicked = true`.
+2. `model.expandGroup.start(lifetime, AsyncActionUpdateRequest(TOOLBAR_GROUP,
+   ActionTimestampSetModel(listOf(ProjectTimestampModel(projectId))), PLACE, ToolbarKindModel(true),
+   FACTORY)).result.advise(lifetime) { … }`; on failure `log("Project widget: toolbar not expanded:
+   …")` and return.
+3. In its answer: if `button` is null, `model.getComponent.start(lifetime,
+   ActionComponentRequest(ACTION, PLACE, FACTORY, projectId))`; the answer's `(control as?
+   BeContextActionBehavior)?.content as? BeToolbarComboButton` becomes `button`; anything else is
+   logged with its class name and nothing is fired.
+4. `button.doAction.fire(RectangleModel(bounds.left, bounds.top, bounds.width, bounds.height))`.
+
+`ClientSession`:
+
+- field `private var projectWidget: ProjectWidget? = null`;
+- in `bindSolution`, next to `runToolbar = RunToolbar(…)`: `projectWidget =
+  ProjectWidget(protocol.asyncActionsModel, newSolution.projectId, ::log).also {
+  it.bind(solutionLifetime) }`, and `solutionLifetime.onTermination { projectWidget = null }`;
+- `fun projectWidgetClicked(bounds: IntRect) = onRd { projectWidget?.click(bounds) ?: log("No
+  project yet; no project popup") }`, placed next to `runToolbarAction`.
+
+The widget's text stays `SessionState.projectName` (the same name; nothing new in `SessionState`).
+
+#### Step 2. `ui/MainToolbar.kt` and `ui/ClientScreen.kt`, the click and its bounds
+
+- `MainToolbar` gets a parameter after `runConfigurationEntries`:
+  `/** The project widget was pressed; [bounds]: its place in the window, dp. */ onProject: (bounds:
+  IntRect) -> Unit = {}`.
+- The project widget's `ToolbarDropdown(control, Modifier.widthIn(max = 200.dp).padding(end =
+  8.dp))` call gets `onClick = { onProject(projectBounds) }`, and its modifier an
+  `onGloballyPositioned` that keeps `projectBounds` exactly as the run buttons keep `bounds` (same
+  file: `boundsInWindow()`, converted to dp with `LocalDensity`, rounded). Put the
+  `onGloballyPositioned` after the `padding(end = 8.dp)` so the 8 dp gap is not part of the bounds.
+- `ClientScreen.kt`, the `MainToolbar(` call: `onProject = session::projectWidgetClicked`.
+
+#### Step 3. `session/BackendPopups.kt` and `ui/popup/BackendPopupView.kt`, the popup's place and the empty header
+
+- `BackendPopups` gets a constructor parameter after `iconPath`: `/** Where a popup anchored to a
+  client component goes: the window point for the component's id, e.g. "44". */ private val
+  componentPlace: (ownerId: String) -> LxPoint?`. `ClientSession` passes `{ ownerId ->
+  projectWidget?.popupPlace(ownerId) }` where it builds `BackendPopups` (the lambda reads the field
+  when called, so the later assignment is fine).
+- `BackendPopups.place`: before the `BePopupPositionDirectTransferContext` line, `if (position is
+  BePopupPositionComponentContext) { popup.anchor = componentPlace(position.point.ownerID.id);
+  return }`.
+- `ProjectWidget.popupPlace(ownerId)`: returns `LxPoint(bounds.left.toDouble(),
+  bounds.bottom.toDouble())` (owner BOTTOM_LEFT to popup TOP_LEFT) when `bounds` is set, else null.
+  Log `ownerId` next to `button.uniqueId.valueOrNull` once per popup. If they differ in the live
+  check, report it; the popup is still placed under the widget.
+- `PopupListView`: draw the header's `BasicText` only when `header.isNotEmpty()`; the 1 dp line
+  stays.
+
+#### Step 4. Showing the project the user chose
+
+Ideate shows one project per `ClientSession` (its `project` parameter, a host path). A session is
+not rebound to another solution: a choice makes a new session over the same link, as a reconnect
+does.
+
+What the backend sends after a choice (trace, addendum 2):
+
+| Choice | Message |
+|---|---|
+| a row under Open Projects | `solutions[key].projectViewModel.focusProjectWindow(false)` on that project's solution, 54 ms later |
+| a row under Recent Projects, or a project made or opened through the top rows' dialogs | `solutions` Add of a new key; its `solutionOpenStrategy.description.hostProjectBasePath` is the path |
+
+`ClientSession`:
+
+- constructor parameter before `onAccepted`: `/** The backend asked to show another project, e.g.
+  after a row of the project widget's popup: its host path. */ private val onProjectSwitch:
+  (hostPath: String) -> Unit = {}`;
+- field `private var switchedTo: String? = null` and `private fun switchTo(hostPath: String?)`:
+  returns unless `projectWidget?.clicked == true`, `hostPath != null`, and `hostPath != switchedTo`;
+  then sets `switchedTo`, logs `Project switch to $hostPath`, calls `onProjectSwitch(hostPath)`;
+- in `protocol.solutionModel.solutions.view(lifetime) { … }`, right after `hostPath` is known:
+  `newSolution.projectViewModel.focusProjectWindow.adviseOn(solutionLifetime, rdScheduler) { if
+  (solution !== newSolution) switchTo(hostPath) }`;
+- the last line of that block (`log("Project … added; showing $project")`): add
+  `switchTo(hostPath)` after it. The welcome-project branch above it stays as it is.
+
+The `clicked` gate matters: solutions that are simply there at connect (`alpha` and `beta` both
+arrive in the first second) must not make the session jump.
+
+`connect/ConnectController.kt`:
+
+- both places that build the session for a link (`connect` and the reconnect's `candidate`) pass
+  `onProjectSwitch = { hostPath -> main.launch { switchProject(current, hostPath) } }`;
+- new `private fun switchProject(current: Attempt, hostPath: String)`: returns unless `attempt ===
+  current` and `current.identity != null`; stops the session (`session?.stop()`), then builds the
+  next one exactly as `connect` does but with `Attempt(current.kind, current.link, current.text,
+  project = hostPath, openFile = null, resumed = true, editorsKey = "${current.editorsKey}
+  :$hostPath")` (no space in the key) and `identity = current.identity`, so the backend takes the
+  same client again. Share the session-building lines with `connect` instead of copying them.
+  `// ponytail: the first project of a link keeps the link's own editors key, so its tabs are not
+  restored after switching away and back; give every project its own key when that matters.`
+
+#### Step 5. Checks, in this order
+
+1. `./gradlew :compose:jvmTest` passes (it includes `BackendPopupRowTest`).
+2. Live, on the desktop app, with a backend that has `alpha` and `beta` open (recipe in the memory
+   note "Check JetBrains Client live"; start the second project with a second
+   `remote-dev-server.sh run <beta>` using the same `-Didea.*.path` folders):
+   - click the widget: the popup opens with its top-left corner at the widget's bottom-left; rows as
+     in the block at the top of this section; no gap above IntelliJ IDEA Home;
+   - click `beta`: the log says `Project switch to …/beta`, a new session connects, the toolbar
+     shows `beta`, the Project tree is beta's;
+   - open the popup again and click `alpha`: back to alpha;
+   - Escape and a click outside close the popup; the run toolbar still works.
+3. Take a Before shot (origin/main: the widget does nothing) and an After shot (the open popup) for
+   the shared Before/After page.
+4. Append a dated addendum here with what was seen, and correct `docs/split-protocol.md` line 877
+   with an addendum there (it says recent projects come from the Gateway plugin; the backend sends
+   them).
+
+#### Not in this build
+
+- Typing to filter the rows (the client's own speed search; nothing is sent).
+- A row with `hasSubstep = true` (not seen in this popup).
+- The top rows' dialogs (New Project…, Open…, Clone Repository…) are `LxDialog`s and need no work
+  here; they open as any Lux dialog does.
