@@ -1,7 +1,6 @@
 package io.github.safeuq.ideate.client.session
 
 import androidx.compose.ui.unit.IntRect
-import com.intellij.platform.split.protocol.DefaultSplitMarshallersProvider
 import com.jediterm.core.util.TermSize
 import com.jetbrains.codeWithMe.model.CwmRunConfigurationExecuteArgs
 import com.jetbrains.codeWithMe.model.RdFileIconParams
@@ -19,20 +18,12 @@ import com.jetbrains.codeWithMe.model.vfsModel
 import com.jetbrains.ide.model.highlighterRegistration.ColorsSchemeModel
 import com.jetbrains.ide.model.highlighterRegistration.DefaultRegistryModel
 import com.jetbrains.ide.model.highlighterRegistration.highlighterRegistrationHostModel
-import com.jetbrains.rd.framework.IMarshaller
 import com.jetbrains.rd.framework.IProtocol
-import com.jetbrains.rd.framework.IdKind
-import com.jetbrains.rd.framework.Identities
-import com.jetbrains.rd.framework.MarshallersProvider
-import com.jetbrains.rd.framework.Protocol
-import com.jetbrains.rd.framework.RdId
 import com.jetbrains.rd.framework.SerializationCtx
-import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
 import com.jetbrains.rd.ide.model.ActionTimestampSetModel
 import com.jetbrains.rd.ide.model.AvatarIconModel
 import com.jetbrains.rd.ide.model.BadgeIconModel
-import com.jetbrains.rd.ide.model.BasicIdeRootMarshallersProvider
 import com.jetbrains.rd.ide.model.BrowseMode
 import com.jetbrains.rd.ide.model.ClipboardContent
 import com.jetbrains.rd.ide.model.ClipboardModel
@@ -109,16 +100,12 @@ import com.jetbrains.rd.ide.model.luxModel
 import com.jetbrains.rd.ide.model.requestResponseModel
 import com.jetbrains.rd.ide.model.solutionModel
 import com.jetbrains.rd.util.lifetime.Lifetime
-import com.jetbrains.rd.util.lifetime.LifetimeDefinition
 import com.jetbrains.rd.util.lifetime.isAlive
 import com.jetbrains.rd.util.reactive.AddRemove
 import com.jetbrains.rd.util.reactive.IScheduler
 import com.jetbrains.rd.util.reactive.hasTrueValue
-import com.jetbrains.rd.util.threading.SingleThreadScheduler
 import io.github.safeuq.ideate.client.connection.ClientCertificate
-import io.github.safeuq.ideate.client.connection.Connection
 import io.github.safeuq.ideate.client.connection.JoinLink
-import io.github.safeuq.ideate.client.connection.SplitWire
 import io.github.safeuq.ideate.client.kernel.SearchKernel
 import io.github.safeuq.ideate.client.session.buildtree.BuildTrees
 import io.github.safeuq.ideate.client.session.console.ConsoleDocuments
@@ -180,12 +167,14 @@ class ClientSession(
   private val onProjectSwitch: (hostPath: String) -> Unit = {},
   private val onAccepted: (ClientCertificate) -> Unit = {},
 ) {
-  private val lifetimeDefinition = LifetimeDefinition()
-  private val lifetime: Lifetime = lifetimeDefinition
+  /** The connection; one per session until every open project shares one (shared-connection.md). */
+  private val connection = BackendConnection(link, identity, inForeground, ::log)
+  private val lifetime: Lifetime = connection.lifetime
   private val mutableState = MutableStateFlow(SessionState())
   val state: StateFlow<SessionState> = mutableState
 
-  @Volatile private var scheduler: IScheduler? = null
+  private val scheduler: IScheduler?
+    get() = connection.scheduler
 
   // Touched only on the rd scheduler thread.
   private val schemes = mutableMapOf<String, ColorsSchemeModel>()
@@ -369,7 +358,7 @@ class ClientSession(
    */
   fun stop() {
     markupTimer.shutdownNow()
-    thread(name = "client-session-stop", isDaemon = true) { lifetimeDefinition.terminate() }
+    connection.close()
   }
 
   // ---- Actions from the UI (any thread) ----
@@ -955,28 +944,7 @@ class ClientSession(
   // ---- Connection and models ----
 
   private fun connect() {
-    val certificate =
-      identity ?: ClientCertificate.create(link, System.getProperty("user.name") ?: "android")
-    val connection = Connection.open(link, certificate, ::log)
-    onAccepted(certificate)
-    val wire =
-      SplitWire(connection, inForeground) { failure ->
-        fail(failure ?: IllegalStateException("Connection closed"), connectionLost = true)
-      }
-    lifetime.onTermination { wire.terminate() }
-    val rdScheduler = SingleThreadScheduler(lifetime, "rd")
-    val protocol =
-      Protocol(
-        "ThinClient",
-        Serializers(ProtocolMarshallers),
-        Identities(IdKind.Client),
-        rdScheduler,
-        wire,
-        lifetime,
-      )
-    wire.start()
-    scheduler = rdScheduler
-    rdScheduler.queue {
+    connection.open(onAccepted, { failure -> fail(failure, connectionLost = true) }) { protocol ->
       createModels(protocol)
       log("rd protocol up, models created")
     }
@@ -2301,12 +2269,6 @@ private fun dataContextBlob(protocol: IProtocol, projectId: RdProjectId): String
     ActionTimestampSetModel(listOf(ProjectTimestampModel(projectId))),
   )
   return Base64.getEncoder().encodeToString(buffer.getArray().copyOf(buffer.position))
-}
-
-private object ProtocolMarshallers : MarshallersProvider {
-  override fun getMarshaller(id: RdId): IMarshaller<*>? =
-    BasicIdeRootMarshallersProvider.getMarshaller(id)
-      ?: DefaultSplitMarshallersProvider.getMarshaller(id)
 }
 
 /**

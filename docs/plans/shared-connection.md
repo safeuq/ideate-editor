@@ -61,3 +61,26 @@ live with two projects before the next starts.
 - Whether the backend sends a document's text controls of both projects to this client when the
   same file is open in both.
 - What `focusProjectWindow` and `closeRequested` mean for a client that shows both.
+
+## Addendum (2026-11-24, 11:09 IST): a second solution answers while the first is bound; step 1 done
+
+Checked live before any refactoring (backend on 5997, `alpha` shown, `beta` also open). For the
+solution that is not shown, a throwaway change set `solutionLifecycle.readyForExtsRegistration` and
+viewed `projectViewModel.panes` and the Project pane's `items`. The backend answered at once, on
+the same connection, while `alpha` stayed bound:
+
+```
+…/beta isLoaded true
+…/beta pane ProjectPane | PackagesPane | Scope
+…/beta item 1 beta | item 2 External Libraries | item 3 Scratches and Consoles
+```
+
+So the first "to verify" point holds: two solutions can be bound at once. Also seen in the code:
+Fleet RPC names a project by `RdCodeWithMeProject.kernelProjectId`, so its services are per project
+already.
+
+Step 1 is built: `session/BackendConnection.kt` has the body of the old `ClientSession.connect`
+(`open(onAccepted, onLost, onReady)`), the lifetime, the rd scheduler, `close()` and
+`ProtocolMarshallers`. `ClientSession` makes one for itself (`connection`), takes its `lifetime`
+and `scheduler` from it, and `stop()` calls `connection.close()`. No change in behaviour: connect,
+a tab click and the switch were checked live.
