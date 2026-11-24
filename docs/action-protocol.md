@@ -304,3 +304,26 @@ whole 34.
 time it shows the selection, e.g. `Gradle.forever2 → forever2`, or `null → (not in the 5
 configurations)` for Current File. Choosing forever2 and then Current File in the selector changed
 the label both times on the test backend (2026-11-24).
+
+## Addendum (2026-11-24): HTML in menu texts
+
+A presentation text can be HTML, which Swing labels render. The run configurations popup's
+"All Configurations" row comes as
+`<html>All Configurations&nbsp;&nbsp;<a style="color:#9fa2a8;">15</a></html>` (IntelliJ's
+`RunToolbarPopup.kt`: the count in `StatusBar.Widget.FOREGROUND`). Ideate printed it as it is.
+
+Compose has `AnnotatedString.fromHtml` only in androidx Compose on Android, where it runs
+`android.text.Html.fromHtml(…, FROM_HTML_MODE_COMPACT)`; Compose Multiplatform 1.12.2 has none in
+common or desktop code (1.7.3's desktop one threw `UnsupportedOperationException`). The user chose
+Android's engine on both platforms, so `ui/component/HtmlText.kt` ports it into the shared code:
+TagSoup 1.2.1 (the parser `android.text.Html` uses) and `HtmlToSpannedConverter`, writing each span
+as the style Compose's `Html.android.kt` maps it to. `swingText(text, colored)` sends text starting
+with `<html>` through it, and `MenuRow` draws every menu label with it.
+
+| Input | Shown |
+|---|---|
+| `<html>All Configurations&nbsp;&nbsp;<a style="color:#9fa2a8;">15</a></html>` | All Configurations  15 (Android ignores the style of an `<a>` without `href`, so 15 is not grey as in IntelliJ) |
+| `<b>Bold</b>` | bold |
+| `<span style="color:#9fa2a8">grey</span>` | grey |
+
+Not ported: Compose's `<annotation>` handler and its list bullets, fonts by system name.

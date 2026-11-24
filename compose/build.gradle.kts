@@ -40,6 +40,8 @@ kotlin {
       // SSH connections (docs/ssh-connections.md): the library JetBrains Gateway uses.
       implementation("com.hierynomus:sshj:0.41.2")
       implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
+      // The HTML parser android.text.Html uses (HtmlText.kt ports its converter).
+      implementation("org.ccil.cowan.tagsoup:tagsoup:1.2.1")
       implementation("org.jetbrains.compose.foundation:foundation:1.12.2")
     }
     jvmTest.dependencies {

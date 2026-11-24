@@ -161,7 +161,7 @@ private fun MenuRow(
         iconPath?.let(icons::painter)?.let { Image(it, null, Modifier.size(16.dp)) }
       }
       BasicText(
-        label,
+        swingText(label, colored = enabled),
         style = text.copy(color = if (enabled) Islands.text else Menus.disabled),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
