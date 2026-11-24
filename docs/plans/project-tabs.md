@@ -231,3 +231,42 @@ Design to work out in its own detailed plan before any code:
 
 This touches most of `ClientSession.kt` (about 2 300 lines) and `ConnectController.kt`. It is done
 in steps that each keep one project working, with the full test suite and a live check per step.
+
+## Addendum (2026-11-24, 16:35 IST): Stage 1 built and checked live
+
+Built as planned: `OpenProject`, `SessionState.openProjects` and `shownProject`;
+`ClientSession.openSolutions`, `showProject`, `closeProject`; `ui/ProjectTabs.kt` with
+`projectTabWidths` and `ProjectTabs`; six `Islands.projectTab*` tokens; the bar under
+`MainToolbar` in `ClientScreen`; "Opening Project" on every try of a switch; `ProjectTabsTest`.
+
+Small differences from the plan:
+
+- `Islands.color(key)` throws on a missing key, so two private fallback forms were added:
+  `color(key) { fallback }` and `color(key, light, dark)` (e.g. `0xFFD3D5DB` / `0xFF43454A` for
+  the separator), chosen by `LafManager.currentTheme.isDark`.
+- Tab widths come from `BoxWithConstraints` and `Modifier.width` per tab, not a custom `Layout`.
+- The hovered tab is kept in the bar (`hoveredPath`), because the separator rule needs to know
+  whether the next tab is hovered.
+- When the shown project's lifetime ends, the switch goes to the first other entry of
+  `openSolutions` (the shown one is filtered out, since its own `onTermination` runs before the
+  removal registered earlier).
+
+Live check, backend on port 5997 with `alpha` and `beta` (1200x800 window, dark theme):
+
+| Check | Result |
+|---|---|
+| Bar under the toolbar, two tabs, shown project selected | pass: `alpha` selected (rounded `ToolWindow.background` fill), `beta` plain, each half the width |
+| Click on the other tab | pass: log `Project switch to …/beta (tab)`, tree, widget (`beta`) and run widget changed, `beta` tab selected; no "Trying to reconnect" |
+| Hover | pass: the hovered unselected tab gets the grey hover fill and `closeSmall` 6 dp from its left; text stays centred |
+| Close icon on the shown project (`beta`) | pass: `Running CloseProject`, then `Backend closed project …` (the backend sends `closeRequested`, the entry leaves `solutions`), then `Shown project closed; switching to alpha`; the new session shows `alpha` and the bar is gone (one project left) |
+
+What the backend did when the shown project closed: it closed only that project and kept the
+connection; `alpha` stayed in `solutions`. The old session logged
+`FAILED: java.lang.IllegalStateException: Connection closed` while it was torn down for the switch;
+the new session came up normally half a second later.
+
+Not checked: closing the last project. With one project there is no tab bar, and the project
+widget's popup (New Project, Open, Clone Repository, IntelliJ IDEA Home, Open Projects, Recent
+Projects) has no Close Project entry, so Stage 1 has no way to close it from Ideate. Whether the
+backend then adds the welcome project (IntelliJ IDEA Home) is still open. The welcome project, if
+open next to a real one, would also get a tab today (its host path is listed like any other).

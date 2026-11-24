@@ -479,6 +479,13 @@ fun ClientScreen(
         runConfigurationEntries = state.contextMenu?.entries,
         onProject = session::projectWidgetClicked,
       )
+      if (state.openProjects.size > 1)
+        ProjectTabs(
+          state.openProjects,
+          state.shownProject,
+          session::showProject,
+          session::closeProject,
+        )
       // Any open soft keyboard has a bottom inset. A floating one keeps only a strip for its back
       // and
       // switch buttons (about 50 dp on Gboard, Android 14); a docked one is 250 dp or more. Android

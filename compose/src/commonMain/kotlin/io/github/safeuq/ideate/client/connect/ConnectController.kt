@@ -1175,7 +1175,7 @@ fun EditorApp(
     ClientScreen(state, session, insets = modifier, windows = windows)
     controller.reconnecting?.let { attemptNumber ->
       val project = controller.switching
-      if (project != null && attemptNumber == 1)
+      if (project != null)
         StartProgress("Opening Project", project, fonts, onCancel = controller::leave)
       else
         StartProgress(

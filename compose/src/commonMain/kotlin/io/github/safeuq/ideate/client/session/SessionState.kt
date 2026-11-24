@@ -195,6 +195,12 @@ enum class LookupKey {
   CANCEL,
 }
 
+/**
+ * A project open on the backend, e.g. `OpenProject("beta", "/work/beta")`. [hostPath] is its folder
+ * there (`RdCodeWithMeProject.hostProjectBasePath`); [name] is the folder's name.
+ */
+data class OpenProject(val name: String, val hostPath: String)
+
 data class SessionState(
   val log: List<String> = emptyList(),
   val failure: String? = null,
@@ -206,6 +212,10 @@ data class SessionState(
   val projectName: String? = null,
   /** The backend's project widget button; null until it is loaded, then [projectName] gives way. */
   val projectWidget: ProjectWidgetLook? = null,
+  /** Every project open on the backend, in the order the backend listed them. */
+  val openProjects: List<OpenProject> = emptyList(),
+  /** The [OpenProject.hostPath] of the project this session shows; null until one is bound. */
+  val shownProject: String? = null,
   val tree: ProjectTree = ProjectTree(),
   val editors: List<EditorFile> = emptyList(),
   /** Each open file's tab icon from the backend, e.g. `/…/Main.java` to `nodes/class.svg`. */

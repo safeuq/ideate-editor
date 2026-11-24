@@ -249,6 +249,8 @@ class ClientSession(
   private var runToolbar: RunToolbar? = null
   private var projectWidget: ProjectWidget? = null
   private var switchedTo: String? = null
+  /** Host path to solution of every open project; rd thread only. */
+  private val openSolutions = mutableMapOf<String, Solution>()
   private val statusWidgets =
     StatusBarWidgets({ icon -> iconPaths(icon).firstOrNull() }) { widgets ->
       mutableState.update { it.copy(statusWidgets = widgets) }
@@ -684,6 +686,26 @@ class ClientSession(
   /** The project widget was pressed; [bounds]: its place in the window, dp. */
   fun projectWidgetClicked(bounds: IntRect) = onRd {
     projectWidget?.click(bounds) ?: log("No project yet; no project popup")
+  }
+
+  /** A project tab was chosen: a new session shows [hostPath], as after the widget's popup. */
+  fun showProject(hostPath: String) = onRd {
+    if (hostPath == mutableState.value.shownProject || hostPath == switchedTo) return@onRd
+    switchedTo = hostPath
+    log("Project switch to $hostPath (tab)")
+    onProjectSwitch(hostPath)
+  }
+
+  /** A project tab's close button: the backend's Close Project action for that project. */
+  fun closeProject(hostPath: String) = onRd {
+    val closing = openSolutions[hostPath] ?: return@onRd log("No open project at $hostPath")
+    actionMenus?.runAction(
+      "CloseProject",
+      "MainMenu",
+      ActionTimestampSetModel(listOf(ProjectTimestampModel(closing.projectId))),
+    ) {
+      log("CloseProject is disabled for $hostPath")
+    }
   }
 
   /**
@@ -1143,6 +1165,7 @@ class ClientSession(
       projectId = newSolution.projectId
       solution = newSolution
       shownSolutionLifetime = solutionLifetime
+      mutableState.update { it.copy(shownProject = hostPath) }
       // Its Project tree names it (the root row): IdeaHome, then smoke after This Window.
       mutableState.update { it.copy(projectName = null) }
       solutionLifetime.onTermination {
@@ -1151,6 +1174,13 @@ class ClientSession(
           projectId = null
           solution = null
           shownSolutionLifetime = null
+          // The shown project was closed: show another one still open, if any.
+          val remaining = openSolutions.keys.firstOrNull { it != hostPath }
+          if (remaining != null && remaining != switchedTo) {
+            switchedTo = remaining
+            log("Shown project closed; switching to $remaining")
+            onProjectSwitch(remaining)
+          }
         }
       }
       newSolution.solutionLifecycle.readyForExtsRegistration.set(true)
@@ -1325,6 +1355,17 @@ class ClientSession(
       val description =
         (newSolution.solutionOpenStrategy as? RdOpenSolution)?.description as? RdCodeWithMeProject
       val hostPath = description?.hostProjectBasePath
+      if (hostPath != null) {
+        openSolutions[hostPath] = newSolution
+        val opened = OpenProject(hostPath.trimEnd('/').substringAfterLast('/'), hostPath)
+        mutableState.update { it.copy(openProjects = it.openProjects + opened) }
+        solutionLifetime.onTermination {
+          openSolutions.remove(hostPath)
+          mutableState.update { state ->
+            state.copy(openProjects = state.openProjects.filterNot { it.hostPath == hostPath })
+          }
+        }
+      }
       newSolution.projectViewModel.focusProjectWindow.advise(solutionLifetime) {
         if (solution !== newSolution) switchTo(hostPath)
       }

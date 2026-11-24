@@ -48,6 +48,37 @@ object Islands {
       "$key is missing from ${LafManager.currentTheme.name}"
     }
 
+  /** [key] in the current theme, or [fallback] when the theme doesn't set it. */
+  private fun color(key: String, fallback: () -> Color): Color =
+    LafManager.currentTheme.color(key) ?: fallback()
+
+  /** [key], or IntelliJ's default for it: [light] or [dark] by the theme, e.g. `0xFFD3D5DB`. */
+  private fun color(key: String, light: Long, dark: Long): Color =
+    color(key) { Color(if (LafManager.currentTheme.isDark) dark else light) }
+
+  // Project tabs (WindowTabsComponent, IslandsUICustomization.paintProjectTab): the Islands themes
+  // set none of the MainWindow.Tab keys, so IntelliJ's fallbacks are what it paints.
+  val projectTabSelectedBackground
+    get() = color("MainWindow.Tab.selectedBackground") { islandBackground }
+
+  val projectTabHoverBackground
+    get() =
+      color("MainWindow.Tab.hoverBackground") {
+        color("MainToolbar.Dropdown.transparentHoverBackground")
+      }
+
+  val projectTabSeparator
+    get() = color("MainWindow.Tab.separatorColor", 0xFFD3D5DB, 0xFF43454A)
+
+  val projectTabForeground
+    get() = color("MainWindow.Tab.foreground", 0xFFA8ADBD, 0xFFB4B8BF)
+
+  val projectTabSelectedForeground
+    get() = color("MainWindow.Tab.selectedForeground", 0xFFC9CCD6, 0xFFCED0D6)
+
+  val projectTabHoverForeground
+    get() = color("MainWindow.Tab.hoverForeground", 0xFFC9CCD6, 0xFFCED0D6)
+
   /**
    * Set once by the app before its first composition (desktop: IntelliJ's own setting; Android:
    * compact). Changing it later doesn't redraw what is already on screen.
