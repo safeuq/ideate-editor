@@ -531,18 +531,35 @@ class ConnectController(
     val shown = session
     val target =
       first.takeIf { it.state.value.shownProject == hostPath }
-        ?: joined.getOrPut(hostPath) {
-          ClientSession(
+        ?: joined[hostPath]?.takeUnless { it.projectClosed }
+        ?: run {
+          // A session whose project was closed is never used again: the project opened again
+          // starts from an empty screen.
+          joined.remove(hostPath)?.stop()
+          lateinit var made: ClientSession
+          made =
+            ClientSession(
               current.link,
               null,
               null,
               openEditors.slot("${current.editorsKey}:$hostPath"),
               hostPath,
               inForeground = { inForeground },
-              onProjectSwitch = projectSwitch(current),
+              onProjectSwitch = { path ->
+                main.launch {
+                  // Its project was closed while another one is on screen (the close button of a
+                  // tab that is not selected): the screen stays, only the session ends.
+                  if (made.projectClosed && session !== made) {
+                    if (joined[hostPath] === made) joined.remove(hostPath)
+                    made.stop()
+                  } else switchProject(current, path)
+                }
+              },
               sharedConnection = first.connection,
             )
-            .also { it.start() }
+          joined[hostPath] = made
+          made.start()
+          made
         }
     if (session === target) return
     // A closed project's session goes with its tab; the one that opened the connection stays.

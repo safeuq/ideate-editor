@@ -189,6 +189,14 @@ class ClientSession(
   private val loadedChildren = mutableSetOf<Int>()
 
   /**
+   * True once the project of a session that joined another session's connection was closed. Such a
+   * session is not used again: a project opened again gets a new one ([ConnectController]).
+   */
+  @Volatile
+  var projectClosed = false
+    private set
+
+  /**
    * Rows under Expand Selected: a row arriving under one opens too. Cleared when the user opens or
    * closes a row, so later rows (a new file) don't open by themselves.
    */
@@ -1188,6 +1196,12 @@ class ClientSession(
           projectId = null
           solution = null
           shownSolutionLifetime = null
+          // The tree's rows went with the project. A project opened again gets new rows, whose
+          // ids can repeat the old ones: with the old sets kept, `expand` was never sent for them.
+          pane = null
+          loadedChildren.clear()
+          mutableState.update { it.copy(tree = ProjectTree()) }
+          if (sharedConnection != null) projectClosed = true
           // The shown project was closed: show another one still open, if any.
           val remaining = openSolutions.keys.firstOrNull { it != hostPath }
           if (remaining != null) {

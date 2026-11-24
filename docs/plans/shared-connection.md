@@ -136,3 +136,50 @@ Not checked, or left as it is:
 
 Live checks here used the two MCP servers of `docs/mcp/setup.md`; the app has to be started with
 `-PagentMcpPort=5979` for `ideate-window` to connect.
+
+## Addendum (2026-11-24, 12:00 IST): a project closed and opened again could not expand its tree
+
+Reported with `xtool` and `commons` open: in `commons`, clicking a chevron in the Project tree did
+nothing. The app's log gave the sequence:
+
+```
+11:43:00 Joined the open connection for …/commons, models created     (its session joins)
+11:43:31 Running CloseProject                                         (commons' tab closed while xtool is on screen)
+11:43:31 Shown project closed; switching to …/xtool                   (logged by commons' session)
+11:43:37 Backend list popup 6: chose 'commons'                        (opened again)
+11:43:37 Project … (…/commons) added                                  (no "Joined the open connection" line)
+```
+
+Cause, two parts:
+
+1. `ConnectController.switchProject` stopped the sessions of closed projects only after its
+   `if (session === target) return`. Closing a tab that is not selected asks for a switch to the
+   project already on screen, so it returned before the cleanup and the closed project's session
+   stayed in `joined`.
+2. Opening the project again took that session from `joined`. Its `solutions.view` was still
+   alive, so it bound the new solution, but `loadedChildren` and `tree.expanded` still held the
+   old tree's row ids. The new rows repeat those ids, and `expand(nodeId)` sends
+   `pane.expand.start` only when `loadedChildren.add(nodeId)` is true: nothing was sent. The root
+   showed as expanded with no children.
+
+Reproduced on the test backend with two Gradle projects (`gone`, `gtwo`): show `gtwo`, show
+`gone`, close `gtwo` from its tab, open `gtwo` from the project popup → only the root row, External
+Libraries and Scratches.
+
+Fix:
+
+- `ClientSession.bindSolution`: when the shown solution ends, `pane = null`,
+  `loadedChildren.clear()` and `tree = ProjectTree()`. This also covers the session that opened the
+  connection, which cannot be replaced, when its own project is closed and opened again.
+- `ClientSession.projectClosed`: set when the project of a joined session closes.
+  `ConnectController.switchProject` uses a joined session only while `projectClosed` is false,
+  otherwise it stops it and makes a new one (the project starts from an empty screen, as a first
+  open does).
+- A joined session's `onProjectSwitch` no longer moves the screen when its project was closed
+  while another project is shown; the session is stopped and removed from `joined` there.
+
+Checked live with the same steps: the log shows a second `Joined the open connection for …/gtwo`,
+the tree is complete and folders expand; the screen stays on `gone` when `gtwo`'s tab is closed.
+
+Not checked: the opening session's own project closed and opened again (the tree reset is there,
+other state such as editor tabs was not looked at).
