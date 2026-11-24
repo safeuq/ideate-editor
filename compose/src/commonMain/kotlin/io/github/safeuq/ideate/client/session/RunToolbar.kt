@@ -73,6 +73,9 @@ internal class RunToolbar(
     fun showSelection() {
       val current = configurations.clientCurrentConfiguration.value
       val configuration = current?.let { configurations.runConfigurations[it] }
+      log(
+        "Run selection: $current → ${configuration?.name ?: "(not in the ${configurations.runConfigurations.size} configurations)"}",
+      )
       publishSelector(
         RunSelector(configuration?.name ?: CURRENT_FILE, configuration?.icon?.let(iconPath)),
       )

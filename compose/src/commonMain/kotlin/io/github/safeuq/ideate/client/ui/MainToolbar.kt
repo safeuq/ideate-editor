@@ -209,13 +209,18 @@ fun MainToolbar(
             selectorOpen = false
           }
       }
-      Row(control, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+      Row(control) {
         runButtons.forEach { button ->
           val iconPath = button.iconPath
           // The placeholder keeps Stop's place while nothing runs: an empty slot of a button's
           // size.
           if (button.actionId == INACTIVE_STOP || iconPath == null)
-            Spacer(Modifier.size(Islands.runButtonWidth, Islands.toolbarButton))
+            Spacer(
+              Modifier.size(
+                Islands.runButtonWidth + Islands.runButtonGap * 2,
+                Islands.toolbarButton,
+              ),
+            )
           else {
             val label = button.description ?: button.text ?: button.actionId
             // RunWidgetButtonLook: a running Run (and Debug) and Stop are filled; the strokes are
@@ -246,18 +251,21 @@ fun MainToolbar(
               onClick = { onRunButton(button.actionId, bounds) },
               modifier =
                 Modifier.onGloballyPositioned { coordinates ->
-                  // The popup's place is in dp.
-                  val box = coordinates.boundsInWindow()
-                  bounds =
-                    with(density) {
-                      IntRect(
-                        box.left.toDp().value.roundToInt(),
-                        box.top.toDp().value.roundToInt(),
-                        box.right.toDp().value.roundToInt(),
-                        box.bottom.toDp().value.roundToInt(),
-                      )
-                    }
-                },
+                    // The popup's place is in dp; the bounds include the gaps, as the button
+                    // component's do in IntelliJ.
+                    val box = coordinates.boundsInWindow()
+                    bounds =
+                      with(density) {
+                        IntRect(
+                          box.left.toDp().value.roundToInt(),
+                          box.top.toDp().value.roundToInt(),
+                          box.right.toDp().value.roundToInt(),
+                          box.bottom.toDp().value.roundToInt(),
+                        )
+                      }
+                  }
+                  // RunWidgetButtonLook paints the highlight inside the button's border gaps.
+                  .padding(horizontal = Islands.runButtonGap),
               size = Islands.toolbarButton,
               iconSize = Islands.toolbarIcon,
               enabled = button.enabled,

@@ -273,3 +273,34 @@ A row without an icon (Edit…, Delete) gets an empty 16 dp slot once any row of
 icon, as `PopupFactoryImpl.ActionItem` gives such an action `EmptyIcon.create(maxIconWidth,
 maxIconHeight)`. Its text then lines up with "Run 'Forever'" above it. The "Configuration" header
 stays at the left inset.
+
+## Addendum (2026-11-24): GroupHeaderSeparator, run button widths, the selection log
+
+**Section headings.** IntelliJ draws the heading above a group of list rows with one component,
+`GroupHeaderSeparator`, in list popups (`PopupListElementRenderer.createSeparator`), combo boxes
+(`GroupedComboBoxRenderer`), completion (`LookupCellRenderer`) and tab lists (`JBTabsImpl`). Ideate
+now has the same as `ui/component/GroupHeaderSeparator.kt`, used by `PopupListView` (More Actions'
+"Configuration", the project popup's "Open Projects" and "Recent Projects", and their plain lines):
+
+| Part | IntelliJ (new UI) | Value |
+|---|---|---|
+| Line | `Popup.separatorInsets` (default 4,8), 1 px, `Popup.separatorColor` | dark `popup-border` #33353B, light `dialog-border` #E9EAEE (theme `"*"` map) |
+| Caption | `Popup.separatorLabelInsets` (default 3,16) | 3 above and below, 16 from the cell |
+| Font | `RelativeFont.BOLD.derive(JBFont.smallOrNewUiMedium())` | bold, 12 next to the 13 UI font |
+| Colour | `Popup.separatorForeground` | `text-secondary` |
+| First row | `setHideLine(myCurrentIndex == 0)` | caption only |
+
+The insets are from the list cell; a row's selection is `Popup.Selection.leftRightInset` (8) in
+from it, so in Ideate (rows at the selection's edge) the line spans the rows and the caption starts
+with their icons.
+
+**Run buttons.** The 34 × 32 measured in JetBrains Client is the button component with its border:
+`RunWidget.actionButtonWidth.compact` 26 plus `RunWidget.toolbarBorderDirectionalGap.compact` 4 on
+each side (normal: 30 and 2). `RunWidgetButtonLook` paints the hover, pressed and running fills
+inside the border, so the highlight is 26 × 26, not 34 wide. The More Actions anchor still uses the
+whole 34.
+
+**Selection log.** `RunToolbar` logs `Run selection: <clientCurrentConfiguration> → <name>` each
+time it shows the selection, e.g. `Gradle.forever2 → forever2`, or `null → (not in the 5
+configurations)` for Current File. Choosing forever2 and then Current File in the selector changed
+the label both times on the test backend (2026-11-24).

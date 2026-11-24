@@ -108,4 +108,19 @@ class IslandsTest {
     LafManager.setCurrentLookAndFeel(LafManager.defaultLightTheme)
     assertEquals(light.map(::Color), colors())
   }
+
+  /**
+   * GroupHeaderSeparator's keys through the theme's "*" map: separatorColor is popup-border in dark
+   * (#33353B) but dialog-border in light (#E9EAEE); separatorForeground is text-secondary.
+   */
+  @Test
+  fun groupHeaderKeysResolve() {
+    val lines =
+      listOf(LafManager.defaultDarkTheme to 0xFF33353B, LafManager.defaultLightTheme to 0xFFE9EAEE)
+    for ((theme, line) in lines) {
+      LafManager.setCurrentLookAndFeel(theme)
+      assertEquals(Color(line), Islands.color("Popup.separatorColor"))
+      assertEquals(Islands.textSecondary, Islands.color("Popup.separatorForeground"))
+    }
+  }
 }
