@@ -1,4 +1,7 @@
 import java.nio.file.Files
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 import org.jetbrains.compose.reload.gradle.ComposeHotRun
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -164,5 +167,176 @@ tasks {
         "Hot reload runs on ${runtime.vendor} ${runtime.languageVersion}; set JAVA_HOME to a JetBrains Runtime 25 or newer (IntelliJ's: Contents/jbr/Contents/Home)"
       }
     }
+  }
+}
+
+// The macOS disk image (docs/release-dmg.md): `./gradlew :desktop:packageDmg` writes
+// build/dmg/Ideate-<version>.dmg. Compose's own packageDmg cannot be used: it builds the runtime
+// with jlink, and the JetBrains Runtime the app needs has no jlink and no jmods.
+// jpackage refuses a version that starts with 0 on macOS, so the first release is 1.0.0.
+val dmgVersion = providers.gradleProperty("ideateVersion").orElse("1.0.0")
+val dmgFolder = layout.buildDirectory.dir("dmg")
+val clientRoot = file(jetbrainsClientLib).parentFile
+
+// jpackage comes with a full JDK, e.g. ~/.sdkman/candidates/java/25.0.5.0+8-tem/bin/jpackage;
+// -Pjpackage=<path> names it when the Java 25 that Gradle finds is a JetBrains Runtime.
+val jpackagePath =
+  providers
+    .gradleProperty("jpackage")
+    .orElse(
+      javaToolchains
+        .launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+        .map { it.metadata.installationPath.file("bin/jpackage").asFile.path },
+    )
+
+fun runCommand(vararg command: String) {
+  val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+  val output = process.inputStream.bufferedReader().readText()
+  check(process.waitFor() == 0) { "${command.joinToString(" ")} failed:\n$output" }
+}
+
+// Every SVG of the client's jars in one jar, as the Android app packs them (ClientAssets in
+// android/build.gradle.kts): DesktopResources.JarIcons looks through every jar under
+// jetbrains.client.lib, and the client's own lib and plugins folders are 2.5 GB.
+val dmgIconsJar by tasks.registering {
+  val iconJars =
+    files("$jetbrainsClientLib/intellij.platform.icons.jar") +
+      fileTree(clientRoot) { include("lib/**/*.jar", "plugins/**/*.jar") }
+  val output = dmgFolder.map { it.file("icons/icons.jar") }
+  inputs.files(iconJars)
+  outputs.file(output)
+  doLast {
+    val written = mutableSetOf<String>()
+    ZipOutputStream(output.get().asFile.outputStream()).use { icons ->
+      iconJars.forEach { jar ->
+        ZipFile(jar).use { zip ->
+          zip
+            .entries()
+            .asSequence()
+            .filter { it.name.endsWith(".svg") && written.add(it.name) }
+            .forEach { entry ->
+              icons.putNextEntry(ZipEntry(entry.name))
+              zip.getInputStream(entry).use { it.copyTo(icons) }
+              icons.closeEntry()
+            }
+        }
+      }
+    }
+  }
+}
+
+// Becomes Ideate.app/Contents/app. `client/` has the same shape as a JetBrains Client install, so
+// Main.kt reads fonts and icons from it through jetbrains.client.lib as it does in a Gradle run.
+val dmgInput by
+  tasks.registering(Sync::class) {
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    into(dmgFolder.map { it.dir("input") })
+    from(tasks.jar)
+    from(configurations.runtimeClasspath)
+    from(files("$jetbrainsClientLib/intellij.platform.icons.jar", dmgIconsJar)) {
+      into("client/lib")
+    }
+    from(
+      listOf(
+          "JetBrainsMono-Regular.ttf",
+          "JetBrainsMono-Bold.ttf",
+          "JetBrainsMono-Italic.ttf",
+          "JetBrainsMono-BoldItalic.ttf",
+          "Inter-Regular.otf",
+          "Inter-SemiBold.otf",
+        )
+        .map { clientRoot.resolve("jbr/Contents/Home/lib/fonts/$it") },
+    ) {
+      into("client/jbr/Contents/Home/lib/fonts")
+    }
+  }
+
+val dmgAppImage by tasks.registering {
+  description = "Builds build/dmg/image/Ideate.app with the client's JetBrains Runtime inside"
+  dependsOn(dmgInput)
+  val image = dmgFolder.map { it.dir("image") }
+  val icon = rootProject.file("app-icon/dark/macos/Ideate.icns")
+  inputs.files(dmgInput, icon)
+  inputs.property("version", dmgVersion)
+  outputs.dir(image)
+  doLast {
+    check(isMac) { "The DMG is built on macOS only" }
+    val jpackage = jpackagePath.get()
+    check(file(jpackage).isFile) {
+      "No jpackage at $jpackage; pass -Pjpackage=<a full JDK 25>/bin/jpackage"
+    }
+    val runtime = clientRoot.resolve("jbr")
+    check(runtime.resolve("Contents/Home/bin/java").isFile) { "No JetBrains Runtime at $runtime" }
+    check(icon.isFile) { "No icon at $icon" }
+    // Gradle's delete removes links without following them (the runtime copy has some).
+    delete(image)
+    runCommand(
+      jpackage,
+      "--type",
+      "app-image",
+      "--name",
+      "Ideate",
+      "--app-version",
+      dmgVersion.get(),
+      "--mac-package-identifier",
+      "io.github.safeuq.ideate",
+      "--icon",
+      icon.path,
+      "--input",
+      dmgFolder.get().dir("input").asFile.path,
+      "--main-jar",
+      tasks.jar.get().archiveFileName.get(),
+      "--main-class",
+      compose.desktop.application.mainClass!!,
+      "--runtime-image",
+      runtime.path,
+      "--java-options",
+      "-Djetbrains.client.lib=\$APPDIR/client/lib",
+      // What Compose's run task sets: Swing follows the system's text and menu settings.
+      "--java-options",
+      "-Dcompose.application.configure.swing.globals=true",
+      "--dest",
+      image.get().asFile.path,
+    )
+    // The title bar's layout follows the SDK the launcher was built with (see prepareSdk26Jbr).
+    val app = image.get().dir("Ideate.app").asFile
+    val launcher = app.resolve("Contents/MacOS/Ideate").path
+    runCommand(
+      "xcrun",
+      "vtool",
+      "-set-build-version",
+      "macos",
+      "11.0",
+      "26.0",
+      "-replace",
+      "-output",
+      launcher,
+      launcher,
+    )
+    runCommand("codesign", "--force", "--deep", "--sign", "-", app.path)
+  }
+}
+
+val packageDmg by tasks.registering {
+  description = "Builds build/dmg/Ideate-<version>.dmg (docs/release-dmg.md)"
+  dependsOn(dmgAppImage)
+  val dmg = dmgFolder.zip(dmgVersion) { folder, version -> folder.file("Ideate-$version.dmg") }
+  inputs.files(dmgAppImage)
+  outputs.file(dmg)
+  doLast {
+    delete(dmg)
+    runCommand(
+      jpackagePath.get(),
+      "--type",
+      "dmg",
+      "--name",
+      "Ideate",
+      "--app-version",
+      dmgVersion.get(),
+      "--app-image",
+      dmgFolder.get().dir("image/Ideate.app").asFile.path,
+      "--dest",
+      dmgFolder.get().asFile.path,
+    )
   }
 }

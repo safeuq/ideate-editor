@@ -16,6 +16,7 @@ docs/           all documentation (below)
 |---|---|
 | [`client.md`](docs/client.md) | code layout and modules; run the desktop build |
 | [`android-app.md`](docs/android-app.md) | build, install and run the Android app |
+| [`release-dmg.md`](docs/release-dmg.md) | build the macOS disk image of the desktop app (`:desktop:packageDmg`): what is bundled, how it was checked, what is open before a public release |
 | [`split-protocol.md`](docs/split-protocol.md) | how JetBrains Client talks to the backend, and running rd on Android |
 | [`edit-protocol.md`](docs/edit-protocol.md) | the editing messages in detail |
 | [`edit-protocol-client.md`](docs/edit-protocol-client.md) | how JetBrains Client sends edits, guesses their result, rebases on the backend's answers, retries and recovers (decompiled) |
