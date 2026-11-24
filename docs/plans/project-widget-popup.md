@@ -136,3 +136,88 @@ section is filled by the backend, and IntelliJ's names are kept.
 ## Open decision
 
 Build the full popup (recommended), or match the Gateway client's top block only.
+
+## Addendum (2026-11-24): checked in a running JetBrains Client; the backend builds the popup
+
+The section "What the JetBrains Client does" above is wrong, and "Design", "Steps" and "Unknown
+until step 1" are replaced by this addendum. The bytecode was read correctly, but the client's own
+`ProjectToolbarWidgetAction` is not what runs: the widget and its popup come from the backend.
+
+How it was checked: a backend of its own on port 5997 (separate settings, projects `alpha` and
+`beta` open), JetBrains Client 263.7307.200 started on its join link with
+`IJ_JAVA_OPTIONS='-Didea.log.trace.categories=protocol.SEND,protocol.RECV'`. The project widget was
+pressed through macOS accessibility (System Events), the popup's rows were read the same way, and
+the rd trace was read for the same seconds (06:52:18 IST). Screen capture isn't allowed from the
+agent's shell, so there is no picture; the accessibility rows are the evidence.
+
+### What the client's popup shows (**seen**)
+
+| Row | Text |
+|---|---|
+| 1 | New Project… |
+| 2 | Open… |
+| 3 | Clone Repository… |
+| 4 | IntelliJ IDEA Home |
+| 5, under the title "Open Projects" | `beta`, `…/widget-backend/beta` |
+| 6 | `alpha`, `…/widget-backend/alpha` |
+| below the list | Press F1 to toggle preview |
+
+So the client has the same popup as IntelliJ, with "IntelliJ IDEA Home", the "Open Projects"
+title and the advertisement line, and without a Toolbox entry. There was no "Recent Projects"
+section only because this backend's settings were new and both of its projects were open.
+
+### How it gets there (**seen** in the trace)
+
+| Step | Message | Example |
+|---|---|---|
+| The toolbar's items | `AsyncActionsModel.expandGroup` for `composite:MainToolbarGeneralActionsGroup;MainToolbarLeft;…;main.toolbar.Project` | answers `ActionIdAndPresentationModel(id = main.toolbar.Project, PresentationModel(flags = 2179, text = "alpha", icon = AvatarIconModel(targetSize = 16, arcRatio = 0.4, FullProjectAvatarIconPresentationModel(name = "alpha", path = "…/alpha")), description = "…/alpha"))` |
+| The widget itself | `AsyncActionsModel.getComponent(ActionComponentRequest(actionId = "main.toolbar.Project", place = "MainToolbar", factoryId = 1, projectId))` | answers a `BeContextActionBehavior`; its `content` has `text = "alpha"`, `leftIcons = [AvatarIconModel]` and the signal `doAction`. The client writes `uniqueId` (23) and `content.uniqueId` (22) |
+| A click | the client fires `getComponent.<call>.content.doAction(RectangleModel(x = 362, y = 78, width = 87, height = 26))`: the widget's bounds | 71 ms later the popup arrives |
+| The popup | the backend adds `UIAutomationInteractionModel.activePopups[1]`: a `BeAbstractPopup` with `content = WizardPopupContent(step, inputMap = [10 → handleSelection1, 27 → goBack3, …])`, `settings.cancelOnClickOutside = true`, and `context = BePopupPositionComponentContext(ownerAnchor = BOTTOM_LEFT, popupAnchor = TOP_LEFT)` | |
+| The rows | `activePopups[1].content.step.items`: one `BeListPopupLine` per row, keys 0 to 5 | a project row's `columnElements` are a `BeStyleControl` holding a grid: the title label ("Open Projects") when the row starts a section, then the icon (`DeferredIconModel`), the name (`RichTextModel` "beta") and the path (`RichTextModel` in `NamedColor("Label.infoForeground")`), with `BeMargin`s between them |
+
+So the backend runs `ProjectToolbarWidgetAction`, `ProjectWidgetRenderer` included, and sends the
+result as the same kind of list popup as the welcome screen's New ▾. The avatar's `targetSize = 16`
+and `arcRatio = 0.4` match what `MainToolbar.kt` already draws.
+
+### What Ideate has for this
+
+- `session/BackendPopups.kt` already shows `WizardPopupContent` popups (`PopupList` with `wizard`),
+  chooses a row and follows substeps. A `PopupRow` is one icon and one text, so a project row's
+  second line and a section title are not shown yet.
+- Nothing calls `AsyncActionsModel.getComponent` yet.
+
+### Design
+
+1. **Widget.** Ask the backend for the widget: `getComponent` for `main.toolbar.Project` in
+   `MainToolbar`, and take the name and avatar from its `content` (`text`, `leftIcons`), in place of
+   `SessionState.projectName`.
+2. **Click.** Fire `content.doAction` with the widget's bounds. No action group is expanded by
+   Ideate, and no recent list is kept: the backend sends all of it.
+3. **Popup.** It arrives in `activePopups` and is shown by `BackendPopups`. Extend a row to what
+   `ProjectWidgetRenderer` sends: a section title above it, an icon, a name, and info-coloured lines
+   under the name. Sizes as in "A project row" above. Show `settings.adText` when it isn't empty.
+4. **Place.** Under the widget (`BOTTOM_LEFT` to `TOP_LEFT`) on a desktop; in the middle of the
+   screen on a phone, as Ideate's other popups.
+5. **After a choice.** Choosing an open project or a recent one is the backend's business: it opens
+   or focuses the project. Ideate has to follow to the solution the backend makes current.
+
+### Steps
+
+- [ ] 1. `ClientSession`: `getComponent` for `main.toolbar.Project`; the widget's text and avatar
+      in `SessionState`; `projectWidgetClicked(bounds)` fires `doAction`.
+- [ ] 2. `BackendPopups` and `BackendPopupView`: a `BeListPopupLine`'s grid read into a title,
+      an icon, a name and secondary lines; a test with the row recorded above.
+- [ ] 3. `MainToolbar.kt`: the widget from the backend's content, `onClick`, and its bounds.
+- [ ] 4. Follow a project switch: on the isolated backend with two projects, choose the other open
+      project and a recent one, and record what the backend sends (a new solution, `closeRequested`,
+      a This Window or New Window question).
+- [ ] 5. Before and After shots, an addendum to `split-protocol.md` for the paragraph named above,
+      a row in `pending.md`.
+
+### Unknown
+
+- Where `factoryId = 1` comes from (it wasn't looked up in the trace), and whether `getComponent`
+  needs the toolbar's `expandGroup` call first.
+- What the backend does for a client after an open or a recent project is chosen (step 4).
+- Whether the popup's speed search (typing to filter) runs on the backend for this popup kind.
