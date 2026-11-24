@@ -1043,3 +1043,22 @@ both ends on the content: `left = start - x`, `right = viewport + max - end - x`
 Every tree draws its rows through `ProjectTreeView`, so this covers Project, Structure, the folder
 chooser and the backend dialogs' trees. A future list that scrolls sideways should call
 `drawRowBand` too.
+
+## 28. A popup without focus closes on a press outside it (2026-11-24)
+
+After a ⌘-click on a declaration, the usages popup stayed open wherever you clicked next. On the
+desktop each popup is its own borderless window (`WindowPopupHost`, §24), and it closed only when that
+window lost the focus. The usages list and completion are shown with `focusable = false`, so their
+window never had the focus and never lost it.
+
+IntelliJ cancels such popups on any mouse press outside them (`AbstractPopup` built with
+`setCancelOnClickOutside(true)`, closed by `IdePopupManager` on `MOUSE_PRESSED`). `WindowPopupHost`
+now does the same for a popup that doesn't take the focus: an AWT listener on mouse presses closes it
+when the press is in any window it doesn't own. Focusable popups still close on focus loss.
+
+| Press | Before | After |
+|---|---|---|
+| on the usages popup | stays | stays |
+| elsewhere in the editor or another pane | stays | closes, and the press also reaches what was clicked, as in IntelliJ |
+
+`PopupWindowTest.pressOutsideClosesAPopupWithoutFocus` checks both with posted events.

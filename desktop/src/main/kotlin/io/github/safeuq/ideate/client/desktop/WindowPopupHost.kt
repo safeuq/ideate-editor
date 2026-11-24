@@ -26,13 +26,18 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.PopupPositionProvider
 import io.github.safeuq.ideate.client.ui.component.PopupHost
+import java.awt.AWTEvent
+import java.awt.Component
 import java.awt.Dialog
 import java.awt.Rectangle
 import java.awt.Toolkit
 import java.awt.Window
+import java.awt.event.AWTEventListener
+import java.awt.event.MouseEvent
 import java.awt.event.WindowEvent
 import java.awt.event.WindowFocusListener
 import javax.swing.RootPaneContainer
+import javax.swing.SwingUtilities
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
@@ -124,9 +129,20 @@ class WindowPopupHost(private val owner: Window) : PopupHost {
           }
         }
       dialog.addWindowFocusListener(focusListener)
+      // A popup that never takes the focus (the usages list after a ⌘-click) never loses it
+      // either, so a press anywhere outside it closes it, as IntelliJ's popups with
+      // cancelOnClickOutside (IdePopupManager on MOUSE_PRESSED).
+      val pressListener = AWTEventListener { event ->
+        if (focusable || event.id != MouseEvent.MOUSE_PRESSED) return@AWTEventListener
+        val source = event.source as? Component ?: return@AWTEventListener
+        val window = source as? Window ?: SwingUtilities.getWindowAncestor(source)
+        if (window == null || !isOwnedBy(window, dialog)) currentDismiss?.invoke()
+      }
+      Toolkit.getDefaultToolkit().addAWTEventListener(pressListener, AWTEvent.MOUSE_EVENT_MASK)
       dialog.setSize(1, 1)
       dialog.isVisible = true
       onDispose {
+        Toolkit.getDefaultToolkit().removeAWTEventListener(pressListener)
         dialog.removeWindowFocusListener(focusListener)
         dialog.dispose()
       }

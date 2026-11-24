@@ -23,8 +23,11 @@ import java.awt.GraphicsEnvironment
 import java.awt.Rectangle
 import java.awt.Robot
 import java.awt.Window
+import java.awt.event.InputEvent
+import java.awt.event.MouseEvent
 import javax.swing.SwingUtilities
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -54,6 +57,66 @@ class PopupWindowTest {
     assertTrue(popup.bounds.height >= 195, "popup ${popup.bounds} should be 200 points tall")
     assertTrue(popup.bounds.y >= 100 + 120 - 30, "popup ${popup.bounds} under the window")
     popup.drawnColor?.let { assertTrue(it.red > 200 && it.green < 60, "popup drawn $it, not red") }
+  }
+
+  /**
+   * A popup that never takes the focus (the usages list): a press on it keeps it, a press in the
+   * main window closes it. Pressed with posted events, not the real mouse.
+   */
+  @Test
+  fun pressOutsideClosesAPopupWithoutFocus() {
+    if (GraphicsEnvironment.isHeadless()) return
+    lateinit var frame: ComposeWindow
+    val shown = mutableStateOf(false)
+    val dismissed = java.util.concurrent.atomic.AtomicInteger()
+    SwingUtilities.invokeAndWait {
+      frame = ComposeWindow()
+      frame.bounds = Rectangle(100, 100, 400, 300)
+      frame.setContent {
+        CompositionLocalProvider(LocalPopupHost provides WindowPopupHost(frame)) {
+          Box(Modifier.fillMaxSize()) {
+            Box(Modifier.align(Alignment.BottomStart).size(10.dp)) {
+              if (shown.value)
+                AppPopup(
+                  PopupPlacement(IntOffset(0, 0), 0),
+                  onDismissRequest = { dismissed.incrementAndGet() },
+                  focusable = false,
+                ) {
+                  Box(Modifier.size(200.dp).background(Color.Red))
+                }
+            }
+          }
+        }
+      }
+      frame.isVisible = true
+    }
+    try {
+      Thread.sleep(500)
+      SwingUtilities.invokeAndWait { shown.value = true }
+      val popup = assertNotNull(waitForPopup(frame), "no popup window opened")
+      press(popup)
+      assertEquals(0, dismissed.get(), "a press on the popup closed it")
+      press(frame)
+      assertEquals(1, dismissed.get(), "a press in the main window left the popup open")
+    } finally {
+      SwingUtilities.invokeAndWait { frame.dispose() }
+    }
+  }
+
+  private fun press(window: Window) = SwingUtilities.invokeAndWait {
+    window.dispatchEvent(
+      MouseEvent(
+        window,
+        MouseEvent.MOUSE_PRESSED,
+        System.currentTimeMillis(),
+        InputEvent.BUTTON1_DOWN_MASK,
+        5,
+        5,
+        1,
+        false,
+        MouseEvent.BUTTON1,
+      ),
+    )
   }
 
   private class Shown(val bounds: Rectangle, val drawnColor: java.awt.Color?)
