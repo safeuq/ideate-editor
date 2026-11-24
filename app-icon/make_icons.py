@@ -59,7 +59,7 @@ def macos_svg(variant):
 
 # Android adaptive icon: 108 dp layer, launcher masks show at most the middle 72 dp, and the art must stay
 # inside the middle 66 dp circle. The bulb is centred on (100, 105.5) and reaches 76 units from there.
-ANDROID_TRANSFORM = "translate(54 54) scale(0.408) translate(-100 -105.5)"
+ANDROID_TRANSFORM = "translate(54 54) scale(0.310) translate(-100 -105.5)"
 
 
 def android_foreground_svg(variant):
