@@ -437,3 +437,10 @@ popup. Its tap area is 20 × 24 dp with the icon at the right end: 6 dp after th
 detail line's right edge. The user chose this on 2026-11-19 from three options (× after the bar,
 Cancel beside the text everywhere, detail and Cancel sharing the last row). Checked in the gallery: `CLIENT_GALLERY=<out>.png`
 now also writes `<out>-progress.png` (900 dp) and `<out>-progress-narrow.png` (411 dp).
+
+## Addendum (2026-11-24, 12:45 IST): `SwipePager` is now `SlidePager`
+
+`SwipePager` (private, in `ui/ClientScreen.kt`) no longer exists. The island pages of a phone held
+upright are slid by the generic `SlidePager` in `ui/SlidePager.kt`, which also slides the open
+projects on a phone. The behaviour described above is unchanged; its parameters and how each of
+the two uses fills them are in `docs/plans/project-tabs.md`, the addendum of 2026-11-24, 12:40 IST.

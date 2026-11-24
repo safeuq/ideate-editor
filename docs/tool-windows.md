@@ -293,3 +293,10 @@ Tests: `compose/src/jvmTest/.../session/BackendTabsTest.kt` (the tab name mappin
 **Cause.** `LuxPaneView` measured its pane with `boundsInWindow()`, which is cut at the window's edge. While a page slid out (phone upright, `SwipePager`), the visible width shrank every frame, e.g. 393 → 371 → 340 dp, and each width went to the backend as the panel's size (`LuxPanelHost.resize` → `panel.size`). Each new size gave `LuxSurface` a new, empty bitmap until the backend had laid the panel out and painted it again, so the Database window (a Lux panel) went blank for the whole slide (screen recording on the Pixel 3a emulator: blank from the 8th frame of the swipe).
 
 **Fix.** The pane is measured whole: `positionInWindow()` plus `coordinates.size`, so a slide only moves the panel (`position`), and its size stays. When the size really changes (the page's rounded corners come back while it moves), `LuxSurface` copies the old pixels into the new bitmap, so the old picture stays until the backend's paint arrives. Checked with the same recording: the Database window stays drawn in every frame of the slide.
+
+## Addendum (2026-11-24, 12:45 IST): `SwipePager` is now `SlidePager`
+
+`SwipePager` (private, in `ui/ClientScreen.kt`) no longer exists. The island pages of a phone held
+upright are slid by the generic `SlidePager` in `ui/SlidePager.kt`, which also slides the open
+projects on a phone. The behaviour described above is unchanged; its parameters and how each of
+the two uses fills them are in `docs/plans/project-tabs.md`, the addendum of 2026-11-24, 12:40 IST.

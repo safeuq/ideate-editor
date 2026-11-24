@@ -273,3 +273,10 @@ Checked on the emulator (Pixel 3a, Wide.java at 123 lines × about 330 columns):
 - A tap still selected a tree row.
 
 **Pitfall:** read `positionChange()` before `consume()`, because a consumed change reports zero. The first build had them the other way round and moved only by the fling.
+
+## Addendum (2026-11-24, 12:45 IST): `SwipePager` is now `SlidePager`
+
+`SwipePager` (private, in `ui/ClientScreen.kt`) no longer exists. The island pages of a phone held
+upright are slid by the generic `SlidePager` in `ui/SlidePager.kt`, which also slides the open
+projects on a phone. The behaviour described above is unchanged; its parameters and how each of
+the two uses fills them are in `docs/plans/project-tabs.md`, the addendum of 2026-11-24, 12:40 IST.
