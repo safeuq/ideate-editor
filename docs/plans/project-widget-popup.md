@@ -714,3 +714,30 @@ Checked with that option: the choice adds `…/projects/IdeaHome` to `solutions`
 two projects). `~/IdeaProjects/IdeaHome` kept its modification time.
 
 Nothing of this plan is open now.
+
+## Addendum (2026-11-24, 10:30 IST): a project's branch is a line of its own
+
+User report: the popup showed `~/Files/Projects/XFlow/commonsmain` and
+`~/Files/Projects/XFlow/xtoolhttp-error-handler`, and `commons` had a branch icon where its avatar
+belongs. For a project in a git repository `ProjectToolbarWidgetAction`'s renderer adds a third
+row, so the `BeGridLayoutPanel` has one more cell:
+
+| Cell | Content | IntelliJ |
+|---|---|---|
+| first | the avatar (or its `DeferredIconModel`) | the row's icon, 20 px |
+| name | `commons` | label |
+| path | `~/Files/Projects/XFlow/commons` | `JBFont.smallOrNewUiMedium()`, info colour |
+| branch | `main`, with `AllIcons.Vcs.Branch` coloured with the info colour | the same font and colour |
+
+`BeRow.of` joined the text of every cell after the name into one string, and took the first icon
+of the whole line for the row, so the branch icon won while the avatar was still deferred. Now each
+text cell after the name is a `RowDetail(text, iconPath)` in `BeRow.details` / `PopupRow.details`,
+and such a cell's icon is that line's only. `PopupListView` draws one 12 sp line per detail in
+`Islands.textSecondary`, the icon 16 dp, tinted the same colour, 4 dp before the text. The filter
+looks in every detail, so `main` finds the projects on that branch, as `PopupLineStep.getTextFor`
+would.
+
+The test projects before this were not git repositories, which is why it was not seen. Checked live
+with `alpha` on `main` and `beta` on `http-error-handler`: three lines each, avatars in place.
+The backend sends the branch a few seconds after the project opens; a popup opened before that has
+no branch line. Test: `BackendPopupRowTest.aProjectRowKeepsItsPathAndItsBranchApartAndItsOwnIcon`.

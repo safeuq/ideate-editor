@@ -91,14 +91,15 @@ class PopupList(
     private set
 
   /**
-   * Whether [row] passes [filter], against its text and second line (`PopupLineStep.getTextFor`
-   * joins every text of the line), e.g. `bet` shows `beta` and a row whose path has `/beta-old`.
+   * Whether [row] passes [filter], against its text and the lines under it
+   * (`PopupLineStep.getTextFor` joins every text of the line), e.g. `bet` shows `beta` and a row
+   * whose path has `/beta-old`.
    */
   // ponytail: a substring check; IntelliJ's SpeedSearch uses its name matcher (camel humps, `*`).
   fun shows(row: PopupRow): Boolean =
     filter.isEmpty() ||
       row.text.contains(filter, ignoreCase = true) ||
-      row.description?.contains(filter, ignoreCase = true) == true
+      row.details.any { it.text.contains(filter, ignoreCase = true) }
 
   /** [text] is the new [filter]; the first row it shows becomes the selected one. */
   fun type(text: String) {
@@ -115,6 +116,12 @@ class PopupList(
   }
 }
 
+/**
+ * One small grey line under a row's text, e.g. `RowDetail("~/work/commons", null)` and
+ * `RowDetail("main", "expui/vcs/branch.svg")` for a project on branch `main`.
+ */
+data class RowDetail(val text: String, val iconPath: String?)
+
 /** One row of a [PopupList]: its icon (a path in the client's icon jar) and text. */
 class PopupRow(
   iconPath: String?,
@@ -122,8 +129,8 @@ class PopupRow(
   internal val line: BeTreeGridLine,
   /** A separator with this title above the row, e.g. "Configuration" over More Actions' Edit…. */
   val header: String? = null,
-  /** A second line under [text], e.g. a project's path in the project widget's popup. */
-  val description: String? = null,
+  /** The lines under [text], e.g. a project's path and its branch in the project widget's popup. */
+  val details: List<RowDetail> = emptyList(),
   /** [BeRow.deferredIcon]: the icon arrives later and replaces [iconPath] or sets [avatar]. */
   internal val deferredIcon: Long? = null,
 ) {
@@ -205,7 +212,7 @@ internal class BackendPopups(
   /** A row of a list, with its deferred icon if that is ready already. */
   private fun row(line: BeTreeGridLine): PopupRow {
     val row = BeRow.of(line, iconPath)
-    return PopupRow(row.icon, row.text, line, row.header, row.description, row.deferredIcon).also {
+    return PopupRow(row.icon, row.text, line, row.header, row.details, row.deferredIcon).also {
       it.avatar = row.avatar
       readyIcons[row.deferredIcon]?.let { icon -> showIcon(it, icon) }
     }
@@ -533,8 +540,11 @@ internal class BeRow(
   val icon: String?,
   val fragments: List<TextFragment>,
   val header: String? = null,
-  /** The text of a [BeGridLayoutPanel]'s cells after the first, e.g. a project's path. */
-  val description: String? = null,
+  /**
+   * A [BeGridLayoutPanel]'s text cells after the first, one line each with the cell's own icon,
+   * e.g. a project's path, then its branch with the branch icon.
+   */
+  val details: List<RowDetail> = emptyList(),
   /** The id of the row's [DeferredIconModel]: `ShellModel.deferredIconReady` brings the icon. */
   val deferredIcon: Long? = null,
   /**
@@ -550,7 +560,7 @@ internal class BeRow(
     fun of(line: BeTreeGridLine, iconPath: (IconModel) -> String?): BeRow {
       var icon: String? = null
       var header: String? = null
-      var description: String? = null
+      val details = mutableListOf<RowDetail>()
       var deferredIcon: Long? = null
       var avatar: String? = null
       val fragments = mutableListOf<TextFragment>()
@@ -593,27 +603,32 @@ internal class BeRow(
             }
           }
           is BeGrid -> each.items.valueOrNull.orEmpty().forEach { look(it.content) }
-          // A row of the project widget's popup: cells [icon, "beta", "/projects/beta"], the path
-          // in a grid below the name's.
-          // ponytail: every text cell after the first is the second line; read `grids` (each
-          // grid's x and y) when a row lays its cells out another way.
+          // A row of the project widget's popup, as ProjectToolbarWidgetAction's renderer lays it
+          // out: cells [avatar, "commons", "~/work/commons", branch icon + "main"]. Each text cell
+          // after the name is a line of its own under it, and its icon is that line's, not the
+          // row's (the branch icon is not the project's icon).
+          // ponytail: lines by cell order; read `grids` (each grid's x and y) when a row lays its
+          // cells out another way.
           is BeGridLayoutPanel ->
             each.items.valueOrNull.orEmpty().forEach { cell ->
-              val named = fragments.any { it.text.isNotEmpty() }
+              if (fragments.none { it.text.isNotEmpty() }) return@forEach look(cell.content)
+              val rowIcon = Triple(icon, deferredIcon, avatar)
               val count = fragments.size
+              icon = null
               look(cell.content)
-              if (named && fragments.size > count) {
-                val added = fragments.subList(count, fragments.size)
-                description = description.orEmpty() + added.joinToString("") { it.text }
-                added.clear()
-              }
+              val added = fragments.subList(count, fragments.size)
+              if (added.isNotEmpty()) details += RowDetail(added.joinToString("") { it.text }, icon)
+              added.clear()
+              icon = rowIcon.first
+              deferredIcon = rowIcon.second
+              avatar = rowIcon.third
             }
           is BeControlContainer -> look(each.content)
           else -> Unit
         }
       }
       line.columnElements.forEach(::look)
-      return BeRow(icon, fragments, header, description, deferredIcon, avatar)
+      return BeRow(icon, fragments, header, details, deferredIcon, avatar)
     }
   }
 }

@@ -67,7 +67,7 @@ class BackendPopupRowTest {
     )
     val row = BeRow.of(BeTreeGridLine(listOf(panel))) { null }
     assertEquals("beta", row.text)
-    assertEquals("/projects/beta", row.description)
+    assertEquals(listOf(RowDetail("/projects/beta", null)), row.details)
     assertEquals(63L, row.deferredIcon)
   }
 
@@ -87,7 +87,12 @@ class BackendPopupRowTest {
   @Test
   fun typingKeepsTheRowsThatHaveTheTextAndSelectsTheFirst() {
     fun row(name: String, path: String?) =
-      PopupRow(null, name, BeTreeGridLine(listOf()), description = path)
+      PopupRow(
+        null,
+        name,
+        BeTreeGridLine(listOf()),
+        details = listOfNotNull(path).map { RowDetail(it, null) },
+      )
     val list =
       PopupList(
         listOf(row("Open…", null), row("alpha", "/work/beta-old"), row("beta", "/work/beta")),
@@ -99,5 +104,27 @@ class BackendPopupRowTest {
     assertEquals(2, list.selected)
     list.move(1)
     assertEquals(1, list.selected)
+  }
+
+  // A project in a git repository, as ProjectToolbarWidgetAction's renderer sends it: the branch is
+  // a line of its own with the branch icon. Seen joined as "~/work/commonsmain", and the branch
+  // icon as the row's icon, before the cells were read apart.
+  @Test
+  fun aProjectRowKeepsItsPathAndItsBranchApartAndItsOwnIcon() {
+    val branchIcon = EmptyIconModel(16, 16)
+    val panel = BeGridLayoutPanel()
+    panel.items.set(
+      listOf(
+        cell(0, text("", DeferredIconModel(63, EmptyIconModel(20, 20)))),
+        cell(2, text("commons")),
+        cell(3, text("~/work/commons")),
+        cell(4, text("main", DeferredIconModel(64, branchIcon))),
+      ),
+    )
+    val row = BeRow.of(BeTreeGridLine(listOf(panel))) { "branch.svg".takeIf { _ -> true } }
+    assertEquals("commons", row.text)
+    assertEquals(listOf("~/work/commons", "main"), row.details.map { it.text })
+    assertEquals("branch.svg", row.details[1].iconPath)
+    assertEquals(63L, row.deferredIcon)
   }
 }

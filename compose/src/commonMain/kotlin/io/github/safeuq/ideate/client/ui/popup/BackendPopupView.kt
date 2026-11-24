@@ -36,6 +36,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -277,9 +278,9 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
               style = text.copy(color = Islands.textSecondary),
             )
         }
-      // A project's row (name over path) is as tall as its two lines, with the 6 dp above and
-      // below that the backend's BeStyleControl margin asks for.
-      val description = row.description
+      // A project's row (name over path and branch) is as tall as its lines, with the 6 dp above
+      // and below that the backend's BeStyleControl margin asks for.
+      val details = row.details
       // In a list popup the row under the pointer is the selected one, as ListPopupImpl moves its
       // selection with the mouse: one highlight for hover, Up and Down.
       val interaction = remember { MutableInteractionSource() }
@@ -287,7 +288,7 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
       if (list.listPopup) LaunchedEffect(hovered) { if (hovered) list.selected = index }
       Row(
         Modifier.fillMaxWidth()
-          .then(if (description == null) Modifier.height(Look.rowHeight) else Modifier)
+          .then(if (details.isEmpty()) Modifier.height(Look.rowHeight) else Modifier)
           .background(
             if (index == list.selected) Islands.selectionBackground else Color.Transparent,
             RoundedCornerShape(Look.selectionRadius),
@@ -295,7 +296,7 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
           .clickable(interaction, indication = null) {
             session.popupSelect(list, row)
           }
-          .padding(horizontal = Look.rowInset, vertical = if (description == null) 0.dp else 6.dp),
+          .padding(horizontal = Look.rowInset, vertical = if (details.isEmpty()) 0.dp else 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Look.iconGap),
       ) {
@@ -308,18 +309,35 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
           if (painter != null) Image(painter, null, Modifier.size(16.dp))
           else if (iconSlot) Spacer(Modifier.size(16.dp))
         }
-        if (description == null)
+        if (details.isEmpty())
           BasicText(row.text, style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         else
           Column {
             BasicText(row.text, style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            // The backend sends no font size; IntelliJ's renderer uses JBFont.smallOrNewUiMedium().
-            BasicText(
-              description,
-              style = text.copy(color = Islands.textSecondary, fontSize = 12.sp),
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
+            // The backend sends no font size; IntelliJ's renderer uses JBFont.smallOrNewUiMedium()
+            // and the info colour for each of these lines, and for the branch line's icon.
+            val small = text.copy(color = Islands.textSecondary, fontSize = 12.sp)
+            details.forEach { detail ->
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+              ) {
+                detail.iconPath?.let(icons::painter)?.let {
+                  Image(
+                    it,
+                    null,
+                    Modifier.size(16.dp),
+                    colorFilter = ColorFilter.tint(Islands.textSecondary),
+                  )
+                }
+                BasicText(
+                  detail.text,
+                  style = small,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                )
+              }
+            }
           }
       }
     }
