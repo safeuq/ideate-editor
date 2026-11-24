@@ -95,8 +95,8 @@ import io.github.safeuq.ideate.client.ui.component.SplitPane
 import io.github.safeuq.ideate.client.ui.console.ConsoleEditor
 import io.github.safeuq.ideate.client.ui.dialog.DialogLook
 import io.github.safeuq.ideate.client.ui.dialog.dialogFrame
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
+import io.github.safeuq.ideate.client.ui.theme.ThemeKeys
 import io.github.safeuq.ideate.client.ui.theme.label
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -812,10 +812,14 @@ fun LuxPaneView(
           proportion = consoleShare,
           onProportion = { consoleShare = it },
           modifier = Modifier.fillMaxWidth().weight(1f),
-          // The line between console and tree is the border itself, as IntelliJ's OnePixelSplitter
-          // inside a tool window: 1 px in the tool window's border colour.
-          gap = with(LocalDensity.current) { 1.toDp() },
-          gapColor = IslandsDark.toolWindowBorder,
+          // The line between console and tree is the border itself, as IntelliJ's OnePixelSplitter:
+          // setDividerWidth(1) is unscaled, 1 Swing px, which is 1 dp (2 device px on a Mac), and
+          // OnePixelDivider paints JBColor.border() = Borders.color.
+          gap = 1.dp,
+          gapColor =
+            checkNotNull(ThemeKeys.color("Borders.color")) {
+              "Borders.color is missing from the UI color table"
+            },
           first = {
             Column(Modifier.fillMaxSize()) {
               if (frame != null) BuildToolbarRow(panel, frame, consoleCells, send, anchor)

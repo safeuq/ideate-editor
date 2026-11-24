@@ -684,3 +684,11 @@ Checked on the emulator (Run window, Gradle `tasks`, Soft-Wrap on): the button w
    java tools/ui-colors/GenerateUiColors.java colors.tsv compose/src/commonMain/kotlin/io/github/safeuq/ideate/client/ui/theme/IslandsDarkUiColors.kt <build>
    ```
    The table is split into string constants of at most 30 KB each, because a class-file constant holds at most 65,535 bytes.
+
+## Addendum (2026-11-24): the Build/Run console–tree divider is 1 dp in Borders.color
+
+Request (user, via the runtime session): the line was 1 device pixel. It is now 1 dp.
+- **Width:** `OnePixelSplitter` calls `setDividerWidth(1)` unscaled. That is 1 Swing pixel, which is 1 pt (2 device px) on a Mac and 1 dp here, the same width as the editor's gutter line.
+- **Colour:** `OnePixelDivider` paints `BACKGROUND = JBColor.border()`, which is `namedColor("Borders.color", …)`. It doesn't read `OnePixelDivider.background`, although both are #26282C in Islands Dark. The colour now comes from `ThemeKeys.color("Borders.color")`, as IntelliJ's code reads it.
+
+Emulator (2.75 px per dp): the line went from 1 row (y 1436) to 3 rows (y 1434–1436) of (38,40,44).
