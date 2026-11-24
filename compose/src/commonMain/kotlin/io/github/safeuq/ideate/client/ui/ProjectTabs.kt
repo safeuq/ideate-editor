@@ -151,12 +151,13 @@ private fun ProjectTab(
         hovered -> Islands.projectTabHoverBackground
         else -> null
       }
-    // fillRoundRect 1 px in from each side, full height, arc Island.arc 10.
+    // fillRoundRect 1 px in from each side, full height, arc Island.arc (20 in the Islands themes,
+    // a diameter).
     if (fill != null) {
       Box(
         Modifier.matchParentSize()
           .padding(horizontal = 1.dp)
-          .background(fill, RoundedCornerShape(5.dp)),
+          .background(fill, RoundedCornerShape(Islands.islandRadius)),
       )
     }
     BasicText(

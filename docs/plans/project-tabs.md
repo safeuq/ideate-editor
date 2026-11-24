@@ -304,3 +304,10 @@ went from beta to alpha, a slide to the left on the last project did nothing).
 Not done: the page does not move with the finger while sliding (Chrome shows the neighbouring tab
 sliding in); the switch happens when the finger lifts. A tablet held upright is `PORTRAIT` too, so
 it gets no bar either.
+
+## Addendum (2026-11-24, 12:05 IST): the tab's corner radius is 10 dp, not 5
+
+`paintProjectTab` fills with arc `Island.arc`. The code default is 10, but the Islands themes set
+`"Island": { "arc": 20 }` (16 in compact mode; High Contrast 0), and the value is a diameter. So
+the corner radius is 10 dp (8 compact), the same as the islands. `ProjectTab` now uses
+`Islands.islandRadius` in place of the fixed `RoundedCornerShape(5.dp)`.
