@@ -203,3 +203,24 @@ A `null` factoryId is accepted for a toolbar. The buttons are asked for again wh
 `PresentationModel.flags` are IntelliJ's `Presentation.myFlags` copied as they are (`ActionsKt` copies them through a VarHandle on `myFlags`). Their bits are `IS_ENABLED` 0x1, `IS_VISIBLE` 0x2, `IS_KEEP_POPUP_IF_REQUESTED` 0x4, `IS_KEEP_POPUP_IF_PREFERRED` 0x8, `IS_POPUP_GROUP` 0x10, `IS_PERFORM_GROUP` 0x20, `IS_HIDE_GROUP_IF_EMPTY` 0x40, `IS_DISABLE_GROUP_IF_EMPTY` 0x80 and `IS_TEMPLATE` 0x1000. A run configuration's row is 0x8b3, a popup group that is also performed when chosen, so Ideate's menu shows it as an item that runs.
 
 Build is not in the row any more, because IntelliJ's run widget has no Build button. More Actions still says "not supported" until `ActionPopupContent` is handled.
+
+## Addendum (2026-11-24): the run widget's More Actions, debugger states and fills
+
+**More Actions.** A click on More Actions sends `RdCallActionRequest("MoreRunToolbarActions", "NewUiRunToolbar", inputEventModel = ScreenPointMouseEvent(…, componentRect = the button's bounds))`. Ideate sends the bounds in window dp. The backend then adds a popup, `activePopups[n] = BeAbstractPopup(content = ActionPopupContent(step), context = BePopupPositionScreenPointContext(x, y))`, whose point is in the same coordinates as the bounds that were sent. `ActionPopupContent.step` is an `ActionStepPopupContent`: a `StepPopupContent` with a `place` added. Its lines are `BeActionPopupLine`s, which are `BeListPopupLine`s that also carry the `action`. What a line shows is in its `columnElements`, for example a `BeLabel` icon followed by the `BeRichText` "Rerun 'Application: Alpha'". The action's template text ("R_un") is not what is shown. A `BeHeader(SEPARATOR)` in a line starts a titled section, such as "Configuration" above Edit… and Delete. Choosing a row fires `items[i].signal`; the client sends no `RdCallActionRequest` for it (seen by intellij-fable in a traced JetBrains Client). The backend answers `result` OK, then CANCEL, then CLOSE, and the client then removes the popup. This is the same sequence as for a `WizardPopupContent`.
+
+**Running buttons.** `PresentationModel.clientProperties` carries `NameEnumValue(enum = "ExecutorActionStatus", name = "EXECUTOR_ACTION_STATUS", ordinal)` on Run, Debug and `ConfigurationXDebuggerResumeAction`. The ordinals are NORMAL 0, LOADING 1 and RUNNING 2. `RunWidgetButtonLook` fills a button when it is enabled and either RUNNING or Stop:
+
+| Button | Fill | Icon |
+|---|---|---|
+| RUNNING Run or Debug | `RunWidget.runningBackground` (dark `#338555`, light `#4E9D6C`) | `RunWidget.runningIconColor` (white) |
+| Stop | `RunWidget.stopBackground` (dark `#C54E58`, light `#E4656E`) | `RunWidget.runningIconColor` |
+| Other Run or Debug | none | `RunWidget.runIconColor` (dark `#4E9D6C`) |
+| Anything else | none | `RunWidget.iconColor` (dark `#C3C5CB`) |
+
+The fill blends `RunWidget.hoverBackground` on hover and `RunWidget.pressedBackground` when pressed.
+
+**Debugger.** `filterOutRunIfDebugResumeIsPresent` (RedesignedRunWidget.kt) removes Run when a debugger Resume or Pause button is visible. Otherwise it removes Debug when an inline Stop is visible. The backend keeps Run visible in its answer, so Ideate applies the same filter. Pause and Resume are both `ConfigurationXDebuggerResumeAction`; only its presentation changes.
+
+**Stop while debugging (open).** `StopAction` is `ActionRemoteBehaviorSpecification.FrontendOtherwiseBackend`. JetBrains Client updates Stop itself, from its own run sessions (`StopAction.getActiveStoppableDescriptors`), and doesn't use the backend's answer. While a Gradle task was being debugged, the backend answered `Stop` 0x880 (hidden) for the whole session, so Ideate shows no Stop button then. For a plain Run the backend's answer shows Stop. To fix this, Ideate needs the list of running sessions that the client builds its Stop from.
+
+**Updates.** While Run or Debug reports RUNNING or LOADING, Ideate asks for the buttons again every 500 ms, as IntelliJ's toolbar updates on a timer. A Gradle debug session changes no `executingConfigurations` entry, so without this nothing would show Pause, Resume or the end of the session.

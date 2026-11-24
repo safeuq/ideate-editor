@@ -9,6 +9,7 @@ import com.jetbrains.rd.ide.model.AsyncActionUpdateRequest
 import com.jetbrains.rd.ide.model.AsyncActionsModel
 import com.jetbrains.rd.ide.model.GroupModel
 import com.jetbrains.rd.ide.model.IconModel
+import com.jetbrains.rd.ide.model.InputEventModel
 import com.jetbrains.rd.ide.model.KeyStrokeModel
 import com.jetbrains.rd.ide.model.KeyboardShortcutModel
 import com.jetbrains.rd.ide.model.PopupKindModel
@@ -127,8 +128,9 @@ internal class ActionMenus(
     actionId: String,
     place: String,
     timestamps: ActionTimestampSetModel,
-    disabled: () -> Unit = {},
+    inputEvent: InputEventModel? = null,
     done: () -> Unit = {},
+    disabled: () -> Unit = {},
   ) {
     val request =
       AsyncActionUpdateRequest(actionId, timestamps, place, PopupKindModel(false, false), null)
@@ -137,7 +139,7 @@ internal class ActionMenus(
         runCatching { result.unwrap() }
           .onFailure { failure -> log("$actionId not updated: ${failure.message}") }
           .getOrNull() ?: return@advise
-      if (presentation.isEnabled) send(actionId, presentation, place, timestamps, done)
+      if (presentation.isEnabled) send(actionId, presentation, place, timestamps, done, inputEvent)
       else {
         log("$actionId is disabled here")
         disabled()
@@ -155,11 +157,14 @@ internal class ActionMenus(
     place: String,
     timestamps: ActionTimestampSetModel,
     done: () -> Unit = {},
+    inputEvent: InputEventModel? = null,
   ) {
     // The backend runs only an action whose presentation, as sent back, is enabled: the one the
     // menu showed, or the one `update` returned.
     val requestId =
-      sendRequest(RdCallActionRequest(timestamps, actionId, place, presentation, null, false, null))
+      sendRequest(
+        RdCallActionRequest(timestamps, actionId, place, presentation, inputEvent, false, null),
+      )
     running[requestId] = Running(actionId, done)
     log("Running $actionId")
   }

@@ -8,6 +8,7 @@ import com.jetbrains.rd.ide.model.AsyncActionUpdateRequest
 import com.jetbrains.rd.ide.model.AsyncActionsModel
 import com.jetbrains.rd.ide.model.GroupModel
 import com.jetbrains.rd.ide.model.IconModel
+import com.jetbrains.rd.ide.model.NameEnumValue
 import com.jetbrains.rd.ide.model.ToolbarKindModel
 import com.jetbrains.rd.util.lifetime.Lifetime
 
@@ -23,7 +24,19 @@ data class RunToolbarButton(
   val description: String?,
   val iconPath: String?,
   val enabled: Boolean,
+  /**
+   * `EXECUTOR_ACTION_STATUS` (a client property the backend sends as an enum): Run and Debug have
+   * it, `RUNNING` while their configuration runs; null for the other buttons.
+   */
+  val executorStatus: ExecutorStatus? = null,
 )
+
+/** IntelliJ's `ExecutorActionStatus`, in its order: the backend sends the ordinal. */
+enum class ExecutorStatus {
+  NORMAL,
+  LOADING,
+  RUNNING,
+}
 
 /** The run configuration selector's label: `Application.Alpha` shows `Alpha`; none shows this. */
 data class RunSelector(val name: String = CURRENT_FILE, val iconPath: String? = null)
@@ -31,6 +44,7 @@ data class RunSelector(val name: String = CURRENT_FILE, val iconPath: String? = 
 private const val CURRENT_FILE = "Current File"
 private const val SELECTOR_ACTION = "RedesignedRunConfigurationSelector"
 private const val MAIN_GROUP = "RunToolbarMainActionGroup"
+private const val EXECUTOR_ACTION_STATUS = "EXECUTOR_ACTION_STATUS"
 
 /**
  * The run widget (docs/plans/run-toolbar.md): the backend's `RunToolbarMainActionGroup` in the
@@ -47,6 +61,8 @@ internal class RunToolbar(
   private val publishButtons: (List<RunToolbarButton>) -> Unit,
   private val publishSelector: (RunSelector) -> Unit,
   private val log: (String) -> Unit,
+  /** Runs the action on the rd thread after the delay in milliseconds. */
+  private val later: (delayMillis: Long, action: () -> Unit) -> Unit,
 ) {
   private var lifetime: Lifetime = Lifetime.Terminated
   /** Answers of older requests that arrive late are dropped. */
@@ -85,19 +101,46 @@ internal class RunToolbar(
       runCatching { result.unwrap() }
         .onSuccess { response ->
           if (response == null) log("Run toolbar: the backend sent no answer")
-          else publishButtons(buttonsOf(response, iconPath))
+          else {
+            val buttons = buttonsOf(response, iconPath)
+            publishButtons(buttons)
+            // IntelliJ's toolbar updates on a timer while its window is active, and JetBrains
+            // Client asks again on each update. Ideate asks every 500 ms while a session runs: a
+            // debug session of a Gradle task changes no `executingConfigurations` entry (seen
+            // 2026-11-24), so nothing else would show Pause, Resume or the end of the session.
+            val running = buttons.any {
+              it.executorStatus.let { status -> status != null && status != ExecutorStatus.NORMAL }
+            }
+            if (running && number == latestRequest) later(UPDATE_MILLIS) { refresh() }
+          }
         }
         .onFailure { failure -> log("Run toolbar not loaded: ${failure.message}") }
     }
   }
 
   companion object {
+    private const val UPDATE_MILLIS = 500L
     const val PLACE = "NewUiRunToolbar"
 
     /** The groups and actions of the widget, as JetBrains Client names them (sorted, `;` apart). */
     const val COMPOSITE_GROUP =
       "composite:Debug;MoreRunToolbarActions;Run;RunToolbarMainActionGroup;" +
         "RunToolbarTopLevelExecutorActionGroup;Stop;compositeResumeGroup"
+
+    /**
+     * IntelliJ's `filterOutRunIfDebugResumeIsPresent`: with the debugger's Resume or Pause shown,
+     * Run is left out (the Debug button is then Restart); with an inline Stop, Debug is.
+     */
+    private fun filterOutRunIfDebugResumeIsPresent(
+      buttons: List<RunToolbarButton>,
+    ): List<RunToolbarButton> =
+      when {
+        buttons.any { "XDebuggerResumeAction" in it.actionId } ->
+          buttons.filter { it.actionId != "Run" }
+        buttons.any { it.actionId == "StopConfigurationInlineAction" } ->
+          buttons.filter { it.actionId != "Debug" }
+        else -> buttons
+      }
 
     /**
      * The visible children of `RunToolbarMainActionGroup` in order, its plain groups (the executor
@@ -125,11 +168,16 @@ internal class RunToolbar(
                   presentation.description,
                   presentation.icon?.icon?.let(iconPath),
                   presentation.isEnabled,
+                  presentation.clientProperties
+                    .orEmpty()
+                    .filterIsInstance<NameEnumValue>()
+                    .firstOrNull { it.name == EXECUTOR_ACTION_STATUS }
+                    ?.let { ExecutorStatus.entries.getOrNull(it.ordinal) },
                 ),
               )
           }
         }
-      return buttons(MAIN_GROUP)
+      return filterOutRunIfDebugResumeIsPresent(buttons(MAIN_GROUP))
     }
   }
 }

@@ -192,6 +192,19 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
   val icons = LocalIcons.current
   Column {
     list.rows.forEachIndexed { index, row ->
+      row.header?.let { header ->
+        Box(
+          Modifier.fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .height(1.dp)
+            .background(Islands.popupBorder),
+        )
+        BasicText(
+          header,
+          Modifier.padding(horizontal = Look.rowInset),
+          style = text.copy(color = Islands.textSecondary),
+        )
+      }
       Row(
         Modifier.fillMaxWidth()
           .height(Look.rowHeight)

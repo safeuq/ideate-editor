@@ -1,5 +1,6 @@
 package io.github.safeuq.ideate.client.session
 
+import androidx.compose.ui.unit.IntRect
 import com.intellij.platform.split.protocol.DefaultSplitMarshallersProvider
 import com.jediterm.core.util.TermSize
 import com.jetbrains.codeWithMe.model.CwmRunConfigurationExecuteArgs
@@ -35,6 +36,7 @@ import com.jetbrains.rd.ide.model.BrowseMode
 import com.jetbrains.rd.ide.model.ClipboardContent
 import com.jetbrains.rd.ide.model.ClipboardModel
 import com.jetbrains.rd.ide.model.ColorizedIconModel
+import com.jetbrains.rd.ide.model.ComponentRect
 import com.jetbrains.rd.ide.model.CompositionIconModel
 import com.jetbrains.rd.ide.model.CropIconModel
 import com.jetbrains.rd.ide.model.CustomImageIconModel
@@ -50,6 +52,7 @@ import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.IconWithOverlayModel
 import com.jetbrains.rd.ide.model.ImageIconModel
 import com.jetbrains.rd.ide.model.IndicatorIconModel
+import com.jetbrains.rd.ide.model.InputEventModel
 import com.jetbrains.rd.ide.model.KernelAwareTextControlId
 import com.jetbrains.rd.ide.model.MarkupDocumentExtension
 import com.jetbrains.rd.ide.model.MarkupTextControlExtension
@@ -86,6 +89,7 @@ import com.jetbrains.rd.ide.model.RequestCompositeQuery
 import com.jetbrains.rd.ide.model.RequestResponseModel
 import com.jetbrains.rd.ide.model.RotatedIconModel
 import com.jetbrains.rd.ide.model.RowIconModel
+import com.jetbrains.rd.ide.model.ScreenPointMouseEvent
 import com.jetbrains.rd.ide.model.Solution
 import com.jetbrains.rd.ide.model.SuccessfulRequestComposite
 import com.jetbrains.rd.ide.model.TextControlId
@@ -656,7 +660,7 @@ class ClientSession(
    * A run widget button, e.g. `Run`, `Debug` or `Stop`: the backend's action in the widget's place,
    * in the selected editor's context ("Cannot run the current file" when there is none).
    */
-  fun runToolbarAction(actionId: String) = onRd {
+  fun runToolbarAction(actionId: String, bounds: IntRect? = null) = onRd {
     val context = actionContext() ?: return@onRd log("No project is open; $actionId not run")
     actionMenus?.runAction(
       actionId,
@@ -664,8 +668,26 @@ class ClientSession(
       context,
       disabled = { log("$actionId is disabled") },
       done = { runToolbar?.refresh() },
+      inputEvent = bounds?.let(::clickAt),
     )
   }
+
+  /**
+   * A left click in the middle of [bounds] (the button's place in the window, dp), as JetBrains
+   * Client sends for a button that opens a popup: the backend puts the popup at that point.
+   */
+  private fun clickAt(bounds: IntRect): InputEventModel =
+    ScreenPointMouseEvent(
+      MOUSE_CLICKED,
+      0,
+      bounds.center.x,
+      bounds.center.y,
+      1,
+      1,
+      ComponentRect(bounds.left, bounds.top, bounds.width, bounds.height),
+      ComponentRect(-1, -1, -1, -1),
+      null,
+    )
 
   /** The run configuration selector's click: its popup as [SessionState.contextMenu]. */
   fun runConfigurationsMenu() {
@@ -1216,6 +1238,9 @@ class ClientSession(
             { buttons -> mutableState.update { it.copy(runButtons = buttons) } },
             { selector -> mutableState.update { it.copy(runSelector = selector) } },
             ::log,
+            { delayMillis, action ->
+              markupTimer.schedule({ onRd(action) }, delayMillis, TimeUnit.MILLISECONDS)
+            },
           )
           .also { it.bind(solutionLifetime, newSolution.codeWithMeRunConfigurationsModel) }
       breadcrumbs.bind(solutionLifetime, newSolution.navigationBarModel, ::refreshBreadcrumbs)
@@ -2052,6 +2077,9 @@ class ClientSession(
     const val PROJECT_PANE = "ProjectPane"
 
     /** `ActionPlaces.KEYBOARD_SHORTCUT`: where an action run by its shortcut comes from. */
+    /** AWT's `MouseEvent.MOUSE_CLICKED`. */
+    const val MOUSE_CLICKED = 500
+
     const val KEYBOARD_PLACE = "keyboard shortcut"
 
     /** About two frames at 60 Hz. */

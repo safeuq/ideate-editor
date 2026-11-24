@@ -17,6 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.ui.LocalIcons
@@ -45,6 +47,13 @@ fun IconButton(
   enabled: Boolean = true,
   /** For a button wider than high, e.g. the run widget's 34 × 32. */
   width: Dp = size,
+  /**
+   * A filled button, e.g. the run widget's running Run (green) and Stop (red): the hover and
+   * pressed backgrounds are blended over it, as `RunWidgetButtonLook` does. Not when disabled.
+   */
+  fill: Color? = null,
+  /** Paints every stroke of the icon in this colour (IntelliJ's `toStrokeIcon`). */
+  tint: Color? = null,
 ) {
   val interaction = remember { MutableInteractionSource() }
   val hovered by interaction.collectIsHoveredAsState()
@@ -56,6 +65,9 @@ fun IconButton(
   val background =
     when {
       !enabled -> Color.Transparent
+      fill != null && pressed -> Islands.color("RunWidget.pressedBackground").compositeOver(fill)
+      fill != null && hovered -> Islands.color("RunWidget.hoverBackground").compositeOver(fill)
+      fill != null -> fill
       pressed || selected -> IconButtonLook.pressedBackground
       hovered -> IconButtonLook.hoverBackground
       else -> Color.Transparent
@@ -77,6 +89,7 @@ fun IconButton(
       icon,
       contentDescription = contentDescription,
       modifier = Modifier.size(iconSize).alpha(if (enabled) 1f else DISABLED_ALPHA),
+      colorFilter = tint?.let { ColorFilter.tint(it) },
     )
   }
 }

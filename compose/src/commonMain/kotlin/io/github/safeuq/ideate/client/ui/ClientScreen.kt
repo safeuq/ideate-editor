@@ -461,7 +461,6 @@ fun ClientScreen(
     Column(Modifier.fillMaxSize()) {
       MainToolbar(
         state.projectName,
-        unsupported,
         onSearch =
           if (state.searchAvailable) {
             { session.searchEverywhere?.open(SearchTab.FILES) }
@@ -474,7 +473,7 @@ fun ClientScreen(
           else null,
         runSelector = state.runSelector,
         runButtons = state.runButtons,
-        onRunButton = session::runToolbarAction,
+        onRunButton = { actionId, bounds -> session.runToolbarAction(actionId, bounds) },
         onRunConfigurations = session::runConfigurationsMenu,
         runConfigurationEntries = state.contextMenu?.entries,
       )

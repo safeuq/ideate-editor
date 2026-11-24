@@ -144,4 +144,27 @@ class RunToolbarTest {
     assertEquals("Rerun 'Application: Alpha'", result.first().text)
     assertEquals(listOf(true, true, true, true), result.map { it.enabled })
   }
+
+  /**
+   * Seen while debugging: Run is still listed visible next to Resume, but IntelliJ leaves it out.
+   */
+  @Test
+  fun aVisibleDebuggerResumeTakesRunsPlace() {
+    val result =
+      buttons(
+        mapOf(
+          "ConfigurationXDebuggerResumeAction" to presentation(0x883, "Resume 'Alpha'"),
+          "Run" to presentation(0x883, "Rerun 'Application: Alpha'"),
+          "Debug" to presentation(0x883, "Rerun 'Application: Alpha' in debug mode"),
+          "Stop" to presentation(0x883, "Stop 'Alpha'"),
+          "MoreRunToolbarActions" to presentation(0x88b, "More Actions"),
+          "InactiveStopActionPlaceholder" to hidden,
+        ),
+      )
+
+    assertEquals(
+      listOf("ConfigurationXDebuggerResumeAction", "Debug", "Stop", "MoreRunToolbarActions"),
+      result.map { it.actionId },
+    )
+  }
 }

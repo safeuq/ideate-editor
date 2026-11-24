@@ -29,14 +29,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.safeuq.ideate.client.session.ExecutorStatus
 import io.github.safeuq.ideate.client.session.RunSelector
 import io.github.safeuq.ideate.client.session.RunToolbarButton
 import io.github.safeuq.ideate.client.ui.component.IconButton
@@ -44,6 +48,7 @@ import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * A main toolbar dropdown (`ToolbarComboButton`): the project widget, the run configurations. A box
@@ -77,17 +82,15 @@ private fun ToolbarDropdown(
 }
 
 private const val INACTIVE_STOP = "InactiveStopActionPlaceholder"
-private const val MORE_ACTIONS = "MoreRunToolbarActions"
 
 /**
  * IntelliJ's main toolbar, reduced: the project widget on the left; the run widget (selector, Run,
  * Debug, Stop, More), then Search Everywhere, on the right. The project name and the run widget are
- * live; the rest reports "not supported yet" through [onUnsupported].
+ * live.
  */
 @Composable
 fun MainToolbar(
   projectName: String?,
-  onUnsupported: (String) -> Unit,
   modifier: Modifier = Modifier,
   /** Opens Search Everywhere: the magnifier at the right end, as in IntelliJ's new UI. */
   onSearch: (() -> Unit)? = null,
@@ -103,8 +106,10 @@ fun MainToolbar(
   /** The run widget: the selected configuration, then the backend's buttons (RunToolbar). */
   runSelector: RunSelector = RunSelector(),
   runButtons: List<RunToolbarButton> = emptyList(),
-  /** A run button was pressed, e.g. `Run`, `Debug`, `Stop`. */
-  onRunButton: (actionId: String) -> Unit = {},
+  /**
+   * A run button was pressed, e.g. `Run`, `Debug`, `Stop`; [bounds]: its place in the window, dp.
+   */
+  onRunButton: (actionId: String, bounds: IntRect) -> Unit = { _, _ -> },
   /** The selector was pressed: asks for its popup, which [runConfigurationEntries] then holds. */
   onRunConfigurations: () -> Unit = {},
   /** The selector popup's rows; null until the backend has answered. */
@@ -208,18 +213,52 @@ fun MainToolbar(
             Spacer(Modifier.size(Islands.runButtonWidth, Islands.toolbarButton))
           else {
             val label = button.description ?: button.text ?: button.actionId
+            // RunWidgetButtonLook: a running Run (and Debug) and Stop are filled; the strokes are
+            // white on a fill, green on the other execution buttons, grey on the rest.
+            val execution = button.executorStatus != null
+            val filled =
+              button.enabled &&
+                (button.actionId == "Stop" || button.executorStatus == ExecutorStatus.RUNNING)
+            val fill =
+              when {
+                !filled -> null
+                button.actionId == "Stop" -> Islands.color("RunWidget.stopBackground")
+                else -> Islands.color("RunWidget.runningBackground")
+              }
+            val tint =
+              Islands.color(
+                when {
+                  filled -> "RunWidget.runningIconColor"
+                  execution -> "RunWidget.runIconColor"
+                  else -> "RunWidget.iconColor"
+                },
+              )
+            var bounds by remember { mutableStateOf(IntRect.Zero) }
+            val density = LocalDensity.current
             IconButton(
               iconPath,
               label,
-              // The run widget's More Actions popup is a later step.
-              onClick = {
-                if (button.actionId == MORE_ACTIONS) onUnsupported(label)
-                else onRunButton(button.actionId)
-              },
+              onClick = { onRunButton(button.actionId, bounds) },
+              modifier =
+                Modifier.onGloballyPositioned { coordinates ->
+                  // The popup's place is in dp.
+                  val box = coordinates.boundsInWindow()
+                  bounds =
+                    with(density) {
+                      IntRect(
+                        box.left.toDp().value.roundToInt(),
+                        box.top.toDp().value.roundToInt(),
+                        box.right.toDp().value.roundToInt(),
+                        box.bottom.toDp().value.roundToInt(),
+                      )
+                    }
+                },
               size = Islands.toolbarButton,
               iconSize = Islands.toolbarIcon,
               enabled = button.enabled,
               width = Islands.runButtonWidth,
+              fill = fill,
+              tint = tint,
             )
           }
         }

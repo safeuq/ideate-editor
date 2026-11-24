@@ -9,6 +9,7 @@ import com.jetbrains.ide.model.uiautomation.BeControl
 import com.jetbrains.ide.model.uiautomation.BeControlContainer
 import com.jetbrains.ide.model.uiautomation.BeEmptyData
 import com.jetbrains.ide.model.uiautomation.BeGrid
+import com.jetbrains.ide.model.uiautomation.BeHeader
 import com.jetbrains.ide.model.uiautomation.BeIcon
 import com.jetbrains.ide.model.uiautomation.BeLabel
 import com.jetbrains.ide.model.uiautomation.BeRichText
@@ -22,9 +23,11 @@ import com.jetbrains.ide.model.uiautomation.DialogResult
 import com.jetbrains.ide.model.uiautomation.ValidationStates
 import com.jetbrains.ide.model.uiautomation.uIAutomationInteractionModel
 import com.jetbrains.rd.framework.IProtocol
+import com.jetbrains.rd.ide.model.ActionPopupContent
 import com.jetbrains.rd.ide.model.BeAbstractPopup
 import com.jetbrains.rd.ide.model.BeListPopupLine
 import com.jetbrains.rd.ide.model.BePopupPositionDirectTransferContext
+import com.jetbrains.rd.ide.model.BePopupPositionScreenPointContext
 import com.jetbrains.rd.ide.model.DefaultPopupContent
 import com.jetbrains.rd.ide.model.FontStyle
 import com.jetbrains.rd.ide.model.IconModel
@@ -62,12 +65,23 @@ class PopupList(
    * a click does in IntelliJ's `ListPopupImpl`, instead of only selecting it.
    */
   internal val wizard: WizardPopupContent? = null,
+  /**
+   * A list popup that isn't a wizard (`ActionPopupContent`, e.g. the run widget's More Actions): a
+   * tap chooses the row too.
+   */
+  internal val listPopup: Boolean = wizard != null,
 ) : PopupItem {
   var selected by mutableStateOf(-1)
 }
 
 /** One row of a [PopupList]: its icon (a path in the client's icon jar) and text. */
-class PopupRow(val iconPath: String?, val text: String, internal val line: BeTreeGridLine)
+class PopupRow(
+  val iconPath: String?,
+  val text: String,
+  internal val line: BeTreeGridLine,
+  /** A separator with this title above the row, e.g. "Configuration" over More Actions' Edit…. */
+  val header: String? = null,
+)
 
 /** A Lux panel the backend paints, e.g. New ▸ File's "already exists" hint. */
 class PopupLux(val surface: LuxDialog) : PopupItem
@@ -123,10 +137,10 @@ internal class BackendPopups(
 
   fun bind() {
     protocol.uIAutomationInteractionModel.activePopups.view(lifetime) { popupLifetime, id, model ->
-      (model.content as? WizardPopupContent)?.let { wizard ->
-        model.loaded.advise(popupLifetime) {
-          showList(popupLifetime, id, model, wizard, wizard.step)
-        }
+      val wizard = model.content as? WizardPopupContent
+      val listStep = wizard?.step ?: (model.content as? ActionPopupContent)?.step
+      if (listStep != null) {
+        model.loaded.advise(popupLifetime) { showList(popupLifetime, id, model, wizard, listStep) }
         model.result.advise(popupLifetime) { result ->
           if (result == DialogResult.CLOSE) closed(id)
         }
@@ -200,7 +214,7 @@ internal class BackendPopups(
           PopupList(
             lines.map { line ->
               val row = BeRow.of(line, iconPath)
-              PopupRow(row.icon, row.text, line)
+              PopupRow(row.icon, row.text, line, row.header)
             },
           )
         lines.forEachIndexed { index, line ->
@@ -266,7 +280,7 @@ internal class BackendPopups(
     popupLifetime: Lifetime,
     id: Int,
     model: BeAbstractPopup,
-    wizard: WizardPopupContent,
+    wizard: WizardPopupContent?,
     step: StepPopupContent,
   ) {
     val lines = step.items.toList().filterIsInstance<BeListPopupLine>()
@@ -274,9 +288,10 @@ internal class BackendPopups(
       PopupList(
         lines.map { line ->
           val row = BeRow.of(line, iconPath)
-          PopupRow(row.icon, row.text, line)
+          PopupRow(row.icon, row.text, line, row.header)
         },
         wizard,
+        listPopup = true,
       )
     val popup =
       BackendPopup(
@@ -299,7 +314,14 @@ internal class BackendPopups(
    * panel's, set by `ProjectViews.resizePanel`) plus the point.
    */
   private fun place(popup: BackendPopup) {
-    val context = popup.model.context.valueOrNull as? BePopupPositionDirectTransferContext ?: return
+    val position = popup.model.context.valueOrNull
+    // A popup the client asked for with a click: the backend answers with the point of that click
+    // (the run widget's More Actions), in the coordinates the click was sent in (window dp).
+    if (position is BePopupPositionScreenPointContext) {
+      popup.anchor = LxPoint(position.x.toDouble(), position.y.toDouble())
+      return
+    }
+    val context = position as? BePopupPositionDirectTransferContext ?: return
     val panel = protocol.luxModel.components[context.luxId] as? LxPanel
     val origin = panel?.position?.valueOrNull
     if (origin == null) {
@@ -334,18 +356,16 @@ internal class BackendPopups(
 
   /** A tap on [row]: it becomes the list's selected row, as a click selects it in IntelliJ. */
   fun select(list: PopupList, row: PopupRow) {
-    list.wizard?.let { wizard ->
-      return choose(list, wizard, row)
-    }
+    if (list.listPopup) return choose(list, list.wizard, row)
     list.rows.forEach { each -> if (each !== row) each.line.isSelected.set(false) }
     row.line.isSelected.set(true)
   }
 
   /** A list popup's row chosen, as `DefaultLineStep.onChosen` does. */
-  private fun choose(list: PopupList, wizard: WizardPopupContent, row: PopupRow) {
+  private fun choose(list: PopupList, wizard: WizardPopupContent?, row: PopupRow) {
     val line = row.line as? BeListPopupLine ?: return
     val popup = shown.values.firstOrNull { list in it.items } ?: return
-    wizard.selectedValueChanged.fire(list.rows.indexOf(row))
+    wizard?.selectedValueChanged?.fire(list.rows.indexOf(row))
     if (!line.hasSubstep) {
       log("Backend list popup ${popup.id}: chose '${row.text}'")
       // As JetBrains Client's DefaultLineStep: the signal is the choice. The backend then closes
@@ -408,16 +428,22 @@ internal class BackendPopups(
  * such as `src` and a grey ` smoke`). A row without text is the placeholder IntelliJ puts under a
  * node until its children load (a BeSpacer).
  */
-internal class BeRow(val icon: String?, val fragments: List<TextFragment>) {
+internal class BeRow(
+  val icon: String?,
+  val fragments: List<TextFragment>,
+  val header: String? = null,
+) {
   val text
     get() = fragments.joinToString("") { it.text }
 
   companion object {
     fun of(line: BeTreeGridLine, iconPath: (IconModel) -> String?): BeRow {
       var icon: String? = null
+      var header: String? = null
       val fragments = mutableListOf<TextFragment>()
       fun look(each: BeControl) {
         when (each) {
+          is BeHeader -> header = each.text.value
           is BeIcon -> if (icon == null) icon = each.icon.valueOrNull?.let(iconPath)
           is BeLabel -> fragments += TextFragment(each.text.value, 0, null)
           is BeRichText -> {
@@ -444,7 +470,7 @@ internal class BeRow(val icon: String?, val fragments: List<TextFragment>) {
         }
       }
       line.columnElements.forEach(::look)
-      return BeRow(icon, fragments)
+      return BeRow(icon, fragments, header)
     }
   }
 }
