@@ -57,7 +57,9 @@ object Islands {
     color(key) { Color(if (LafManager.currentTheme.isDark) dark else light) }
 
   // Project tabs (WindowTabsComponent, IslandsUICustomization.paintProjectTab): the Islands themes
-  // set none of the MainWindow.Tab keys, so IntelliJ's fallbacks are what it paints.
+  // set most MainWindow.Tab keys (Islands Dark: foreground text-muted, selectedForeground
+  // text-default, selectedBackground tool-window-bg, hoverBackground tab-bg-hovered, separatorColor
+  // toolbar-border); the fallbacks are IntelliJ's for the keys a theme leaves out.
   val projectTabSelectedBackground
     get() = color("MainWindow.Tab.selectedBackground") { islandBackground }
 

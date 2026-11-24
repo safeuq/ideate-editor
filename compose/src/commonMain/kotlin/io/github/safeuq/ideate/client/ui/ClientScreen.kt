@@ -462,6 +462,11 @@ fun ClientScreen(
       MainToolbar(
         state.projectName,
         state.projectWidget,
+        // Phone layouts have no project tab bar; a sideways slide on this row switches instead.
+        modifier =
+          if (layout != ScreenLayout.WIDE && state.openProjects.size > 1)
+            Modifier.projectSwipe(state.openProjects, state.shownProject, session::showProject)
+          else Modifier,
         onSearch =
           if (state.searchAvailable) {
             { session.searchEverywhere?.open(SearchTab.FILES) }
@@ -479,7 +484,7 @@ fun ClientScreen(
         runConfigurationEntries = state.contextMenu?.entries,
         onProject = session::projectWidgetClicked,
       )
-      if (state.openProjects.size > 1)
+      if (layout == ScreenLayout.WIDE && state.openProjects.size > 1)
         ProjectTabs(
           state.openProjects,
           state.shownProject,

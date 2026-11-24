@@ -3,6 +3,7 @@ package io.github.safeuq.ideate.client.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -25,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,6 +36,7 @@ import io.github.safeuq.ideate.client.session.OpenProject
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
+import kotlin.math.abs
 
 /** Each tab's width for [count] tabs in [total]: equal, the last takes the remainder. */
 internal fun projectTabWidths(total: Int, count: Int): List<Int> {
@@ -41,6 +44,34 @@ internal fun projectTabWidths(total: Int, count: Int): List<Int> {
   val each = total / count
   return List(count) { index -> if (index == count - 1) total - each * (count - 1) else each }
 }
+
+/** The project [step] tabs after [shown] (`1` next, `-1` previous); null past either end. */
+internal fun neighbourProject(projects: List<OpenProject>, shown: String?, step: Int): String? {
+  val index = projects.indexOfFirst { it.hostPath == shown }
+  return if (index < 0) null else projects.getOrNull(index + step)?.hostPath
+}
+
+/**
+ * Phone layouts have no tab bar: sliding a finger sideways on the title bar shows the next project
+ * (slide left) or the previous one (slide right), as the toolbar of Chrome on Android does.
+ */
+fun Modifier.projectSwipe(
+  projects: List<OpenProject>,
+  shown: String?,
+  onShow: (hostPath: String) -> Unit,
+): Modifier =
+  pointerInput(projects, shown) {
+    var travelled = 0f
+    detectHorizontalDragGestures(
+      onDragStart = { travelled = 0f },
+      onDragEnd = {
+        if (abs(travelled) > 48.dp.toPx())
+          neighbourProject(projects, shown, if (travelled < 0) 1 else -1)?.let(onShow)
+      },
+    ) { _, amount ->
+      travelled += amount
+    }
+  }
 
 /**
  * IntelliJ's macOS project tabs (WindowTabsComponent, IslandsUICustomization.paintProjectTab): one
@@ -55,7 +86,19 @@ fun ProjectTabs(
   modifier: Modifier = Modifier,
 ) {
   var hoveredPath by remember { mutableStateOf<String?>(null) }
-  BoxWithConstraints(modifier.fillMaxWidth().height(30.dp).background(Islands.windowBackground)) {
+  // No background of its own: IntelliJ registers the tab bar as a window background component, so
+  // the header's project gradient shows behind tabs that are neither selected nor hovered. Its
+  // border is empty(0, left tool window bar + 1, 2, right tool window bar + 2).
+  BoxWithConstraints(
+    modifier
+      .fillMaxWidth()
+      .padding(
+        start = Islands.stripeThickness + 1.dp,
+        end = Islands.stripeThickness + 2.dp,
+        bottom = 2.dp,
+      )
+      .height(30.dp),
+  ) {
     val widths = projectTabWidths(constraints.maxWidth, projects.size)
     val density = LocalDensity.current
     Row(Modifier.fillMaxHeight()) {

@@ -270,3 +270,37 @@ widget's popup (New Project, Open, Clone Repository, IntelliJ IDEA Home, Open Pr
 Projects) has no Close Project entry, so Stage 1 has no way to close it from Ideate. Whether the
 backend then adds the welcome project (IntelliJ IDEA Home) is still open. The welcome project, if
 open next to a real one, would also get a tab today (its host path is listed like any other).
+
+## Addendum (2026-11-24, 11:55 IST): the bar's look corrected; phone layouts switch by a slide
+
+Correction to the table above: the Islands themes do set `MainWindow.Tab` keys. Islands Dark
+(`ManyIslandsDark.theme.json`) has `foreground: text-muted`, `selectedForeground: text-default`,
+`selectedBackground: tool-window-bg`, `hoverBackground: tab-bg-hovered`,
+`separatorColor: toolbar-border`. `Islands.projectTab*` already read these keys first, so the
+colours were right; the comment in `Islands.kt` was wrong and is fixed.
+
+What did not match IntelliJ, and is changed in `ui/ProjectTabs.kt`:
+
+| | Before | Now (as IntelliJ) |
+|---|---|---|
+| bar background | flat `Islands.windowBackground` | none: IntelliJ registers the bar with `registerWindowBackgroundComponent`, so the header's project gradient shows behind tabs that are neither selected nor hovered |
+| start inset | 0 | left tool window bar + 1 (`Islands.stripeThickness + 1.dp`) |
+| end inset | 0 | right tool window bar + 2 |
+| below the tabs | 0 | 2 dp (`JBUI.Borders.empty(0, left, 2, right)`) |
+
+Phone layouts (`ScreenLayout.PORTRAIT` and `ScreenLayout.COMPACT`) have no tab bar; `ClientScreen`
+shows `ProjectTabs` only in `ScreenLayout.WIDE`. Projects are switched there by:
+
+- the project widget's popup: choosing a project that is already open shows it (no reopening,
+  see `shared-connection.md`);
+- sliding sideways on the title bar (`Modifier.projectSwipe(projects, shown, onShow)` given to
+  `MainToolbar`): more than 48 dp to the left shows the next project, to the right the previous
+  one, as the toolbar of Chrome on Android. `neighbourProject(projects, shown, step)` picks it and
+  returns null past either end (`ProjectTabsTest.neighbourStopsAtBothEnds`).
+
+Checked live with alpha and beta at 1200×800 dp (bar) and 420×800 dp (no bar, a slide to the right
+went from beta to alpha, a slide to the left on the last project did nothing).
+
+Not done: the page does not move with the finger while sliding (Chrome shows the neighbouring tab
+sliding in); the switch happens when the finger lifts. A tablet held upright is `PORTRAIT` too, so
+it gets no bar either.
