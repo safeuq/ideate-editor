@@ -7,12 +7,22 @@ import com.jetbrains.rd.ide.model.ActionComponentRequest
 import com.jetbrains.rd.ide.model.ActionTimestampSetModel
 import com.jetbrains.rd.ide.model.AsyncActionUpdateRequest
 import com.jetbrains.rd.ide.model.AsyncActionsModel
+import com.jetbrains.rd.ide.model.DeferredIconModel
+import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.LxPoint
 import com.jetbrains.rd.ide.model.ProjectTimestampModel
 import com.jetbrains.rd.ide.model.RdProjectId
 import com.jetbrains.rd.ide.model.RectangleModel
 import com.jetbrains.rd.ide.model.ToolbarKindModel
 import com.jetbrains.rd.util.lifetime.Lifetime
+
+/**
+ * What the main toolbar's project widget shows: the backend button's [text], and its icon as a path
+ * in the icon jar ([iconPath]) or as the project whose avatar it is ([avatar]). E.g.
+ * `ProjectWidgetLook("IntelliJ IDEA Home", "expui/nodes/homeFolder.svg", null)`,
+ * `ProjectWidgetLook("beta", null, "beta")`.
+ */
+data class ProjectWidgetLook(val text: String, val iconPath: String?, val avatar: String?)
 
 /**
  * The main toolbar's project widget (IntelliJ's ProjectToolbarWidgetAction,
@@ -22,6 +32,10 @@ internal class ProjectWidget(
   private val model: AsyncActionsModel,
   private val projectId: RdProjectId,
   private val log: (String) -> Unit,
+  private val iconPath: (IconModel) -> String?,
+  /** Runs the action with the icon of `DeferredIconModel` [id] once the backend has sent it. */
+  private val whenIconReady: (id: Long, (IconModel) -> Unit) -> Unit,
+  private val publish: (ProjectWidgetLook) -> Unit,
 ) {
   private var lifetime: Lifetime = Lifetime.Terminated
   /** The backend's `BeToolbarComboButton`, asked for once after the first `expandGroup`. */
@@ -35,6 +49,7 @@ internal class ProjectWidget(
   fun bind(solutionLifetime: Lifetime) {
     lifetime = solutionLifetime
     solutionLifetime.onTermination { button = null }
+    load {}
   }
 
   /**
@@ -44,6 +59,14 @@ internal class ProjectWidget(
   fun click(bounds: IntRect) {
     this.bounds = bounds
     clicked = true
+    load(::fire)
+  }
+
+  /**
+   * Runs [then] with the backend's button, after the main toolbar's `expandGroup`. The first time
+   * the button is asked for too.
+   */
+  private fun load(then: (BeToolbarComboButton) -> Unit) {
     val request =
       AsyncActionUpdateRequest(
         TOOLBAR_GROUP,
@@ -59,7 +82,7 @@ internal class ProjectWidget(
           return@advise
         }
       val known = button
-      if (known != null) return@advise fire(known)
+      if (known != null) return@advise then(known)
       model.getComponent
         .start(lifetime, ActionComponentRequest(ACTION, PLACE, FACTORY, projectId))
         .result
@@ -77,10 +100,41 @@ internal class ProjectWidget(
             return@advise
           }
           button = found
-          // Not fired here: a `doAction` fired inside this answer is lost (seen 2026-11-24, the
+          show(found)
+          // Not used here: a `doAction` fired inside this answer is lost (seen 2026-11-24, the
           // first click after connecting opened nothing; rd binds the component after the
-          // answer's handlers ran). One more round trip to the backend, then it is fired.
-          click(bounds)
+          // answer's handlers ran). One more round trip to the backend, then [then] runs.
+          load(then)
+        }
+    }
+  }
+
+  /**
+   * The button's text and first left icon are what the toolbar shows, as JetBrains Client does:
+   * `alpha` with its avatar or its own icon file, `IntelliJ IDEA Home` with the home icon for the
+   * welcome project (whose folder is `IdeaHome`).
+   */
+  private fun show(comboButton: BeToolbarComboButton) {
+    var text = ""
+    var icon: IconModel? = null
+    fun publishLook() {
+      val model = icon
+      publish(ProjectWidgetLook(text, model?.let(iconPath), avatarProject(model)))
+    }
+    comboButton.text.advise(lifetime) {
+      text = it.orEmpty()
+      publishLook()
+    }
+    comboButton.leftIcons.advise(lifetime) {
+      val first = comboButton.leftIcons.firstOrNull()
+      icon = first
+      publishLook()
+      if (first is DeferredIconModel)
+        whenIconReady(first.id) { ready ->
+          if (icon === first) {
+            icon = ready
+            publishLook()
+          }
         }
     }
   }

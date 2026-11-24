@@ -741,3 +741,69 @@ The test projects before this were not git repositories, which is why it was not
 with `alpha` on `main` and `beta` on `http-error-handler`: three lines each, avatars in place.
 The backend sends the branch a few seconds after the project opens; a popup opened before that has
 no branch line. Test: `BackendPopupRowTest.aProjectRowKeepsItsPathAndItsBranchApartAndItsOwnIcon`.
+
+## Addendum (2026-11-24, 10:51 IST): a project's own icon, spacing from the row's model, the widget's text and icon
+
+Three user reports, all checked live on a 263 backend (port 5997; `alpha` with `.idea/icon.svg`
+on `main`, `beta` on `http-error-handler`).
+
+### Some projects had no icon
+
+A project with `.idea/icon.svg` has no `AvatarIconModel`. Its `DeferredIconModel` resolves to
+
+```
+CompositionIconModel(subNodes = [EmptyIconModel(20, 20), ProjectFileIconModel(size = 16,
+  data = IconDataModel(identity = 466, isSvg = true, data = <the file's bytes>))], shifts 2, 2)
+```
+
+and `ClientSession.iconPaths` logged "Icon type not handled yet: ProjectFileIconModel". Now it keeps
+the SVG in `IconJar` under `projectIcon/<identity>.svg` and returns that path. `PopupListView`
+draws it 16 dp in the middle of the 20 dp icon cell. A PNG project icon (`isSvg = false`) still
+shows nothing.
+
+### Spacing
+
+The backend sends each row's spacing; Ideate used its own numbers. What it sends, from the list
+cell's edge:
+
+| Row | `BeStyleControl` margin (left, top, right, bottom) | icon to text | above and below each line |
+|---|---|---|---|
+| New Project…, Open…, Clone Repository… | 16, 0, 8, 0 | 4 (a second margin, around the icon) | none |
+| IntelliJ IDEA Home | 16, 6, 16, 6 | 8 (the icon cell's `gaps.right`) | 2 (the name cell's `gaps.top` / `bottom`) |
+| a project | 16, 6, 16, 6 | 8 | 2, for the name, the path and the branch |
+
+`BeRow.of` reads these into `RowInsets(left, top, right, bottom, iconGap, lineGap)`
+(`PopupRow.insets`); a row that sends none keeps `RowInsets()` (16, 0, 16, 0, 6, 0), the look
+before. The list itself is IntelliJ's own and its numbers are from `JBUI.CurrentTheme.Popup`:
+
+| IntelliJ | Value | Ideate before | Ideate now |
+|---|---|---|---|
+| `Popup.Selection.leftRightInset`: selection from the popup's side | 8 | 10 | 8 (`Look.listInset`) |
+| `Popup.Body.topInsetNoHeader`, `bottomInsetNoAd` | 8 | 10 | 8 |
+| `Popup.Selection.innerInsets` + margin: text column from the selection's edge | 16 − 8 = 8 | 8 | `insets.left − 8` |
+| icon to text, action row / project row | 4 / 8 | 6 / 6 | from the row |
+| project row: above and below | 6 | 6 | from the row |
+| project row: around each line | 2 | 0 | from the row |
+| one-line row with a margin above and below (IntelliJ IDEA Home) | 6 + 2 + line + 2 + 6 | fixed 24 | as tall as that |
+
+`GroupHeaderSeparator`'s insets are unchanged (`cellInset = Look.rowInset`, 8). Popups that are
+not lists keep `Look.inset` (10). Test: `BackendPopupRowTest.aProjectRowBringsItsSpacing`.
+
+### The widget says what the backend's button says
+
+The toolbar showed the project view's root name: `IdeaHome` for the welcome project, and always a
+letter avatar. JetBrains Client shows the backend's `BeToolbarComboButton`: its `text` and the
+first of its `leftIcons`.
+
+| Project | `text` | first of `leftIcons` |
+|---|---|---|
+| `beta` | `beta` | the avatar (deferred, then `AvatarIconModel`) |
+| `alpha` with its own icon | `alpha` | `CompositionIconModel[EmptyIconModel(16, 16), ProjectFileIconModel(size = 12)]` |
+| the welcome project | `IntelliJ IDEA Home` | `ImageIconModel("expui/nodes/homeFolder.svg")` 16 × 16 |
+
+`ProjectWidget.bind` now asks for the button at once (`load`: the toolbar's `expandGroup`, then
+`getComponent`), and `show` follows `text` and `leftIcons` into `SessionState.projectWidget`
+(`ProjectWidgetLook(text, iconPath, avatar)`). `MainToolbar` shows it, and falls back to
+`projectName` and the name's avatar until it is there. An icon-jar icon is 16 dp in the avatar's
+20 dp box (the backend's own sizes, 12 in 16, are for its 16 px toolbar icons).
+`BackendPopups.whenIconReady(id, use)` gives the widget its deferred icon.

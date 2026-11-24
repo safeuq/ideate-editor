@@ -461,6 +461,7 @@ fun ClientScreen(
     Column(Modifier.fillMaxSize()) {
       MainToolbar(
         state.projectName,
+        state.projectWidget,
         onSearch =
           if (state.searchAvailable) {
             { session.searchEverywhere?.open(SearchTab.FILES) }

@@ -59,6 +59,7 @@ import com.jetbrains.rd.ide.model.MarkupDocumentExtension
 import com.jetbrains.rd.ide.model.MarkupTextControlExtension
 import com.jetbrains.rd.ide.model.OffsetIconModel
 import com.jetbrains.rd.ide.model.OriginKind
+import com.jetbrains.rd.ide.model.ProjectFileIconModel
 import com.jetbrains.rd.ide.model.ProjectTimestampModel
 import com.jetbrains.rd.ide.model.ProjectViewTimestampModel
 import com.jetbrains.rd.ide.model.RdCodeWithMeProject
@@ -1274,9 +1275,17 @@ class ClientSession(
           )
           .also { it.bind(solutionLifetime, newSolution.codeWithMeRunConfigurationsModel) }
       projectWidget =
-        ProjectWidget(protocol.asyncActionsModel, newSolution.projectId, ::log).also {
-          it.bind(solutionLifetime)
-        }
+        ProjectWidget(
+            protocol.asyncActionsModel,
+            newSolution.projectId,
+            ::log,
+            { icon -> iconPaths(icon).firstOrNull() },
+            { id, use -> backendPopups?.whenIconReady(id, use) },
+            { look -> mutableState.update { it.copy(projectWidget = look) } },
+          )
+          .also {
+            it.bind(solutionLifetime)
+          }
       solutionLifetime.onTermination { projectWidget = null }
       breadcrumbs.bind(solutionLifetime, newSolution.navigationBarModel, ::refreshBreadcrumbs)
       bindStructure(solutionLifetime, newSolution)
@@ -2196,6 +2205,17 @@ class ClientSession(
         is RowIconModel -> icon.subNodes.flatMap(::iconPaths)
         // Layered icon (e.g. the module file): the first layer is the base icon.
         is CompositionIconModel -> icon.subNodes.flatMap(::iconPaths)
+        // A project's own icon (`.idea/icon.svg`), sent as the file's bytes inside a 20 px box in
+        // the project widget's popup: kept under a path of its own, e.g. `projectIcon/466.svg`.
+        // ponytail: SVG only; a PNG project icon shows nothing until the icon jar takes bitmaps.
+        is ProjectFileIconModel -> {
+          val data = icon.data
+          if (data != null && data.isSvg) {
+            val path = "projectIcon/${data.identity}.svg"
+            IconJar.remember(path, mapOf(path to data.data))
+            listOf(path)
+          } else emptyList()
+        }
         // Shown until the real icon is computed; the backend sends the final one as an item update.
         is DeferredIconModel -> icon.baseIcon?.let(::iconPaths).orEmpty()
         // A blank slot, e.g. the visibility place in a Structure row's icon.

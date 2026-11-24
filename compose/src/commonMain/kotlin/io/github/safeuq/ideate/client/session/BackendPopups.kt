@@ -14,9 +14,12 @@ import com.jetbrains.ide.model.uiautomation.BeGridLayoutPanel
 import com.jetbrains.ide.model.uiautomation.BeHeader
 import com.jetbrains.ide.model.uiautomation.BeIcon
 import com.jetbrains.ide.model.uiautomation.BeLabel
+import com.jetbrains.ide.model.uiautomation.BeMargin
+import com.jetbrains.ide.model.uiautomation.BeMarginModifier
 import com.jetbrains.ide.model.uiautomation.BeRichText
 import com.jetbrains.ide.model.uiautomation.BeShortcutListener
 import com.jetbrains.ide.model.uiautomation.BeSpacer
+import com.jetbrains.ide.model.uiautomation.BeStyleControl
 import com.jetbrains.ide.model.uiautomation.BeTextBox
 import com.jetbrains.ide.model.uiautomation.BeTreeGrid
 import com.jetbrains.ide.model.uiautomation.BeTreeGridLine
@@ -122,6 +125,22 @@ class PopupList(
  */
 data class RowDetail(val text: String, val iconPath: String?)
 
+/**
+ * A row's spacing as the backend sends it, in IntelliJ's units from the list cell's edge: the
+ * `BeStyleControl` margin around the row ([left], [top], [right], [bottom]), the gap between the
+ * icon and the text, and the gap above and below each text line. E.g. New Project…: `RowInsets(16,
+ * 0, 8, 0, iconGap = 4)`; a project: `RowInsets(16, 6, 16, 6, iconGap = 8, lineGap = 2)`. The
+ * defaults are for a row that sends none (New ▸ Java Class's kinds).
+ */
+data class RowInsets(
+  val left: Int = 16,
+  val top: Int = 0,
+  val right: Int = 16,
+  val bottom: Int = 0,
+  val iconGap: Int = 6,
+  val lineGap: Int = 0,
+)
+
 /** One row of a [PopupList]: its icon (a path in the client's icon jar) and text. */
 class PopupRow(
   iconPath: String?,
@@ -133,6 +152,7 @@ class PopupRow(
   val details: List<RowDetail> = emptyList(),
   /** [BeRow.deferredIcon]: the icon arrives later and replaces [iconPath] or sets [avatar]. */
   internal val deferredIcon: Long? = null,
+  val insets: RowInsets = RowInsets(),
 ) {
   var iconPath by mutableStateOf(iconPath)
 
@@ -209,13 +229,21 @@ internal class BackendPopups(
    */
   private val readyIcons = mutableMapOf<Long, IconModel>()
 
+  private val waitingForIcon = mutableMapOf<Long, MutableList<(IconModel) -> Unit>>()
+
+  /** Runs [use] with the icon of `DeferredIconModel` [id], now or when the backend sends it. */
+  fun whenIconReady(id: Long, use: (IconModel) -> Unit) {
+    readyIcons[id]?.let(use) ?: waitingForIcon.getOrPut(id) { mutableListOf() }.add(use)
+  }
+
   /** A row of a list, with its deferred icon if that is ready already. */
   private fun row(line: BeTreeGridLine): PopupRow {
     val row = BeRow.of(line, iconPath)
-    return PopupRow(row.icon, row.text, line, row.header, row.details, row.deferredIcon).also {
-      it.avatar = row.avatar
-      readyIcons[row.deferredIcon]?.let { icon -> showIcon(it, icon) }
-    }
+    return PopupRow(row.icon, row.text, line, row.header, row.details, row.deferredIcon, row.insets)
+      .also {
+        it.avatar = row.avatar
+        readyIcons[row.deferredIcon]?.let { icon -> showIcon(it, icon) }
+      }
   }
 
   /** [icon] is [row]'s real icon: a project's avatar, or an icon of the client's icon jar. */
@@ -230,6 +258,7 @@ internal class BackendPopups(
     protocol.shellModel.deferredIconReady.adviseOn(lifetime, protocol.scheduler) { ready ->
       val icon = ready.icon ?: return@adviseOn
       readyIcons[ready.id] = icon
+      waitingForIcon.remove(ready.id)?.forEach { it(icon) }
       shown.values
         .flatMap { it.items }
         .filterIsInstance<PopupList>()
@@ -552,6 +581,7 @@ internal class BeRow(
    * the row instead of deferring it (seen 2026-11-24 for the popup opened from the second project).
    */
   val avatar: String? = null,
+  val insets: RowInsets = RowInsets(),
 ) {
   val text
     get() = fragments.joinToString("") { it.text }
@@ -561,6 +591,9 @@ internal class BeRow(
       var icon: String? = null
       var header: String? = null
       val details = mutableListOf<RowDetail>()
+      var margin: BeMargin? = null
+      var iconGap: Int? = null
+      var lineGap = 0
       var deferredIcon: Long? = null
       var avatar: String? = null
       val fragments = mutableListOf<TextFragment>()
@@ -571,6 +604,16 @@ internal class BeRow(
       fun look(each: BeControl) {
         when (each) {
           is BeHeader -> header = each.text.value
+          // Before the text: the first margin is the row's (New Project…: 16, 0, 8, 0), the next
+          // one is around the icon, whose right side is the gap to the text (4).
+          is BeStyleControl -> {
+            val styled = (each.margin.value as? BeMarginModifier)?.margin
+            if (styled != null && fragments.none { it.text.isNotEmpty() }) {
+              if (margin == null) margin = styled
+              else if (iconGap == null) iconGap = styled.right.multiplier
+            }
+            look(each.content)
+          }
           is BeIcon -> {
             if (icon == null) icon = each.icon.valueOrNull?.let(iconPath)
             special(each.icon.valueOrNull)
@@ -611,7 +654,15 @@ internal class BeRow(
           // cells out another way.
           is BeGridLayoutPanel ->
             each.items.valueOrNull.orEmpty().forEach { cell ->
-              if (fragments.none { it.text.isNotEmpty() }) return@forEach look(cell.content)
+              if (fragments.none { it.text.isNotEmpty() }) {
+                look(cell.content)
+                // The avatar's cell has the gap to the name on its right (8); the name's cell has
+                // the gap above and below each line (2).
+                val gaps = cell.gridConstraints.gaps
+                if (fragments.none { it.text.isNotEmpty() }) iconGap = gaps.right.multiplier
+                else lineGap = gaps.top.multiplier
+                return@forEach
+              }
               val rowIcon = Triple(icon, deferredIcon, avatar)
               val count = fragments.size
               icon = null
@@ -628,7 +679,18 @@ internal class BeRow(
         }
       }
       line.columnElements.forEach(::look)
-      return BeRow(icon, fragments, header, details, deferredIcon, avatar)
+      val insets =
+        RowInsets().let { default ->
+          RowInsets(
+            margin?.left?.multiplier ?: default.left,
+            margin?.top?.multiplier ?: default.top,
+            margin?.right?.multiplier ?: default.right,
+            margin?.bottom?.multiplier ?: default.bottom,
+            iconGap ?: default.iconGap,
+            lineGap,
+          )
+        }
+      return BeRow(icon, fragments, header, details, deferredIcon, avatar, insets)
     }
   }
 }

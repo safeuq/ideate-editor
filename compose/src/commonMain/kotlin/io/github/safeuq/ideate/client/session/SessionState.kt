@@ -204,6 +204,8 @@ data class SessionState(
    */
   val connectionLost: String? = null,
   val projectName: String? = null,
+  /** The backend's project widget button; null until it is loaded, then [projectName] gives way. */
+  val projectWidget: ProjectWidgetLook? = null,
   val tree: ProjectTree = ProjectTree(),
   val editors: List<EditorFile> = emptyList(),
   /** Each open file's tab icon from the backend, e.g. `/…/Main.java` to `nodes/class.svg`. */

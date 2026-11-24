@@ -7,8 +7,10 @@ import com.jetbrains.ide.model.uiautomation.BeGridConstraints
 import com.jetbrains.ide.model.uiautomation.BeGridLayoutPanel
 import com.jetbrains.ide.model.uiautomation.BeMargin
 import com.jetbrains.ide.model.uiautomation.BeMarginItem
+import com.jetbrains.ide.model.uiautomation.BeMarginModifier
 import com.jetbrains.ide.model.uiautomation.BeMarginType
 import com.jetbrains.ide.model.uiautomation.BeRichText
+import com.jetbrains.ide.model.uiautomation.BeStyleControl
 import com.jetbrains.ide.model.uiautomation.BeTreeGridLine
 import com.jetbrains.rd.ide.model.AvatarIconModel
 import com.jetbrains.rd.ide.model.DeferredIconModel
@@ -126,5 +128,48 @@ class BackendPopupRowTest {
     assertEquals(listOf("~/work/commons", "main"), row.details.map { it.text })
     assertEquals("branch.svg", row.details[1].iconPath)
     assertEquals(63L, row.deferredIcon)
+  }
+
+  // The spacing of a project's row comes with the row: 16/6/16/6 around it, 8 after the avatar's
+  // cell, 2 above and below each line (ProjectToolbarWidgetAction's renderer, seen on a 263
+  // backend).
+  @Test
+  fun aProjectRowBringsItsSpacing() {
+    fun margin(left: Int, top: Int, right: Int, bottom: Int) =
+      BeMargin(
+        BeMarginItem(BeMarginType.OnePx, left),
+        BeMarginItem(BeMarginType.OnePx, top),
+        BeMarginItem(BeMarginType.OnePx, right),
+        BeMarginItem(BeMarginType.OnePx, bottom),
+      )
+    fun cell(gridIndex: Int, gaps: BeMargin, content: BeControl) =
+      BeControlWithGridConstraints(
+        BeGridConstraints(
+          gridIndex,
+          0,
+          0,
+          1,
+          1,
+          BeAlignment.Left,
+          BeAlignment.Top,
+          true,
+          gaps,
+          margin(0, 0, 0, 0),
+          null,
+        ),
+        content,
+      )
+    val panel = BeGridLayoutPanel()
+    panel.items.set(
+      listOf(
+        cell(0, margin(0, 2, 8, 2), text("", EmptyIconModel(20, 20))),
+        cell(2, margin(0, 2, 0, 2), text("beta")),
+        cell(3, margin(0, 2, 0, 2), text("/projects/beta")),
+      ),
+    )
+    val styled = BeStyleControl(panel)
+    styled.margin.set(BeMarginModifier(margin(16, 6, 16, 6)))
+    val row = BeRow.of(BeTreeGridLine(listOf(styled))) { null }
+    assertEquals(RowInsets(16, 6, 16, 6, iconGap = 8, lineGap = 2), row.insets)
   }
 }

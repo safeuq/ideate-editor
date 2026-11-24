@@ -155,7 +155,10 @@ private fun BackendPopupView(popup: BackendPopup, session: ClientSession) {
           else -> false
         }
       }
-      .padding(Look.inset),
+      // A list popup's rows reach IntelliJ's selection edge (`Popup.Selection.leftRightInset`, 8
+      // from the popup's side) and its body has 8 above and below (`Popup.Body.topInsetNoHeader`,
+      // `bottomInsetNoAd`); other popups keep their own inset.
+      .padding(if (list != null) Look.listInset else Look.inset),
     verticalArrangement = Arrangement.spacedBy(Look.gap),
   ) {
     if (popup.title.isNotEmpty()) {
@@ -204,6 +207,7 @@ private object Look {
   val width = 300.dp
   val radius = 8.dp
   val inset = 10.dp
+  val listInset = 8.dp
   val gap = 8.dp
   /** IntelliJ's list row (`List.rowHeight`), the same for mouse and touch. */
   val rowHeight = 24.dp
@@ -276,6 +280,9 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
       // A project's row (name over path and branch) is as tall as its lines, with the 6 dp above
       // and below that the backend's BeStyleControl margin asks for.
       val details = row.details
+      // The backend's margins count from IntelliJ's list cell, Look.rowInset outside the selection.
+      val insets = row.insets
+      val inside = Look.rowInset.value.toInt()
       // In a list popup the row under the pointer is the selected one, as ListPopupImpl moves its
       // selection with the mouse: one highlight for hover, Up and Down.
       val interaction = remember { MutableInteractionSource() }
@@ -283,7 +290,10 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
       if (list.listPopup) LaunchedEffect(hovered) { if (hovered) list.selected = index }
       Row(
         Modifier.fillMaxWidth()
-          .then(if (details.isEmpty()) Modifier.height(Look.rowHeight) else Modifier)
+          .then(
+            if (insets.top == 0 && insets.bottom == 0) Modifier.height(Look.rowHeight)
+            else Modifier,
+          )
           .background(
             if (index == list.selected) Islands.selectionBackground else Color.Transparent,
             RoundedCornerShape(Look.selectionRadius),
@@ -291,29 +301,52 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
           .clickable(interaction, indication = null) {
             session.popupSelect(list, row)
           }
-          .padding(horizontal = Look.rowInset, vertical = if (details.isEmpty()) 0.dp else 6.dp),
+          .padding(
+            start = (insets.left - inside).coerceAtLeast(0).dp,
+            top = insets.top.dp,
+            end = (insets.right - inside).coerceAtLeast(0).dp,
+            bottom = insets.bottom.dp,
+          ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Look.iconGap),
+        horizontalArrangement = Arrangement.spacedBy(insets.iconGap.dp),
       ) {
         val avatar = row.avatar
-        // The avatar's cell: 20 dp (AvatarIconModel.targetSize), at the top with a 2 dp gap.
-        if (avatar != null)
-          ProjectAvatar(avatar, 20.dp, Modifier.align(Alignment.Top).padding(top = 2.dp))
-        else {
-          val painter = row.iconPath?.let(icons::painter)
-          if (painter != null) Image(painter, null, Modifier.size(16.dp))
-          else if (iconSlot) Spacer(Modifier.size(16.dp))
-        }
+        val painter = row.iconPath?.let(icons::painter)
+        // A project's icon cell: 20 dp (AvatarIconModel.targetSize), at the top after the line
+        // gap. The project's own icon file is 16 dp in the middle of it (the backend's
+        // CompositionIconModel shifts it by 2), and the cell is kept while the icon is on its way.
+        val iconCell = Modifier.align(Alignment.Top).padding(top = insets.lineGap.dp)
+        if (avatar != null) ProjectAvatar(avatar, 20.dp, iconCell)
+        else if (details.isNotEmpty())
+          Box(iconCell.size(20.dp), contentAlignment = Alignment.Center) {
+            if (painter != null) Image(painter, null, Modifier.size(16.dp))
+          }
+        else if (painter != null) Image(painter, null, Modifier.size(16.dp))
+        else if (iconSlot) Spacer(Modifier.size(16.dp))
         if (details.isEmpty())
-          BasicText(row.text, style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          BasicText(
+            row.text,
+            Modifier.padding(vertical = insets.lineGap.dp),
+            style = text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
         else
           Column {
-            BasicText(row.text, style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val lineGap = Modifier.padding(vertical = insets.lineGap.dp)
+            BasicText(
+              row.text,
+              lineGap,
+              style = text,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
             // The backend sends no font size; IntelliJ's renderer uses JBFont.smallOrNewUiMedium()
             // and the info colour for each of these lines, and for the branch line's icon.
             val small = text.copy(color = Islands.textSecondary, fontSize = 12.sp)
             details.forEach { detail ->
               Row(
+                lineGap,
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
               ) {

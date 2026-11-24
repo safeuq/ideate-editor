@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.safeuq.ideate.client.session.ExecutorStatus
+import io.github.safeuq.ideate.client.session.ProjectWidgetLook
 import io.github.safeuq.ideate.client.session.RunSelector
 import io.github.safeuq.ideate.client.session.RunToolbarButton
 import io.github.safeuq.ideate.client.ui.component.IconButton
@@ -91,6 +92,8 @@ private const val INACTIVE_STOP = "InactiveStopActionPlaceholder"
 @Composable
 fun MainToolbar(
   projectName: String?,
+  /** The backend's widget button once loaded: its text and icon replace [projectName]'s. */
+  projectWidget: ProjectWidgetLook?,
   modifier: Modifier = Modifier,
   /** Opens Search Everywhere: the magnifier at the right end, as in IntelliJ's new UI. */
   onSearch: (() -> Unit)? = null,
@@ -136,7 +139,7 @@ fun MainToolbar(
       ),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    val name = projectName ?: "…"
+    val name = projectWidget?.text?.takeIf { it.isNotEmpty() } ?: projectName ?: "…"
     // The project widget keeps its width (up to 200 dp); the run configurations give way first.
     var projectBounds by remember { mutableStateOf(IntRect.Zero) }
     val density = LocalDensity.current
@@ -159,13 +162,17 @@ fun MainToolbar(
     ) {
       // Sized like the toolbar icons (RecentProject.Avatar.iconSize falls back to
       // MainToolbar.Button.iconSize).
-      ProjectAvatar(
-        name,
-        Islands.toolbarIcon,
-        Modifier.onGloballyPositioned { coordinates ->
-          onProjectIconCenter(coordinates.positionInWindow().x + coordinates.size.width / 2f)
-        },
-      )
+      val iconPlace = Modifier.onGloballyPositioned { coordinates ->
+        onProjectIconCenter(coordinates.positionInWindow().x + coordinates.size.width / 2f)
+      }
+      // An icon of the icon jar (the welcome project's home icon, a project's own icon file) is
+      // 16 dp in the avatar's box; otherwise the avatar the backend names, or the name's.
+      val widgetIcon = projectWidget?.iconPath?.let(icons::painter)
+      if (widgetIcon != null)
+        Box(iconPlace.size(Islands.toolbarIcon), contentAlignment = Alignment.Center) {
+          Image(widgetIcon, null, Modifier.size(16.dp))
+        }
+      else ProjectAvatar(projectWidget?.avatar ?: name, Islands.toolbarIcon, iconPlace)
       BasicText(
         name,
         style = text.copy(fontWeight = FontWeight.SemiBold),
