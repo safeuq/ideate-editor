@@ -589,3 +589,76 @@ Recent Projects, and the top rows' dialogs from Ideate.
 
 Open: the 5 s a switch takes. The backend keeps a client's first connection until it has declined
 the second; whether JetBrains Client's own reconnect avoids that wait is not looked at yet.
+
+## Addendum (2026-11-24, 15:40 IST): the switch takes half a second; Escape; the rows not tried before
+
+### The 5 s switch: the cause and the fix
+
+What the backend did with a second connection of the same client while it still held the first
+(its `idea.log`, 2026-11-24 15:07 IST):
+
+```
+WireReuseUtil   Local wire exist for client: true      ← the old session's wire
+WireReuseUtil   Remote wire exist for client: false    ← Ideate always sends WIRE_EXIST = 0
+WireStorage     Terminate wire … @9                    ← the old wire
+…               Create a new Wire on a new transport   ← wire @10 for the new connection
+RdServerConnectionManager  Connection with client … was closed in favor of another connection
+SecureWireOverStreamTransport  Wire … @10  Connection flow. failed with code DECLINED and message Closed
+(4.0 s later)   TLS Transport … Connection state changed: <CONNECTED> -> <CLOSED>
+```
+
+Closing the old session also failed the new wire, 2 ms after it was made, and the backend closed
+the socket only 4 s later; that is when Ideate saw `DECLINED`. With the 1 s pause before the retry
+this was the 5 s.
+
+A client can end its own session: `SecureWireOverStreamTransport.onSystemFrameReceived` (the class
+is shared by backend and client) sets the wire's state to `DECLINED(reason)` for a
+`FORCE_TERMINATE_WIRE` frame from the other side, and the backend then drops the wire at once
+(`Wire connection declined (how?), terminating its lifetime immediately with no delays`, `Wire was
+successfully removed`, 4 ms after the frame). `reason` is an int32 ordinal of
+`ConnectionDeclineReason`: `None` 0, `UserDeclined` 1, `GuestLimitReached` 2,
+`OtherControllerLaunched` 3, `HostExit` 4.
+
+| Order tried | Result |
+|---|---|
+| new connection while the old session is open | declined; retry accepted; 5 s |
+| `FORCE_TERMINATE_WIRE(0)` on the old one, new connection 5 ms later | still declined (`closed in favor of another connection`: the old session was not closed yet) |
+| `FORCE_TERMINATE_WIRE(0)`, new connection 300 ms later | accepted in 20 ms |
+
+In the code:
+
+- `SplitWire.terminate()` sends `FORCE_TERMINATE_WIRE` with reason 0 and closes; `ClientSession`
+  calls it when its lifetime ends (`stop()`), so every deliberate end of a session tells the
+  backend, also Back from the IDE screen.
+- `ConnectController.switchProject` starts `reconnect(next, identity, …, SWITCH_WAIT_MILLIS)` (500
+  ms before the first try), then stops the old session. The job is started first so that
+  `connectionLost` (which returns while `reconnectJob` is active) does not take the stopped
+  session for a lost connection.
+- While the first try runs the popup says "Opening Project / beta" (`ConnectController.switching`)
+  instead of "No connection to IDE Backend".
+
+Measured from the row's choice to `Connection accepted`: 617 ms and 614 ms (`alpha` → `beta` →
+`alpha`), no declined try.
+
+The 500 ms is a wait, not a signal: the backend gives none before its 4 s socket close. If a
+backend is slower than that, the try is declined and retried as before.
+
+### Escape did not close a list popup
+
+`BackendPopupView` handles keys on the popup's own column, which gets them only while something
+inside it has the focus. A popup with a text field focuses that field; a list popup (More Actions,
+the project widget's) focused nothing, so Escape and the arrow keys reached nothing on the desktop.
+Now a popup without a `PopupTextField` requests the focus for itself when it is shown, as IntelliJ
+focuses its list (`BeAbstractPopupSettings.isFocused`). Checked: Escape closes the popup (`Backend
+popup 8 cancelled`). A click outside already worked (`Backend popup 5 cancelled`).
+
+### Tried from Ideate now
+
+| What | Result |
+|---|---|
+| New Project… | `Backend dialog 'New Project' (800 × 637)` opens; Escape closes it |
+| Open… | `Backend dialog 'Open File or Project' (424 × 454)` opens; Escape closes it |
+| Clone Repository… | `Backend dialog 'Clone Repository' (800 × 650)` opens with its URL field focused; Cancel closes it |
+| a row under Recent Projects (`beta`, backend started with only `alpha`) | the backend opens it: `solutions` gets a new entry 320 ms after the choice, `switchTo` asks for it, the new session is accepted 540 ms later and shows `beta` |
+
+Still not tried: IntelliJ IDEA Home. Still not built: typing to filter the rows.

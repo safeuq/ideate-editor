@@ -179,6 +179,9 @@ class ConnectController(
   private companion object {
     /** How long a dropped connection is retried before the app shows the connect screen. */
     const val RECONNECT_FOR_MILLIS = 120_000L
+
+    /** Between stopping a session and connecting the next one for another project. */
+    const val SWITCH_WAIT_MILLIS = 500L
   }
 
   /**
@@ -204,6 +207,13 @@ class ConnectController(
    * connection to IDE Backend. Trying to reconnect…". Null otherwise.
    */
   var reconnecting by mutableStateOf<Int?>(null)
+    private set
+
+  /**
+   * The project a new session is being opened for after a choice in the project widget's popup,
+   * e.g. `beta`: the first try shows "Opening Project" instead of the lost-connection message.
+   */
+  var switching by mutableStateOf<String?>(null)
     private set
 
   private var reconnectJob: Job? = null
@@ -294,6 +304,7 @@ class ConnectController(
 
   /** No session any more: the editor window closes, and there is nothing to restore later. */
   private fun endSession() {
+    switching = null
     session = null
     handOverFrom = null
     lastShown = null
@@ -493,12 +504,16 @@ class ConnectController(
 
   /**
    * The backend showed another project (a row of the project widget's popup): a new session over
-   * the same link and identity shows it, through [reconnect]. The new session connects while the
-   * old one is still open, and the backend then closes the old one "in favor of another
-   * connection". Stopping the old session first made the backend decline the new one (DECLINED,
-   * "Closed", seen 2026-11-24). // ponytail: the first project of a link keeps the link's own
-   * editors key, so its tabs are not restored after switching away and back; give every project its
-   * own key when that matters.
+   * the same link and identity shows it, through [reconnect].
+   *
+   * The old session is stopped first, which tells the backend to drop its wire (`SplitWire
+   * .terminate`). The backend then needs a moment to close that session: a connection 5 ms after
+   * the stop was declined ("closed in favor of another connection", and the refusal arrives 4 s
+   * later), one 300 ms after it was accepted in 20 ms (seen 2026-11-24). So the first try waits
+   * [SWITCH_WAIT_MILLIS]; a declined try is retried by [reconnect] as any other.
+   *
+   * ponytail: the first project of a link keeps the link's own editors key, so its tabs are not
+   * restored after switching away and back; give every project its own key when that matters.
    */
   private fun switchProject(current: Attempt, hostPath: String) {
     if (attempt !== current) return
@@ -515,7 +530,10 @@ class ConnectController(
       )
     next.identity = identity
     attempt = next
-    reconnect(next, identity, "Switching to $hostPath")
+    switching = hostPath.trimEnd('/').substringAfterLast('/')
+    // The reconnect job first, so the stopped session's end is not taken for a lost connection.
+    reconnect(next, identity, "Switching to $hostPath", SWITCH_WAIT_MILLIS)
+    session?.stop()
   }
 
   /**
@@ -540,6 +558,7 @@ class ConnectController(
   private fun onAccepted(current: Attempt, identity: String) {
     if (attempt !== current) return
     opening = null
+    switching = null
     accepted = true
     current.identity = identity
     // The SSH page lists the host's projects itself; a forwarded link is no use after a restart.
@@ -579,7 +598,13 @@ class ConnectController(
   /** Set by [reconnectOnce] when the backend's certificate changed since the link was made. */
   private var backendRestarted = false
 
-  private fun reconnect(lost: Attempt, identity: String, reason: String) {
+  private fun reconnect(
+    lost: Attempt,
+    identity: String,
+    reason: String,
+    /** How long to wait before the first try; see [switchProject]. */
+    startAfterMillis: Long = 0,
+  ) {
     val certificate = runCatching { ClientCertificate.decode(identity) }.getOrNull()
     if (certificate == null) {
       endSession()
@@ -588,6 +613,7 @@ class ConnectController(
     }
     reconnectJob?.cancel()
     reconnectJob = main.launch {
+      delay(startAfterMillis)
       val clock = ForegroundClock()
       val watching = launch { snapshotFlow { inForeground }.collect(clock::inForeground) }
       var pause = 1_000L
@@ -1144,12 +1170,16 @@ fun EditorApp(
     controller.windows = windows
     ClientScreen(state, session, insets = modifier, windows = windows)
     controller.reconnecting?.let { attemptNumber ->
-      StartProgress(
-        "No connection to IDE Backend",
-        "Trying to reconnect… (attempt $attemptNumber)",
-        fonts,
-        onCancel = controller::leave,
-      )
+      val project = controller.switching
+      if (project != null && attemptNumber == 1)
+        StartProgress("Opening Project", project, fonts, onCancel = controller::leave)
+      else
+        StartProgress(
+          "No connection to IDE Backend",
+          "Trying to reconnect… (attempt $attemptNumber)",
+          fonts,
+          onCancel = controller::leave,
+        )
     }
   }
 }

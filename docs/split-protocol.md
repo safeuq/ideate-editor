@@ -1020,3 +1020,14 @@ and sends it as `UIAutomationInteractionModel.activePopups` (`WizardPopupContent
 and the recent projects as rows. Ideate does the same since this date: `session/ProjectWidget.kt`
 sends the widget's click, and a chosen project is shown by a new `ClientSession(project = …)` over
 the same link (`ConnectController.switchProject`). Details: `docs/plans/project-widget-popup.md`.
+
+## Addendum (2026-11-24): a client ends its session with FORCE_TERMINATE_WIRE
+
+The status table says `FORCE_TERMINATE_WIRE` is only something to close on. It also works from the
+client: the backend sets the wire to `DECLINED` and removes it at once, instead of keeping it for a
+resume. Without it the backend still holds the wire when this client connects again, closes the
+old session "in favor of another connection" and declines the new connection too (the refusal
+arrives 4 s later). Ideate sends it with reason 0 (`ConnectionDeclineReason.None`) whenever a
+session is stopped on purpose (`SplitWire.terminate`); a connection made 300 ms after it was
+accepted in 20 ms. Log lines and timings: `docs/plans/project-widget-popup.md`, the addendum of
+15:40 IST.

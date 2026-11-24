@@ -112,6 +112,22 @@ class SplitWire(
     }
   }
 
+  /**
+   * Ends the session on purpose: tells the backend to drop this wire (`FORCE_TERMINATE_WIRE`,
+   * reason `ConnectionDeclineReason.None` = 0), then closes. Without it the backend keeps the wire
+   * for a resume and declines this client's next connection once.
+   */
+  fun terminate() {
+    if (closed) return
+    runCatching {
+      connection.frames.writeSystem(
+        WireStatus.FORCE_TERMINATE_WIRE,
+        java.nio.ByteBuffer.allocate(4).putInt(0).array(),
+      )
+    }
+    close()
+  }
+
   fun close(failure: Throwable? = null) {
     if (closed) return
     closed = true

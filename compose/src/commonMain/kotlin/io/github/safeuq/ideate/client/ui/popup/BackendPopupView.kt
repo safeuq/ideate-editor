@@ -112,9 +112,16 @@ fun BackendPopups(popups: List<BackendPopup>, session: ClientSession) {
 @Composable
 private fun BackendPopupView(popup: BackendPopup, session: ClientSession) {
   val text = LocalClientFonts.current.label()
+  // A popup without a text field (a list popup: More Actions, the project widget's) takes the
+  // keyboard itself, as IntelliJ focuses its list (`isFocused`); otherwise Escape and the arrow
+  // keys reach nothing.
+  val popupFocus = remember { FocusRequester() }
+  if (popup.items.none { it is PopupTextField })
+    LaunchedEffect(popup.id) { runCatching { popupFocus.requestFocus() } }
   Column(
     Modifier.fillMaxWidth()
       .popupContainer(Look.radius)
+      .focusRequester(popupFocus)
       // Taps inside the popup stay there.
       .clickable(remember { MutableInteractionSource() }, indication = null) {}
       .onPreviewKeyEvent { event ->

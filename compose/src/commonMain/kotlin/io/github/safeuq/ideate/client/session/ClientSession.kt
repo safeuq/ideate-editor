@@ -940,7 +940,7 @@ class ClientSession(
       SplitWire(connection, inForeground) { failure ->
         fail(failure ?: IllegalStateException("Connection closed"), connectionLost = true)
       }
-    lifetime.onTermination { wire.close() }
+    lifetime.onTermination { wire.terminate() }
     val rdScheduler = SingleThreadScheduler(lifetime, "rd")
     val protocol =
       Protocol(
