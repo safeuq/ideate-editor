@@ -221,3 +221,44 @@ and `arcRatio = 0.4` match what `MainToolbar.kt` already draws.
   needs the toolbar's `expandGroup` call first.
 - What the backend does for a client after an open or a recent project is chosen (step 4).
 - Whether the popup's speed search (typing to filter) runs on the backend for this popup kind.
+
+## Addendum (2026-11-24, second run): choosing a project, filtering, `factoryId`
+
+Same setup as the first addendum (own backend on 5997, traced JetBrains Client), 07:06 to 07:10
+IST. All **seen** in the client and its rd trace. This answers the first addendum's "Unknown".
+
+| Question | Answer | Example from the trace |
+|---|---|---|
+| Where does `factoryId` come from? | The client picks one number per toolbar and sends it in that toolbar's `expandGroup` and in every `getComponent` for it. The backend never sends it. | `1` for the `alpha` window's `MainToolbar`, `5` for the `beta` window's; both in `AsyncActionUpdateRequest(place = "MainToolbar", uiKind = ToolbarKindModel(horizontal = true), factoryId = 1)` and `ActionComponentRequest(actionId = "main.toolbar.Project", factoryId = 1)` |
+| Does typing filter on the backend? | No. Typing `alp` left one row (`alpha`) and nothing was sent in those 2 s. The client filters the rows it has. | after the popup opened only `content.selectedValueChanged(2)` was sent |
+| How is a row chosen? | The client fires the row's own signal, then closes the popup. | SEND `activePopups[2].content.step.items[5].signal(Unit)`; RECV `activePopups[2].result = OK`; SEND `result = CLOSE` and `activePopups` Remove key 2 |
+| What follows choosing an **open** project? | The backend asks the client to bring that project's window forward, 54 ms after the choice. No solution is added or closed. | RECV `solutions[0].projectViewModel.focusProjectWindow(false)`; the client's main window changed from `beta` to `alpha` |
+| What follows choosing a **recent** project? | The backend opens it and adds it as a new solution, 55 ms after the choice. No This Window or New Window question came, and the current project stayed open. | RECV `solutions` Add key 2, then `solutions[2].isLoaded = true` 165 ms later; the client showed `alpha` as a new window (a macOS window tab) |
+| What does closing a project send? | The backend asks, the client removes the solution. | RECV `solutions[0].closeRequested = RdSolutionCloseOptions(…)`, SEND `solutions` Remove key 0 |
+
+The rows in each state of this run:
+
+| State | Rows after the four fixed ones |
+|---|---|
+| only `alpha` open | "Open Projects": `alpha` |
+| `alpha` and `beta` open, asked from `beta`'s window | "Open Projects": `beta`, `alpha` |
+| `alpha` closed from the client, asked from `beta` | "Open Projects": `beta`; "Recent Projects": `alpha` |
+
+The shown project is itself a row under "Open Projects". A project that was only ever open while
+the backend was killed did not become recent; closing it from the client did.
+
+### What this adds to the design
+
+- Ideate reads `focusProjectWindow` nowhere yet. It is how the backend says "show this project":
+  on it, bind the session to that solution (step 4 of the first addendum).
+- After a recent project is chosen, the new entry of `solutionModel.solutions` is the one to show.
+  Ideate today leaves a second solution alone unless the shown one is the welcome project.
+- Filtering by typing is the client's job: match on the name and the lines under it, as
+  `ProjectWidgetSpeedsearchFilter` does.
+- `ActionMenus` sends `factoryId = null` today. For the toolbar, pick a number per toolbar and use
+  it in both calls.
+
+### Not checked
+
+New Project…, Open… and Clone Repository… were not chosen (each opens a dialog), and neither was
+IntelliJ IDEA Home.
