@@ -59,7 +59,7 @@ import io.github.safeuq.ideate.client.session.SearchTab
 import io.github.safeuq.ideate.client.ui.component.SearchHistory
 import io.github.safeuq.ideate.client.ui.component.SearchTextField
 import io.github.safeuq.ideate.client.ui.component.popupContainer
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.UiDensity
 import io.github.safeuq.ideate.client.ui.theme.label
@@ -134,7 +134,7 @@ internal fun SearchEverywherePopup(
           ) {
             BasicText(
               tab.title,
-              style = fonts.label(if (selected) Looks.tabSelectedText else IslandsDark.text),
+              style = fonts.label(if (selected) Looks.tabSelectedText else Islands.text),
               maxLines = 1,
             )
           }
@@ -176,7 +176,7 @@ internal fun SearchEverywherePopup(
         // SeEmptyResultInfo's text when nothing matched in the tab.
         BasicText(
           "Nothing found.",
-          style = fonts.label(IslandsDark.textSecondary),
+          style = fonts.label(Islands.textSecondary),
           modifier = Modifier.padding(horizontal = Looks.rowInset * 2, vertical = 12.dp),
         )
       }
@@ -199,21 +199,21 @@ internal fun SearchEverywherePopup(
 
 @Composable
 private fun Separator() {
-  Box(Modifier.fillMaxWidth().height(1.dp).background(IslandsDark.popupBorder))
+  Box(Modifier.fillMaxWidth().height(1.dp).background(Islands.popupBorder))
 }
 
 @Composable
 private fun ResultRow(row: SearchRow, selected: Boolean, onClick: () -> Unit) {
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
-  val style = fonts.label(IslandsDark.text)
-  val secondary = if (selected) IslandsDark.text else IslandsDark.textSecondary
+  val style = fonts.label(Islands.text)
+  val secondary = if (selected) Islands.text else Islands.textSecondary
   Row(
     Modifier.fillMaxWidth()
       .height(Looks.rowHeight)
       .padding(horizontal = Looks.rowInset)
       .background(
-        if (selected) IslandsDark.selectionBackground else Color.Transparent,
+        if (selected) Islands.selectionBackground else Color.Transparent,
         RoundedCornerShape(Looks.selectionRadius),
       )
       .clickable(onClick = onClick)
@@ -272,7 +272,7 @@ private fun ResultRow(row: SearchRow, selected: Boolean, onClick: () -> Unit) {
         if (container != null && widths.folder > 0) {
           BasicText(
             container,
-            style = style.copy(color = IslandsDark.textSecondary),
+            style = style.copy(color = Islands.textSecondary),
             maxLines = 1,
             softWrap = false,
             modifier =
@@ -405,8 +405,12 @@ private object Looks {
   val tabHeight = 24.dp
   val tabPadding = 12.dp // BigPopup.tabInsets 0,12
   val tabRadius = 4.dp
-  val tabSelected = Color(0xFF233558) // SearchEverywhere.Tab.selectedBackground = blue-40
-  val tabSelectedText = Color.White // SearchEverywhere.Tab.selectedForeground = text-over-accent
+  val tabSelected
+    get() = Islands.color("SearchEverywhere.Tab.selectedBackground") // blue-40
+
+  val tabSelectedText
+    get() = Islands.color("SearchEverywhere.Tab.selectedForeground") // text-over-accent
+
   // ComplexPopup.TextField.borderInsets 0,12, then textFieldInputInsets' 2 inside: the icon is 14
   // in.
   val fieldPadding = 14.dp
@@ -416,12 +420,13 @@ private object Looks {
   val rowInset = 8.dp // Popup.Selection.leftRightInset, then innerInsets 0,8
 
   val rowHeight
-    get() = if (IslandsDark.density == UiDensity.COMPACT) 22.dp else 24.dp // List.rowHeight
+    get() = if (Islands.density == UiDensity.COMPACT) 22.dp else 24.dp // List.rowHeight
 
   val selectionRadius = 4.dp // Popup.Selection.arc 8
   val iconSize = 16.dp
   val gap = 6.dp // the renderer's defaultGapWidth
-  val matchBackground = Color(0xFFBA9752) // SearchMatch.startBackground = search-match-bg
+  val matchBackground
+    get() = Islands.color("SearchMatch.startBackground") // search-match-bg
 }
 
 /**

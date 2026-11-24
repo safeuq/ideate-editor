@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 
 /**
  * The window's title bar, when the app draws into it as IntelliJ's new UI does: the main toolbar
@@ -46,7 +46,7 @@ val LocalTitleBarArea = staticCompositionLocalOf<TitleBarArea?> { null }
 @Composable
 fun TitleBarSpacer() {
   val area = LocalTitleBarArea.current ?: return
-  Spacer(Modifier.fillMaxWidth().height(maxOf(area.height, IslandsDark.toolbarHeight)))
+  Spacer(Modifier.fillMaxWidth().height(maxOf(area.height, Islands.toolbarHeight)))
 }
 
 /**

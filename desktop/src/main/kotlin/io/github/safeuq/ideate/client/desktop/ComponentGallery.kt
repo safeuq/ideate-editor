@@ -49,7 +49,7 @@ import io.github.safeuq.ideate.client.ui.dialog.MessageDialog
 import io.github.safeuq.ideate.client.ui.dialog.MessageKind
 import io.github.safeuq.ideate.client.ui.projectAvatarBrush
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 import java.io.File
@@ -100,7 +100,7 @@ object ComponentGallery {
       val scene =
         ImageComposeScene((widthDp * SCALE).toInt(), (heightDp * SCALE).toInt(), density) {
           CompositionLocalProvider(LocalClientFonts provides fonts, LocalIcons provides icons) {
-            Box(Modifier.fillMaxSize().background(IslandsDark.islandBackground).padding(inset.dp)) {
+            Box(Modifier.fillMaxSize().background(Islands.islandBackground).padding(inset.dp)) {
               content()
             }
           }
@@ -143,7 +143,7 @@ object ComponentGallery {
 
 @Composable
 private fun Backdrop(content: @Composable () -> Unit) {
-  Box(Modifier.fillMaxSize().background(IslandsDark.windowBackground)) { content() }
+  Box(Modifier.fillMaxSize().background(Islands.windowBackground)) { content() }
 }
 
 /** DialogWrapper.kt with fields, radio buttons, an error and the south panel. */
@@ -192,7 +192,7 @@ private fun SampleMessage() {
 @Composable
 private fun Gallery(focused: FocusedShots) {
   Column(
-    Modifier.fillMaxSize().background(IslandsDark.islandBackground).padding(20.dp),
+    Modifier.fillMaxSize().background(Islands.islandBackground).padding(20.dp),
     verticalArrangement = Arrangement.spacedBy(14.dp),
   ) {
     Section("Button.kt: DefaultButton, OutlinedButton; enabled, disabled") {
@@ -258,8 +258,8 @@ private fun Gallery(focused: FocusedShots) {
           "expui/build/build.svg",
           "Build",
           {},
-          size = IslandsDark.toolbarButton,
-          iconSize = IslandsDark.toolbarIcon,
+          size = Islands.toolbarButton,
+          iconSize = Islands.toolbarIcon,
         )
       }
     }
@@ -312,7 +312,7 @@ private fun Toggles(focused: FocusedShots) {
 private fun Section(title: String, content: @Composable () -> Unit) {
   val fonts = LocalClientFonts.current
   Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    BasicText(title, style = fonts.label(IslandsDark.textSecondary))
+    BasicText(title, style = fonts.label(Islands.textSecondary))
     content()
   }
 }

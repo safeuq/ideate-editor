@@ -35,7 +35,7 @@ import com.jediterm.core.input.KeyEvent
 import io.github.safeuq.ideate.client.session.terminal.TerminalKeyInput
 import io.github.safeuq.ideate.client.ui.IS_MAC
 import io.github.safeuq.ideate.client.ui.component.IconButtonLook
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 
 /**
@@ -62,7 +62,7 @@ fun TerminalKeyBar(keys: TerminalKeyInput, modifier: Modifier = Modifier) {
     modifier
       .fillMaxWidth()
       .height(KEY_BAR_HEIGHT)
-      .background(IslandsDark.windowBackground)
+      .background(Islands.windowBackground)
       .padding(horizontal = 6.dp),
     horizontalArrangement = Arrangement.spacedBy(2.dp),
     verticalAlignment = Alignment.CenterVertically,
@@ -104,7 +104,7 @@ private fun KeyButton(
         if (selected || pressed) IconButtonLook.pressedBackground else Color.Transparent,
         IconButtonLook.shape,
       )
-      .border(1.dp, IslandsDark.controlBorder, IconButtonLook.shape)
+      .border(1.dp, Islands.controlBorder, IconButtonLook.shape)
       .semantics {
         contentDescription = description
         role = Role.Button
@@ -146,7 +146,7 @@ private fun GlyphKey(
       val outline = layout.getPathForRange(0, glyph.length).getBounds()
       drawText(
         layout,
-        color = IslandsDark.text,
+        color = Islands.text,
         topLeft = Offset(size.width / 2 - outline.center.x, size.height / 2 - outline.center.y),
       )
     }

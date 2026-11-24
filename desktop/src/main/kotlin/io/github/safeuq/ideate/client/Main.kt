@@ -31,7 +31,8 @@ import io.github.safeuq.ideate.client.ui.lux.PngDecoder
 import io.github.safeuq.ideate.client.ui.lux.luxScreenScale
 import io.github.safeuq.ideate.client.ui.lux.pngDecoder
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
+import io.github.safeuq.ideate.client.ui.theme.SyncThemeWithOs
 import java.awt.GraphicsEnvironment
 import java.io.File
 import java.nio.file.Files
@@ -64,7 +65,7 @@ fun main(arguments: Array<String>) {
     )
   MacFullScreenControlsManager.configureEnable()
   val fonts = DesktopResources.fonts(clientLib)
-  IslandsDark.density = DesktopResources.uiDensity()
+  Islands.density = DesktopResources.uiDensity()
   // Lux dialogs' images (ui/lux/LuxImages.kt).
   pngDecoder = PngDecoder { bytes ->
     runCatching { Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
@@ -174,6 +175,7 @@ private fun IdeateWindow(
       AgentMcp.register(window)
       onDispose { AgentMcp.unregister(window) }
     }
+    SyncThemeWithOs()
     IdeateLocals(
       window,
       clientLib,

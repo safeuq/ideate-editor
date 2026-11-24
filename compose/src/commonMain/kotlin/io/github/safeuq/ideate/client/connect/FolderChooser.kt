@@ -36,7 +36,7 @@ import io.github.safeuq.ideate.client.ui.component.Link
 import io.github.safeuq.ideate.client.ui.component.TextField
 import io.github.safeuq.ideate.client.ui.dialog.DialogAction
 import io.github.safeuq.ideate.client.ui.dialog.DialogWrapper
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 
 /**
@@ -60,9 +60,9 @@ fun FolderChooser(
   val icons = LocalIcons.current
   val text =
     TextStyle(
-      color = IslandsDark.text,
+      color = Islands.text,
       fontFamily = fonts.ui,
-      fontSize = IslandsDark.UI_FONT_SIZE.sp,
+      fontSize = Islands.UI_FONT_SIZE.sp,
     )
 
   // Folder contents by path, loaded through Termux when a folder is first expanded.
@@ -163,7 +163,7 @@ fun FolderChooser(
         Modifier.padding(horizontal = 6.dp)
           .width(1.dp)
           .height(20.dp)
-          .background(IslandsDark.toolbarSeparator),
+          .background(Islands.toolbarSeparator),
       )
       IconButton(
         "expui/general/refresh.svg",
@@ -192,7 +192,7 @@ fun FolderChooser(
         .padding(top = 6.dp)
         .weight(1f)
         .fillMaxWidth()
-        .border(1.dp, IslandsDark.toolWindowBorder), // the tree's JBScrollPane: *.borderColor
+        .border(1.dp, Islands.toolWindowBorder), // the tree's JBScrollPane: *.borderColor
     ) {
       ProjectTreeView(
         tree = tree,
@@ -218,7 +218,7 @@ fun FolderChooser(
     error?.let { message ->
       BasicText(
         message,
-        style = text.copy(color = IslandsDark.textSecondary),
+        style = text.copy(color = Islands.textSecondary),
         modifier = Modifier.padding(horizontal = Chooser.sideInset, vertical = 4.dp),
       )
     }

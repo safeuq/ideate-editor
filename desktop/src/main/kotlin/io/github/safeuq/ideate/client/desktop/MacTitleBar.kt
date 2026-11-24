@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import com.jetbrains.JBR
 import io.github.safeuq.ideate.client.ui.TitleBarArea
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 
@@ -36,7 +36,7 @@ fun rememberMacTitleBar(window: ComposeWindow): TitleBarArea? {
   val decorations = JBR.getWindowDecorations()
   val titleBar = remember(window) { decorations.createCustomTitleBar() }
   val controls = remember(window) { ControlAreas() }
-  val height = IslandsDark.toolbarHeight
+  val height = Islands.toolbarHeight
   // Set once per window and height, as MacToolbarFrameHeader does, never again on entering full
   // screen: JBR's updateCustomTitleBar then calls setWindowControlsHidden:NO, which hides its
   // full-screen buttons (MacFullScreenControlsManager) and brings back macOS's own, shown only on

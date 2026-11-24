@@ -12,7 +12,7 @@ fun interface PngDecoder {
 
 /**
  * The platform's PNG decoder (desktop: Skia, Android: BitmapFactory), set once at startup before
- * any Lux dialog opens, as [io.github.safeuq.ideate.client.ui.theme.IslandsDark.density] is.
+ * any Lux dialog opens, as [io.github.safeuq.ideate.client.ui.theme.Islands.density] is.
  */
 @Volatile var pngDecoder: PngDecoder = PngDecoder { null }
 

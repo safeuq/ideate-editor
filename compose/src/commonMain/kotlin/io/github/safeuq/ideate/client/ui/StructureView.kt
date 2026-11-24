@@ -16,7 +16,7 @@ import io.github.safeuq.ideate.client.session.SessionState
 import io.github.safeuq.ideate.client.session.StructureTree
 import io.github.safeuq.ideate.client.session.TextFragment
 import io.github.safeuq.ideate.client.session.TreeNode
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -48,7 +48,7 @@ fun StructureView(
     Box(modifier.padding(12.dp)) {
       BasicText(
         if (state.selectedEditor == null) "No file is open" else "Loading…",
-        style = fonts.label(IslandsDark.textSecondary),
+        style = fonts.label(Islands.textSecondary),
       )
     }
     return

@@ -1,7 +1,7 @@
 package io.github.safeuq.ideate.client.desktop
 
 import androidx.compose.ui.graphics.toArgb
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 
 /**
  * IntelliJ's `MacFullScreenControlsManager` (new UI, macOS): in full screen the traffic lights stay
@@ -27,7 +27,7 @@ object MacFullScreenControlsManager {
    * transparent. IntelliJ also sets the misspelt `newFullScreeControls` key, for older JBRs.
    */
   private fun configureColors() {
-    val rgb = IslandsDark.fullScreenControlBackground.toArgb().toString()
+    val rgb = Islands.fullScreenControlBackground.toArgb().toString()
     System.setProperty("apple.awt.newFullScreeControls.background", rgb)
     System.setProperty("apple.awt.newFullScreenControls.background", rgb)
   }

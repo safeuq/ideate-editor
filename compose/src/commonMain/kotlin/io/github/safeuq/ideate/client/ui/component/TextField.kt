@@ -25,7 +25,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextRange
@@ -33,7 +32,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -85,13 +84,13 @@ fun TextField(
     },
     enabled = enabled,
     singleLine = singleLine,
-    textStyle = fonts.label(if (enabled) IslandsDark.text else IslandsDark.textDisabled),
+    textStyle = fonts.label(if (enabled) Islands.text else Islands.textDisabled),
     visualTransformation =
       if (secret) PasswordVisualTransformation() else VisualTransformation.None,
     keyboardOptions = keyboardOptions,
     keyboardActions = keyboardActions,
     interactionSource = interaction,
-    cursorBrush = SolidColor(IslandsDark.text),
+    cursorBrush = SolidColor(Islands.text),
     modifier =
       modifier
         .fillMaxWidth()
@@ -101,7 +100,7 @@ fun TextField(
           // The border is 1 px; the focus ring adds 1 px outside it, 2 px of focus color in all.
           val ring = 1.dp.toPx()
           drawRoundRect(
-            IslandsDark.focusBorder,
+            Islands.focusBorder,
             topLeft = Offset(-ring / 2, -ring / 2),
             size = Size(size.width + ring, size.height + ring),
             cornerRadius = CornerRadius(FieldLook.radius.toPx() + ring / 2),
@@ -116,8 +115,8 @@ fun TextField(
                 1.dp,
                 when {
                   !enabled -> FieldLook.disabledBorder
-                  focused -> IslandsDark.focusBorder
-                  else -> IslandsDark.controlBorder
+                  focused -> Islands.focusBorder
+                  else -> Islands.controlBorder
                 },
                 shape,
               ),
@@ -136,7 +135,7 @@ fun TextField(
           contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
         ) {
           if (value.isEmpty() && placeholder != null)
-            BasicText(placeholder, style = fonts.label(IslandsDark.textSecondary), maxLines = 1)
+            BasicText(placeholder, style = fonts.label(Islands.textSecondary), maxLines = 1)
           inner()
         }
         trailingIcon?.invoke()
@@ -149,9 +148,12 @@ fun TextField(
 private object FieldLook {
   val radius = 4.dp // Component.arc 8, an arc diameter
   val height // TextField.minimumSize 49,28; compact 49,24
-    get() = IslandsDark.byDensity(28.dp, 24.dp)
+    get() = Islands.byDensity(28.dp, 24.dp)
 
   val horizontalPadding = 9.dp // IntUiBridgeTextField: 8 + the 1 px border
-  val background = Color(0xFF191A1C) // TextField.background = control-bg
-  val disabledBorder = Color(0xFF33353B) // *.disabledBorderColor = control-border-disabled
+  val background
+    get() = Islands.color("TextField.background") // control-bg
+
+  val disabledBorder
+    get() = Islands.color("Component.disabledBorderColor") // control-border-disabled
 }

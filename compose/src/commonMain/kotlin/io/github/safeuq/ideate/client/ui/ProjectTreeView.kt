@@ -61,8 +61,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.session.ProjectTree
 import io.github.safeuq.ideate.client.session.TreeNode
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
+import io.github.safeuq.ideate.client.ui.theme.ThemeKeys
 import io.github.safeuq.ideate.client.ui.theme.label
 import io.github.safeuq.ideate.client.ui.theme.small
 import kotlin.math.roundToInt
@@ -79,9 +80,7 @@ fun ProjectToolWindow(
   val fonts = LocalClientFonts.current
   Column(modifier) {
     Box(
-      Modifier.fillMaxWidth()
-        .height(IslandsDark.headerHeight)
-        .padding(start = IslandsDark.headerLeftInset),
+      Modifier.fillMaxWidth().height(Islands.headerHeight).padding(start = Islands.headerLeftInset),
       contentAlignment = Alignment.CenterStart,
     ) {
       BasicText(
@@ -171,8 +170,7 @@ fun ProjectTreeView(
 
   LazyColumn(
     state = listState,
-    contentPadding =
-      PaddingValues(top = IslandsDark.treeTopInset, bottom = IslandsDark.treeTopInset),
+    contentPadding = PaddingValues(top = Islands.treeTopInset, bottom = Islands.treeTopInset),
     modifier =
       modifier
         .onSizeChanged { viewportWidth = it.width.toFloat() }
@@ -195,7 +193,7 @@ fun ProjectTreeView(
       ) {
         TreeRow(
           node = node,
-          nameColor = node.fileStatus?.let(fileStatusColor) ?: IslandsDark.text,
+          nameColor = node.fileStatus?.let(fileStatusColor) ?: Islands.text,
           depth = depth,
           expanded = node.id in tree.expanded,
           selected = node.id == tree.selected,
@@ -252,21 +250,20 @@ private fun TreeRow(
   val highlight =
     when {
       selected ->
-        if (treeFocused) IslandsDark.selectionBackground
-        else IslandsDark.selectionInactiveBackground
-      hovered -> IslandsDark.treeHover
+        if (treeFocused) Islands.selectionBackground else Islands.selectionInactiveBackground
+      hovered -> Islands.treeHover
       else -> null
     }
-  val chevronX = IslandsDark.treeChevronInset + IslandsDark.treeIndent * (depth - 1)
-  val rendererX = IslandsDark.treeChevronInset + IslandsDark.treeIndent * depth
-  val iconX = rendererX + IslandsDark.treeIconTextGap
-  val textX = iconX + 16.dp + IslandsDark.treeTextGap
+  val chevronX = Islands.treeChevronInset + Islands.treeIndent * (depth - 1)
+  val rendererX = Islands.treeChevronInset + Islands.treeIndent * depth
+  val iconX = rendererX + Islands.treeIconTextGap
+  val textX = iconX + 16.dp + Islands.treeTextGap
 
   Box(
     Modifier.fillMaxWidth()
-      .height(IslandsDark.treeRowHeight)
+      .height(Islands.treeRowHeight)
       // The scope's file colour fills the whole row, under the selection.
-      .then(node.background?.let { Modifier.background(Color(it)) } ?: Modifier)
+      .then(rowBackground(node)?.let { Modifier.background(it) } ?: Modifier)
       .hoverable(interaction)
       .pointerInput(node.id) {
         // On release, not on touch-down: a scroll that starts on a row takes the press over
@@ -287,9 +284,9 @@ private fun TreeRow(
       // redraws it.
       Box(
         Modifier.fillMaxSize().clipToBounds().drawBehind {
-          val left = IslandsDark.treeChevronInset.toPx() - scroll.x
-          val right = size.width - IslandsDark.treeSideInset.toPx()
-          val radius = IslandsDark.treeSelectionRadius.toPx()
+          val left = Islands.treeChevronInset.toPx() - scroll.x
+          val right = size.width - Islands.treeSideInset.toPx()
+          val radius = Islands.treeSelectionRadius.toPx()
           drawRoundRect(
             highlight,
             topLeft = Offset(left, 0f),
@@ -365,7 +362,7 @@ private fun TreeRow(
               .align(Alignment.CenterStart)
               .wrapContentWidth(Alignment.Start, unbounded = true)
               .onSizeChanged {
-                onRight(it.width + with(density) { (textX + IslandsDark.treeSideInset).toPx() })
+                onRight(it.width + with(density) { (textX + Islands.treeSideInset).toPx() })
               },
         )
       }
@@ -373,14 +370,23 @@ private fun TreeRow(
       node.trailing?.let { trailing ->
         BasicText(
           trailing,
-          style = fonts.small(if (selected) IslandsDark.text else IslandsDark.textSecondary),
+          style = fonts.small(if (selected) Islands.text else Islands.textSecondary),
           maxLines = 1,
           softWrap = false,
           modifier =
             Modifier.align(Alignment.CenterVertically)
-              .padding(start = 24.dp, end = IslandsDark.treeSideInset + 4.dp),
+              .padding(start = 24.dp, end = Islands.treeSideInset + 4.dp),
         )
       }
     }
   }
 }
+
+/**
+ * A node's scope color as JetBrains Client picks it (`ProjectScopeUtils.getScopeColor`): the color
+ * name through `FileColorManager.getColor`, i.e. `FileColor.Orange` in the current theme (Islands
+ * Dark #45322B, Islands Light its own), else the color the backend sent.
+ */
+private fun rowBackground(node: TreeNode): Color? =
+  node.backgroundName?.let { name -> ThemeKeys.color("FileColor.$name") }
+    ?: node.background?.let { Color(it) }

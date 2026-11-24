@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.session.UsageRow
 import io.github.safeuq.ideate.client.session.UsagesPopup
 import io.github.safeuq.ideate.client.ui.component.popupContainer
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.editor
 import io.github.safeuq.ideate.client.ui.theme.medium
@@ -125,7 +125,7 @@ private fun UsageRowView(
       .height(Usages.rowHeight)
       .padding(horizontal = 3.dp)
       .background(
-        if (selected) IslandsDark.selectionBackground else Color.Transparent,
+        if (selected) Islands.selectionBackground else Color.Transparent,
         RoundedCornerShape(4.dp),
       )
       .clickable { onChoose(row.index) }
@@ -151,8 +151,12 @@ private fun UsageRowView(
 }
 
 private object Usages {
-  val foreground = Color(0xFFBCBEC4)
-  val secondary = IslandsDark.textSecondary
+  val foreground
+    get() = Islands.color("CompletionPopup.foreground")
+
+  val secondary
+    get() = Islands.textSecondary
+
   val rowHeight = 24.dp
   val maxRows = 15
   val radius = 6.dp

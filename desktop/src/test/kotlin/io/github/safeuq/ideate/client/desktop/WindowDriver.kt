@@ -8,7 +8,7 @@ import io.github.safeuq.ideate.client.session.ClientSession
 import io.github.safeuq.ideate.client.ui.ClientScreen
 import io.github.safeuq.ideate.client.ui.lux.PngDecoder
 import io.github.safeuq.ideate.client.ui.lux.pngDecoder
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import java.awt.Window
 import java.awt.event.MouseEvent
 import java.awt.event.WindowEvent
@@ -102,7 +102,7 @@ class WindowDriver private constructor(private val outputFolder: File) {
           },
         )
       val fonts = DesktopResources.fonts(clientLib)
-      IslandsDark.density = DesktopResources.uiDensity()
+      Islands.density = DesktopResources.uiDensity()
       pngDecoder = PngDecoder { bytes ->
         runCatching { Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
       }

@@ -24,7 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.session.BackendToolWindowView
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -35,16 +35,16 @@ import io.github.safeuq.ideate.client.ui.theme.label
  */
 @Composable
 fun HeaderTab(title: String, isSelected: Boolean, onSelect: () -> Unit, onClose: (() -> Unit)?) {
-  val pill = RoundedCornerShape(IslandsDark.tabRadius)
+  val pill = RoundedCornerShape(Islands.tabRadius)
   val interaction = remember { MutableInteractionSource() }
   val hovered by interaction.collectIsHoveredAsState()
   Box(
-    Modifier.height(IslandsDark.tabHeight)
+    Modifier.height(Islands.tabHeight)
       .clip(pill)
       .then(
         if (isSelected)
-          Modifier.background(IslandsDark.tabSelectedBackground)
-            .border(1.dp, IslandsDark.tabSelectedBorder, pill)
+          Modifier.background(Islands.tabSelectedBackground)
+            .border(1.dp, Islands.tabSelectedBorder, pill)
         else Modifier,
       )
       .hoverable(interaction)

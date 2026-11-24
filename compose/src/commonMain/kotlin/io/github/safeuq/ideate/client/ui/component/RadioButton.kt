@@ -16,7 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.ui.LocalIcons
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -80,7 +80,7 @@ internal fun ToggleRow(text: String, iconPath: String, enabled: Boolean, modifie
     icons.painter(iconPath)?.let { Image(it, null, Modifier.size(24.dp)) }
     BasicText(
       text,
-      style = fonts.label(if (enabled) IslandsDark.text else IslandsDark.textDisabled),
+      style = fonts.label(if (enabled) Islands.text else Islands.textDisabled),
     )
   }
 }

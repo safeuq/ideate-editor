@@ -12,7 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.ui.LocalIcons
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.h4
 import io.github.safeuq.ideate.client.ui.theme.label
@@ -56,7 +56,7 @@ fun MessageDialog(
     Row(
       Modifier.width(width)
         // AlertDialog.background = popup-bg; its PopupBorder in popup-border.
-        .dialogFrame(IslandsDark.popupBackground, IslandsDark.popupBorder)
+        .dialogFrame(Islands.popupBackground, Islands.popupBorder)
         .padding(20.dp), // createContentPaneBorder: 20 all round
       horizontalArrangement = Arrangement.spacedBy(12.dp), // the icon panel's hgap
     ) {

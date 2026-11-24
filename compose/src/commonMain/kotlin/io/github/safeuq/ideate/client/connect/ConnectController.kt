@@ -31,7 +31,7 @@ import io.github.safeuq.ideate.client.ui.TitleBarSpacer
 import io.github.safeuq.ideate.client.ui.ToolWindowState
 import io.github.safeuq.ideate.client.ui.dialog.MessageKind
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.toolWindowButtons
 import kotlin.concurrent.thread
 import kotlinx.coroutines.CompletableDeferred
@@ -1048,7 +1048,7 @@ fun EditorApp(
   fonts: ClientFonts,
   modifier: Modifier = Modifier,
 ) {
-  Box(Modifier.fillMaxSize().background(IslandsDark.windowBackground)) {
+  Box(Modifier.fillMaxSize().background(Islands.windowBackground)) {
     // collectAsState alone keeps the old session's last value for a frame after [session] changes,
     // which looked like "the new session has sent everything"; so read the value itself. Reading
     // the collected value is what makes this recompose on a change.

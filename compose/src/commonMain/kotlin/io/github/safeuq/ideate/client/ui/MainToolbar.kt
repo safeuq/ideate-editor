@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.safeuq.ideate.client.ui.component.IconButton
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 import kotlin.math.abs
@@ -56,16 +56,16 @@ private fun ToolbarDropdown(
 ) {
   val interaction = remember { MutableInteractionSource() }
   val hovered by interaction.collectIsHoveredAsState()
-  val shape = RoundedCornerShape(IslandsDark.toolbarButtonRadius)
+  val shape = RoundedCornerShape(Islands.toolbarButtonRadius)
   Row(
     modifier
       .then(control)
-      .height(IslandsDark.toolbarButton)
+      .height(Islands.toolbarButton)
       .clip(shape)
-      .background(if (hovered) IslandsDark.toolbarHover else Color.Transparent)
+      .background(if (hovered) Islands.toolbarHover else Color.Transparent)
       .hoverable(interaction)
       .then(onClick?.let { Modifier.clickable(onClick = it) } ?: Modifier)
-      .padding(start = IslandsDark.toolbarDropdownStart, end = IslandsDark.toolbarDropdownEnd),
+      .padding(start = Islands.toolbarDropdownStart, end = Islands.toolbarDropdownEnd),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     content()
@@ -90,13 +90,13 @@ fun MainToolbar(
    * Where the islands start, so the project widget's box lines up with them when the window has its
    * own title bar: after the tool window bar in landscape, as Gateway's second row does.
    */
-  islandsStart: Dp = IslandsDark.islandGap,
+  islandsStart: Dp = Islands.islandGap,
   /** Phone upright, away from the editor: the button back to it, at the row's right end. */
   back: ToolbarBack? = null,
 ) {
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
-  val text = fonts.label().copy(fontSize = IslandsDark.toolbarFontSize.sp)
+  val text = fonts.label().copy(fontSize = Islands.toolbarFontSize.sp)
   // In the window's title bar (TitleBar.kt): leave the window's buttons their room, be at least as
   // tall as the system's caption bar, and keep the controls from dragging the window.
   val titleBar = LocalTitleBarArea.current
@@ -104,7 +104,7 @@ fun MainToolbar(
   Row(
     modifier
       .fillMaxWidth()
-      .height(maxOf(IslandsDark.toolbarHeight, titleBar?.height ?: 0.dp))
+      .height(maxOf(Islands.toolbarHeight, titleBar?.height ?: 0.dp))
       // After the window's buttons when they are in this row (macOS); else lined up with the
       // islands.
       .padding(
@@ -120,7 +120,7 @@ fun MainToolbar(
       // toolbar icons (RecentProject.Avatar.iconSize falls back to MainToolbar.Button.iconSize),
       // corners of arcRatio 0.4 (an arc diameter, so a radius of 0.2 × size), the initials in
       // JetBrains Mono SemiBold at 13/20 of the size (16 → 10, 20 → 13).
-      val avatarSize = IslandsDark.toolbarIcon
+      val avatarSize = Islands.toolbarIcon
       Box(
         Modifier.size(avatarSize)
           .onGloballyPositioned { coordinates ->
@@ -179,8 +179,8 @@ fun MainToolbar(
               path,
               label,
               onClick = { onUnsupported(label) },
-              size = IslandsDark.toolbarButton,
-              iconSize = IslandsDark.toolbarIcon,
+              size = Islands.toolbarButton,
+              iconSize = Islands.toolbarIcon,
             )
           }
       }
@@ -190,16 +190,16 @@ fun MainToolbar(
           "Search Everywhere",
           onClick = search,
           modifier = control.padding(start = 6.dp),
-          size = IslandsDark.toolbarButton,
-          iconSize = IslandsDark.toolbarIcon,
+          size = Islands.toolbarButton,
+          iconSize = Islands.toolbarIcon,
         )
       }
       // A divider, then the way back to the editor; the run controls move left to make room.
       back?.let { target ->
         Box(
           Modifier.padding(horizontal = 4.dp)
-            .size(1.dp, IslandsDark.toolbarIcon)
-            .background(IslandsDark.toolbarSeparator),
+            .size(1.dp, Islands.toolbarIcon)
+            .background(Islands.toolbarSeparator),
         )
         IconButton(
           if (target.pointsRight) "expui/general/chevronRight.svg"
@@ -207,8 +207,8 @@ fun MainToolbar(
           "Back to the editor",
           onClick = target.onClick,
           modifier = control,
-          size = IslandsDark.toolbarButton,
-          iconSize = IslandsDark.toolbarIcon,
+          size = Islands.toolbarButton,
+          iconSize = Islands.toolbarIcon,
         )
       }
     }
@@ -258,7 +258,9 @@ internal fun initials(name: String): String {
  * project name as the id. `smoke` → Color4, blue.
  */
 fun projectAvatarBrush(name: String): Brush {
-  val (start, end) = AVATAR_GRADIENTS[projectColorIndex(name)]
+  val color = "RecentProject.Color${projectColorIndex(name) + 1}"
+  val start = Islands.color("$color.Avatar.Start")
+  val end = Islands.color("$color.Avatar.End")
   return Brush.linearGradient(
     listOf(end, start),
     start = Offset(0f, Float.POSITIVE_INFINITY),
@@ -267,38 +269,12 @@ fun projectAvatarBrush(name: String): Brush {
 }
 
 /** The project's colour, 0 to 8, picked as [projectAvatarBrush] describes. */
-private fun projectColorIndex(name: String) = abs(name.hashCode() % AVATAR_GRADIENTS.size)
+private fun projectColorIndex(name: String) = abs(name.hashCode() % 9) // Color1..9
 
 /**
  * The colour of the project gradient behind the main toolbar ([drawProjectGradient]): the same
  * colour index as the avatar, `RecentProject.ColorN.MainToolbarGradientStart` in
  * ManyIslandsDark.theme.json. `smoke` → Color4 `#335661`.
  */
-fun projectGradientColor(name: String): Color = MAIN_TOOLBAR_GRADIENT[projectColorIndex(name)]
-
-private val MAIN_TOOLBAR_GRADIENT =
-  listOf(
-    Color(0xFF664832),
-    Color(0xFF5E4724),
-    Color(0xFF45522F),
-    Color(0xFF335661),
-    Color(0xFF394773),
-    Color(0xFF613861),
-    Color(0xFF503D70),
-    Color(0xFF325959),
-    Color(0xFF365439),
-  )
-
-/** `RecentProject.Color1..9.Avatar.Start/End` in ManyIslandsDark.theme.json. */
-private val AVATAR_GRADIENTS =
-  listOf(
-    Color(0xFFE08855) to Color(0xFFE9806F),
-    Color(0xFFB08B14) to Color(0xFFBB7F19),
-    Color(0xFFA1A359) to Color(0xFF87AA59),
-    Color(0xFF3B92B8) to Color(0xFF6183EC),
-    Color(0xFF3574F0) to Color(0xFF7A64F0),
-    Color(0xFFC84D8F) to Color(0xFFA956CF),
-    Color(0xFF955AE0) to Color(0xFFA84DE0),
-    Color(0xFF24A394) to Color(0xFF279CCD),
-    Color(0xFF5FAD65) to Color(0xFF3D968B),
-  )
+fun projectGradientColor(name: String): Color =
+  Islands.color("RecentProject.Color${projectColorIndex(name) + 1}.MainToolbarGradientStart")

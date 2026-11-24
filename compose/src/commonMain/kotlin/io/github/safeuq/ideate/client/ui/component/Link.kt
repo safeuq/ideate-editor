@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -39,7 +39,7 @@ fun Link(
     text,
     style =
       style.copy(
-        color = if (enabled) IslandsDark.link else IslandsDark.textDisabled,
+        color = if (enabled) Islands.link else Islands.textDisabled,
         textDecoration = if (enabled && hovered) TextDecoration.Underline else null,
       ),
     maxLines = 1,

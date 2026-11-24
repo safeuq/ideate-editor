@@ -976,3 +976,27 @@ Request (user, via the runtime session): Ideate gets a light theme that follows 
   Examples in Islands Light: `Panel.background` #F7F8F9, `ActionButton.pressedBackground` #20000000, `Borders.color` #E9EAEE.
 - **The dump records the theme too.** Its first line is `#theme<TAB>id<TAB>name<TAB>isDark<TAB>editorSchemeId`, read from the client's own `LafManager`, so none of these values is copied by hand. To dump another theme, set it in the client's `options/laf.xml` (`<component name="LafManager"><laf themeId="Islands Light"/></component>`) before starting the client. Generate with `java tools/ui-colors/GenerateUiColors.java <table.tsv> <Out.kt> <build> <Kotlin val name>`, e.g. `ISLANDS_LIGHT`. A fresh Islands Dark dump matched the f48390d table line for line.
 - **Editor scheme:** `ClientSession` no longer names "Islands Dark". It picks `LafManager.currentTheme.editorSchemeId` from the schemes the backend sends, and again on each theme change, through a listener that is queued on the rd thread, where the schemes live.
+
+## Addendum (2026-11-24): themes, step 2 — the chrome follows the theme and the OS
+
+`IslandsDark` is now `Islands` (ui/theme/Islands.kt), because it serves both themes. Each chrome color is a getter that reads its `UIManager` key in `LafManager.currentTheme`, so a theme change redraws it. Every key was checked in both JetBrains Client dumps (263.7307.200):
+
+| Islands getter | Key | Islands Dark | Islands Light |
+|---|---|---|---|
+| `windowBackground` | `MainWindow.background` | `#26282C` | `#E9EAEE` |
+| `islandBackground` | `ToolWindow.background` | `#191A1C` | `#FFFFFF` |
+| `text` | `Label.foreground` | `#D1D3D9` | `#000000` |
+| `selectionBackground` | `Tree.selectionBackground` | `#2A4371` | `#D0DFFE` |
+| `toolbarHover` | `ActionButton.hoverBackground` | `#17FFFFFF` | `#12000000` |
+| `tabSelectedBackground` | `EditorTabs.underlinedTabBackground` | `#233558` | `#E3EBFE` |
+| `tabSelectedBorder` | `EditorTabs.underlinedBorderColor` | `#2E4D89` | `#A7C5FF` |
+
+The rest are listed in `IslandsTest`. Two dark values moved slightly, because they used to be measured from screenshots and now come from the key: the selected tab `#233657` → `#233558` and its border `#2C4A82` → `#2E4D89`. `fullScreenControlBackground` moved from `#57595C` to `#575A5C`.
+
+The color literals outside ui/theme/ became keys as well: `SearchEverywhere.Tab.*`, `SearchMatch.startBackground`, `CompletionPopup.foreground` / `matchForeground`, `StatusBar.Widget.*`, `TextField.background`, `Component.disabledBorderColor`, `Button.focusedBorderColor` / `disabledBorderColor`, `ProgressBar.*`, `Slider.buttonColor`, `MainWindow.Tab.selectedInactiveBackground` (the connect screen's tab), and `RecentProject.ColorN.MainToolbarGradientStart` / `Avatar.Start` / `Avatar.End` (N = `abs(name.hashCode() % 9) + 1`). One literal is left: `DialogLook.outline` `#393B40`, which was measured on macOS's own window border and has no key.
+
+Project tree scope colors (Settings | Appearance | File Colors) are resolved as JetBrains Client does (`ProjectScopeUtils.getScopeColor`). The scope's color name goes through `FileColorManager.getColor`, which maps `Orange` to `JBColor.namedColor("FileColor.Orange", …)`. Only after that does it fall back to the ARGB the backend sent. The backend uses its own dark theme, so the excluded `.gradle` row used to stay `#45322B` in Islands Light. It is now light orange.
+
+`SyncThemeWithOs()` is IntelliJ's "Sync with OS". It sits at the top of both `IdeateWindow`s (Android and desktop) and sets `defaultDarkTheme` or `defaultLightTheme` from `isSystemInDarkTheme()`. It does this only when that window's own reading changes. On Android, the connect screen stays alive behind the editor and does not get the uiMode change until it shows again. When every composition set the window's reading, the two windows flipped the theme between dark and light every frame. The log showed "Color scheme Light ready" and "Color scheme Islands Dark ready" alternating every 16 ms.
+
+On Android, the bar icons use `SystemBarStyle.auto` and are set again when the theme changes, because uiMode is in `configChanges` and the activity is not recreated. The launch window color is `#FFFFFF`, with `#191A1C` in `values-night`.

@@ -1,7 +1,10 @@
 package io.github.safeuq.ideate.client.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import java.util.concurrent.CopyOnWriteArrayList
@@ -62,6 +65,26 @@ object LafManager {
   fun addListener(listener: (UiTheme) -> Unit): () -> Unit {
     listeners += listener
     return { listeners -= listener }
+  }
+}
+
+/**
+ * IntelliJ's "Sync with OS" (Settings | Appearance | Theme): the OS's dark or light mode picks
+ * [LafManager.defaultDarkTheme] or [LafManager.defaultLightTheme], and a switch while the app runs
+ * switches the theme too. Called at the top of every window's content, so what it composes already
+ * reads the new theme.
+ *
+ * Only when this window's reading changes: a window behind another (Android's connect screen behind
+ * the editor) isn't told of a switch until it shows again, and setting its stale mode on every
+ * composition would flip the theme back and forth with the window in front, every frame.
+ */
+@Composable
+fun SyncThemeWithOs() {
+  val dark = isSystemInDarkTheme()
+  remember(dark) {
+    LafManager.setCurrentLookAndFeel(
+      if (dark) LafManager.defaultDarkTheme else LafManager.defaultLightTheme,
+    )
   }
 }
 

@@ -93,7 +93,7 @@ import io.github.safeuq.ideate.client.ui.terminal.TerminalHeaderTabs
 import io.github.safeuq.ideate.client.ui.terminal.TerminalKeyBar
 import io.github.safeuq.ideate.client.ui.terminal.TerminalTabsState
 import io.github.safeuq.ideate.client.ui.terminal.TerminalToolWindow
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 import kotlin.math.abs
@@ -193,11 +193,11 @@ fun ClientScreen(
         )
         true
       }
-      .background(IslandsDark.windowBackground)
+      .background(Islands.windowBackground)
       .drawBehind {
         if (projectColor != null) {
           val center = if (gradientCenter.isNaN()) 150.dp.toPx() else gradientCenter
-          drawProjectGradient(IslandsDark.windowBackground, projectColor, center)
+          drawProjectGradient(Islands.windowBackground, projectColor, center)
         }
       }
       .then(insets),
@@ -468,8 +468,7 @@ fun ClientScreen(
           } else null,
         onProjectIconCenter = { gradientCenter = it },
         islandsStart =
-          if (layout == ScreenLayout.PORTRAIT) IslandsDark.islandGap
-          else IslandsDark.stripeThickness,
+          if (layout == ScreenLayout.PORTRAIT) Islands.islandGap else Islands.stripeThickness,
         back =
           if (editorCovered) ToolbarBack(pointsRight = page == Page.LEFT, onClick = ::backToEditor)
           else null,
@@ -605,7 +604,7 @@ fun ClientScreen(
             // One bar with every group; left windows open left of the editor, right and bottom
             // ones right of it, at full height.
             ToolWindowBar(buttons, shown, ::barClick, vertical = true, Modifier.fillMaxHeight())
-            val main = Modifier.weight(1f).fillMaxHeight().padding(end = IslandsDark.islandGap)
+            val main = Modifier.weight(1f).fillMaxHeight().padding(end = Islands.islandGap)
             val window = Place.entries.firstNotNullOfOrNull { windows.open[it] }
             when {
               window == null -> Editor(main)
@@ -657,7 +656,7 @@ fun ClientScreen(
         state.search,
         search,
         // Under the main toolbar, which the popup must not cover on a phone.
-        top = IslandsDark.toolbarHeight + IslandsDark.islandGap,
+        top = Islands.toolbarHeight + Islands.islandGap,
         maxHeight = maxHeight * 0.6f,
         onChosen = ::onNavigated,
         onUnsupported = unsupported,
@@ -668,13 +667,13 @@ fun ClientScreen(
 }
 
 private fun Modifier.island(radius: Dp) =
-  clip(RoundedCornerShape(radius)).background(IslandsDark.islandBackground)
+  clip(RoundedCornerShape(radius)).background(Islands.islandBackground)
 
 /**
  * The islands' corner radius: IntelliJ's everywhere, except on a phone held upright, where a page
  * with one island at rest draws it square and flush with the screen's sides ([SwipePager]).
  */
-private val LocalIslandRadius = compositionLocalOf { IslandsDark.islandRadius }
+private val LocalIslandRadius = compositionLocalOf { Islands.islandRadius }
 
 /** `RdProjectViewAsyncPane` "ProjectPane": the Project view, the one with [SessionState.tree]. */
 private const val PROJECT_PANE = "ProjectPane"
@@ -789,7 +788,7 @@ private fun BackendToolWindowContent(
       BasicText(
         // Empty until the backend's content arrives, a moment after the window opens.
         view?.label ?: "",
-        style = LocalClientFonts.current.label().copy(color = IslandsDark.textSecondary),
+        style = LocalClientFonts.current.label().copy(color = Islands.textSecondary),
       )
     }
     return
@@ -853,8 +852,8 @@ private fun SwipePager(
   LaunchedEffect(page) { position.animateTo(positionOf(page)) }
 
   val rounded = dragging || position.isRunning || split(page)
-  val gap by animateDpAsState(if (rounded) IslandsDark.islandGap else 0.dp)
-  val radius by animateDpAsState(if (rounded) IslandsDark.islandRadius else 0.dp)
+  val gap by animateDpAsState(if (rounded) Islands.islandGap else 0.dp)
+  val radius by animateDpAsState(if (rounded) Islands.islandRadius else 0.dp)
 
   // The pager's top left in the window, so a drag's start can be compared with the tab row's.
   var origin by remember { mutableStateOf(Offset.Zero) }
@@ -970,7 +969,7 @@ private fun EditorIsland(
     // EditorTabs.underTabsBorderColor. Not while sticky lines show at the editor's top (user
     // request): their panel starts right there.
     var stickyShown by remember { mutableStateOf(false) }
-    if (!stickyShown) EditorBorder(IslandsDark.underTabsBorder)
+    if (!stickyShown) EditorBorder(Islands.underTabsBorder)
     val scheme = state.scheme
     if (selected != null && scheme != null) {
       val actions =
@@ -1013,14 +1012,14 @@ private fun EditorIsland(
           session,
           // EditorColors.BREADCRUMBS_BORDER_COLOR falls back to INDENT_GUIDE_COLOR.
           (scheme.color("BREADCRUMBS_BORDER_COLOR") ?: scheme.color("INDENT_GUIDE"))?.let(::Color)
-            ?: IslandsDark.popupBorder,
+            ?: Islands.popupBorder,
         )
     } else {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         BasicText(
           if (state.tree.nodes.isEmpty()) "Connecting…"
           else "Double-tap a file in the Project tool window to open it",
-          style = fonts.label(IslandsDark.textSecondary),
+          style = fonts.label(Islands.textSecondary),
           modifier = Modifier.padding(16.dp),
         )
       }
@@ -1102,7 +1101,7 @@ private fun EditorTabs(state: SessionState, session: ClientSession, tabRow: TabR
     }
   }
   Row(
-    Modifier.fillMaxWidth().height(IslandsDark.tabRowHeight),
+    Modifier.fillMaxWidth().height(Islands.tabRowHeight),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Row(
@@ -1116,7 +1115,7 @@ private fun EditorTabs(state: SessionState, session: ClientSession, tabRow: TabR
       for (editor in state.editors) {
         val selected = editor.path == state.selectedEditor
         val iconPath = fileIconPath(state, editor.path)
-        val pill = RoundedCornerShape(IslandsDark.tabRadius)
+        val pill = RoundedCornerShape(Islands.tabRadius)
         // Measured on this wrapper: the row is its parent.
         Box(
           Modifier.onPlaced { coordinates ->
@@ -1125,12 +1124,12 @@ private fun EditorTabs(state: SessionState, session: ClientSession, tabRow: TabR
         ) {
           ContextMenuArea(entries = { tabMenu(editor.path, editor.name) }) {
             Box(
-              Modifier.height(IslandsDark.tabHeight)
+              Modifier.height(Islands.tabHeight)
                 .clip(pill)
                 .then(
                   if (selected)
-                    Modifier.background(IslandsDark.tabSelectedBackground)
-                      .border(1.dp, IslandsDark.tabSelectedBorder, pill)
+                    Modifier.background(Islands.tabSelectedBackground)
+                      .border(1.dp, Islands.tabSelectedBorder, pill)
                   else Modifier,
                 )
                 .clickable { session.selectEditor(editor.path) }
@@ -1160,7 +1159,7 @@ private fun EditorTabs(state: SessionState, session: ClientSession, tabRow: TabR
           "Show Hidden Tabs",
           onClick = { open = true },
           modifier = Modifier.padding(horizontal = 4.dp),
-          size = IslandsDark.tabHeight,
+          size = Islands.tabHeight,
           iconSize = 16.dp,
         )
         if (open) {

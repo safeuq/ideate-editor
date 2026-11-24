@@ -6,7 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 
 /**
  * The frame every IntelliJ popup has (`AbstractPopup` with its `PopupBorder`), Jewel's
@@ -16,5 +16,5 @@ import io.github.safeuq.ideate.client.ui.theme.IslandsDark
  */
 fun Modifier.popupContainer(radius: Dp): Modifier {
   val shape = RoundedCornerShape(radius)
-  return background(IslandsDark.popupBackground, shape).border(1.dp, IslandsDark.popupBorder, shape)
+  return background(Islands.popupBackground, shape).border(1.dp, Islands.popupBorder, shape)
 }

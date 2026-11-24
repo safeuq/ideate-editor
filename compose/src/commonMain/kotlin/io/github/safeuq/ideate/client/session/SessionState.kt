@@ -35,8 +35,13 @@ data class TreeNode(
    * null or `NOT_CHANGED` for the default colour.
    */
   val fileStatus: String? = null,
-  /** ARGB row background from the node's scope (Settings | Appearance | File Colors), or null. */
+  /**
+   * ARGB row background from the node's scope (Settings | Appearance | File Colors), as the
+   * backend's theme computed it, or null; [backgroundName] wins when the current theme has it.
+   */
   val background: Long? = null,
+  /** The scope's color name, e.g. `Orange` for `FileColor.Orange`, or null. */
+  val backgroundName: String? = null,
   /** Gray text at the row's right edge, e.g. a Build step's `1 sec, 251 ms`; null: none. */
   val trailing: String? = null,
 )

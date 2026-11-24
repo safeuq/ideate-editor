@@ -22,7 +22,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -59,20 +59,20 @@ private fun Button(
   val interaction = remember { MutableInteractionSource() }
   val focused by interaction.collectIsFocusedAsState()
   val shape = RoundedCornerShape(ButtonLook.radius)
-  val background = if (enabled && default) IslandsDark.controlBrandBackground else Color.Transparent
+  val background = if (enabled && default) Islands.controlBrandBackground else Color.Transparent
   val border =
     when {
       !enabled -> ButtonLook.disabledBorder
       // Focused: the border turns the dialog color and the focus ring goes around it.
       focused -> ButtonLook.focusedBorder
-      default -> IslandsDark.controlBrandBackground
-      else -> IslandsDark.controlBorder
+      default -> Islands.controlBrandBackground
+      else -> Islands.controlBorder
     }
   val content =
     when {
-      !enabled -> IslandsDark.textDisabled
-      default -> IslandsDark.textOverAccent
-      else -> IslandsDark.text
+      !enabled -> Islands.textDisabled
+      default -> Islands.textOverAccent
+      else -> Islands.text
     }
   Box(
     modifier
@@ -82,7 +82,7 @@ private fun Button(
         // DarculaButtonPainter: a 2 px ring in the focus color just outside the button.
         val ring = ButtonLook.focusWidth.toPx()
         drawRoundRect(
-          IslandsDark.focusBorder,
+          Islands.focusBorder,
           topLeft = Offset(-ring / 2, -ring / 2),
           size = Size(size.width + ring, size.height + ring),
           cornerRadius = CornerRadius(ButtonLook.radius.toPx() + ring / 2),
@@ -109,10 +109,13 @@ private object ButtonLook {
   val radius = 4.dp // Button.arc 8, an arc diameter
   val minWidth = 72.dp // Button.minimumSize 72,28
   val height // Button.minimumSize 72,28; compact 72,24
-    get() = IslandsDark.byDensity(28.dp, 24.dp)
+    get() = Islands.byDensity(28.dp, 24.dp)
 
   val horizontalPadding = 14.dp // DarculaButtonUI.HORIZONTAL_PADDING
   val focusWidth = 2.dp // DarculaUIUtil.BW (focus ring)
-  val focusedBorder = Color(0xFF191A1C) // Button.focusedBorderColor = control-bg / dialog-bg
-  val disabledBorder = Color(0xFF33353B) // *.disabledBorderColor = control-border-disabled
+  val focusedBorder
+    get() = Islands.color("Button.focusedBorderColor") // control-bg / dialog-bg
+
+  val disabledBorder
+    get() = Islands.color("Button.disabledBorderColor") // control-border-disabled
 }

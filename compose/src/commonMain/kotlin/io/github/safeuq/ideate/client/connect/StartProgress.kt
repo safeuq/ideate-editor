@@ -33,7 +33,7 @@ import io.github.safeuq.ideate.client.ui.component.IndeterminateHorizontalProgre
 import io.github.safeuq.ideate.client.ui.component.OutlinedButton
 import io.github.safeuq.ideate.client.ui.component.popupContainer
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.label
 
 /**
@@ -117,7 +117,7 @@ private fun ProgressText(
       }
     BasicText(
       detail,
-      style = text.copy(color = IslandsDark.textSecondary),
+      style = text.copy(color = Islands.textSecondary),
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
     )

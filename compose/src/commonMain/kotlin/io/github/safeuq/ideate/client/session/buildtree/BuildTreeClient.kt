@@ -198,7 +198,7 @@ class BuildTreeModel {
 /** `SimpleTextAttributes.STYLE_BOLD`. */
 private const val BOLD = 1
 
-/** `IslandsDark.textSecondary`, ARGB. */
+/** `Islands.textSecondary`, ARGB. */
 private const val HINT_COLOR = 0xFF73767CL
 
 /** [path] is an icon's path in the icons jar; [animated]: the running spinner. */

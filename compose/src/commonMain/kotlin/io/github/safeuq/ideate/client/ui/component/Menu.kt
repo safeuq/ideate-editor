@@ -38,7 +38,7 @@ import io.github.safeuq.ideate.client.ui.MenuEntry
 import io.github.safeuq.ideate.client.ui.MenuItem
 import io.github.safeuq.ideate.client.ui.MenuSeparator
 import io.github.safeuq.ideate.client.ui.SubMenu
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -162,7 +162,7 @@ private fun MenuRow(
       }
       BasicText(
         label,
-        style = text.copy(color = if (enabled) IslandsDark.text else Menus.disabled),
+        style = text.copy(color = if (enabled) Islands.text else Menus.disabled),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.weight(1f),
@@ -193,10 +193,18 @@ private fun Separator() {
 
 internal object Menus {
   val rowHeight = 24.dp // PopupMenu rows, the same for mouse and touch
-  val border = IslandsDark.popupBorder // Separator.separatorColor = popup-border
-  val selection = IslandsDark.selectionBackground // MenuItem.selectionBackground
-  val shortcut = IslandsDark.textSecondary // MenuItem.acceleratorForeground = text-secondary
-  val disabled = IslandsDark.textDisabled // MenuItem.disabledForeground
+  val border
+    get() = Islands.popupBorder // Separator.separatorColor = popup-border
+
+  val selection
+    get() = Islands.selectionBackground // MenuItem.selectionBackground
+
+  val shortcut
+    get() = Islands.textSecondary // MenuItem.acceleratorForeground = text-secondary
+
+  val disabled
+    get() = Islands.textDisabled // MenuItem.disabledForeground
+
   val radius = 8.dp // PopupMenu.borderCornerRadius
   val verticalInset = 6.dp // PopupMenu.borderInsets 6,1,6,1
   val selectionInset = 7.dp // PopupMenu.Selection.outerInsets 1,7

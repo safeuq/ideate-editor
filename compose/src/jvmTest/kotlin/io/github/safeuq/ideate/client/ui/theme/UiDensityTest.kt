@@ -41,19 +41,19 @@ class UiDensityTest {
 
   @Test
   fun sizesFollowTheDensity() {
-    val before = IslandsDark.density
+    val before = Islands.density
     try {
-      IslandsDark.density = UiDensity.NORMAL
+      Islands.density = UiDensity.NORMAL
       assertEquals(listOf(40f, 30f, 20f, 41f, 24f, 6f), sizes())
-      IslandsDark.density = UiDensity.COMPACT
+      Islands.density = UiDensity.COMPACT
       assertEquals(listOf(32f, 26f, 16f, 31f, 22f, 4f), sizes())
     } finally {
-      IslandsDark.density = before
+      Islands.density = before
     }
   }
 
   private fun sizes() =
-    with(IslandsDark) {
+    with(Islands) {
       listOf(toolbarHeight, toolbarButton, stripeIcon, headerHeight, treeRowHeight, islandGap).map {
         it.value
       }

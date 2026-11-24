@@ -13,9 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.unit.dp
+import io.github.safeuq.ideate.client.ui.theme.Islands
 
 /**
  * IntelliJ's indeterminate `JProgressBar`, painted as `DarculaProgressBarUI.paintIndeterminate`
@@ -76,14 +76,21 @@ fun DeterminateHorizontalProgressBar(fraction: Float, modifier: Modifier = Modif
 }
 
 private object ProgressBarLook {
-  val track = Color(0xFF40434A) // ProgressBar.trackColor = control-bg-small = gray-50
-  val progress = Color(0xFF3871E1) // ProgressBar.progressColor = control-brand-bg = blue-80
+  val track
+    get() = Islands.color("ProgressBar.trackColor") // control-bg-small
+
+  val progress
+    get() = Islands.color("ProgressBar.progressColor") // control-brand-bg
+
   val height = 4.dp // DarculaProgressBarUI.DEFAULT_WIDTH
-  // ProgressBar.indeterminateStartColor = blue-110 (Islands Dark)
-  val indeterminateStart = Color(0xFF92B7FF)
+  val indeterminateStart
+    get() = Islands.color("ProgressBar.indeterminateStartColor")
+
   // Islands Dark spells it "indeterminateendcolor"; UIManager keys match case, so the parent
   // Experimental Dark's indeterminateEndColor = Blue5 applies.
-  val indeterminateEnd = Color(0xFF366ACE)
+  val indeterminateEnd
+    get() = Islands.color("ProgressBar.indeterminateEndColor")
+
   const val cycleMillis = 800 // CYCLE_TIME_DEFAULT
   const val frames = 16 // cycleMillis / REPAINT_INTERVAL_DEFAULT (50)
   val step = 6.dp

@@ -34,7 +34,7 @@ import io.github.safeuq.ideate.client.session.LuxDialog
 import io.github.safeuq.ideate.client.session.PanelBuildTree
 import io.github.safeuq.ideate.client.session.PanelConsole
 import io.github.safeuq.ideate.client.session.PanelLocal
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import kotlin.math.roundToInt
 
 /**
@@ -151,7 +151,7 @@ internal fun PixelLine() {
   Box(
     Modifier.fillMaxWidth()
       .height(with(LocalDensity.current) { 1.toDp() })
-      .background(IslandsDark.toolWindowBorder),
+      .background(Islands.toolWindowBorder),
   )
 }
 

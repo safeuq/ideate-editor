@@ -57,7 +57,7 @@ import io.github.safeuq.ideate.client.ui.LocalIcons
 import io.github.safeuq.ideate.client.ui.component.TextField
 import io.github.safeuq.ideate.client.ui.component.popupContainer
 import io.github.safeuq.ideate.client.ui.lux.LuxPainter
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 import kotlin.math.roundToInt
@@ -132,7 +132,7 @@ private fun BackendPopupView(popup: BackendPopup, session: ClientSession) {
       BasicText(
         popup.title,
         Modifier.fillMaxWidth(),
-        style = text.copy(color = IslandsDark.textSecondary),
+        style = text.copy(color = Islands.textSecondary),
       )
     }
     var first = true
@@ -156,7 +156,7 @@ private fun BackendPopupView(popup: BackendPopup, session: ClientSession) {
               problem,
               style =
                 text.copy(
-                  color = if (item.isError) IslandsDark.textError else IslandsDark.textSecondary,
+                  color = if (item.isError) Islands.textError else Islands.textSecondary,
                 ),
             )
           }
@@ -196,7 +196,7 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
         Modifier.fillMaxWidth()
           .height(Look.rowHeight)
           .background(
-            if (index == list.selected) IslandsDark.selectionBackground else Color.Transparent,
+            if (index == list.selected) Islands.selectionBackground else Color.Transparent,
             RoundedCornerShape(Look.selectionRadius),
           )
           .clickable(remember { MutableInteractionSource() }, indication = null) {

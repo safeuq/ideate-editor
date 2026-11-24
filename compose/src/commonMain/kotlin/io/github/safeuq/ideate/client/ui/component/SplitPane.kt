@@ -40,7 +40,7 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 
 /**
  * The resize pointers a mouse shows over a split's border, as IntelliJ's `Splitter` sets
@@ -76,7 +76,7 @@ fun SplitPane(
   proportion: Float,
   onProportion: (Float) -> Unit,
   modifier: Modifier = Modifier,
-  gap: Dp = IslandsDark.islandGap,
+  gap: Dp = Islands.islandGap,
   gapColor: Color = Color.Unspecified,
   first: @Composable () -> Unit,
   second: @Composable () -> Unit,
@@ -138,7 +138,8 @@ object SplitLook {
 
   /** The gap while a finger drags: the pill with 4 dp on each side. A mouse leaves it as it is. */
   val touchGap = 12.dp
-  val pill = Color(0xFF9DA0A8) // Slider.buttonColor in Islands Dark
+  val pill
+    get() = Islands.color("Slider.buttonColor")
 }
 
 /**

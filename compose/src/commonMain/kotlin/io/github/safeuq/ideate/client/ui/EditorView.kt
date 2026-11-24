@@ -88,7 +88,7 @@ import io.github.safeuq.ideate.client.session.TextEffect
 import io.github.safeuq.ideate.client.session.UsagesPopup
 import io.github.safeuq.ideate.client.ui.component.AppPopup
 import io.github.safeuq.ideate.client.ui.component.PopupPlacement
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import kotlin.math.ceil
 import kotlin.math.max
@@ -200,13 +200,13 @@ fun EditorView(
     remember(fonts, scheme) {
       TextStyle(
         fontFamily = fonts.editor,
-        fontSize = IslandsDark.EDITOR_FONT_SIZE.sp,
+        fontSize = Islands.EDITOR_FONT_SIZE.sp,
         color = Color(scheme.foreground),
       )
     }
   val lineNumberStyle =
     remember(fonts) {
-      TextStyle(fontFamily = fonts.editor, fontSize = IslandsDark.LINE_NUMBER_FONT_SIZE.sp)
+      TextStyle(fontFamily = fonts.editor, fontSize = Islands.LINE_NUMBER_FONT_SIZE.sp)
     }
 
   val metrics =
@@ -216,8 +216,7 @@ fun EditorView(
         // above and below.
         val sample = measurer.measure("0".repeat(100), textStyle)
         val fontHeight = ceil(sample.size.height.toFloat() / density.density) * density.density
-        val lineHeight =
-          ceil(fontHeight / density.density * IslandsDark.LINE_SPACING) * density.density
+        val lineHeight = ceil(fontHeight / density.density * Islands.LINE_SPACING) * density.density
         val extra = ((lineHeight - fontHeight) / density.density / 2).toInt() * density.density
         val lineNumberWidth =
           max(
@@ -234,17 +233,15 @@ fun EditorView(
         // area and the gap after the VCS markers, the line numbers right-aligned, a gap, the icons
         // (17), a gap, folding 11, 6. Normal density, two-digit numbers: 4 + 4 + 14 + 4 + 17 + 4 +
         // 11 + 6 = 64, text right after.
-        val numbersLeft =
-          IslandsDark.gutterEmptyAnnotationArea.toPx() + IslandsDark.gutterGap.toPx()
+        val numbersLeft = Islands.gutterEmptyAnnotationArea.toPx() + Islands.gutterGap.toPx()
         val lineNumbersRight = numbersLeft + lineNumberWidth
-        val iconAreaLeft = lineNumbersRight + IslandsDark.gutterGap.toPx()
+        val iconAreaLeft = lineNumbersRight + Islands.gutterGap.toPx()
         val gutterWidth =
           // A console (ConsoleViewUtil.setupConsoleEditor: no line numbers, no line markers,
           // folding outline on) keeps only the folding column, empty: the fold icon's 9 + 2 = 11
           // (EditorGutterLayout, getFoldingAreaWidth), text right after it.
           if (isConsole) 11.dp.toPx()
-          else
-            iconAreaLeft + 17.dp.toPx() + IslandsDark.gutterGap.toPx() + 11.dp.toPx() + 6.dp.toPx()
+          else iconAreaLeft + 17.dp.toPx() + Islands.gutterGap.toPx() + 11.dp.toPx() + 6.dp.toPx()
         EditorMetrics(
           lineHeight = lineHeight,
           baseline = sample.firstBaseline + extra,
@@ -1207,7 +1204,7 @@ private fun EditorLine(
           val key =
             if (guide.indentLevel == selectedGuideLevel) "SELECTED_INDENT_GUIDE" else "INDENT_GUIDE"
           val guideColor = scheme.color(key) ?: continue
-          val shift = (Math.round(5 * IslandsDark.EDITOR_FONT_SIZE / 13f) / 2).dp.toPx()
+          val shift = (Math.round(5 * Islands.EDITOR_FONT_SIZE / 13f) / 2).dp.toPx()
           val guideX = textLeft + guide.indentLevel * metrics.charWidth - shift
           drawLine(
             Color(guideColor),
@@ -1285,7 +1282,7 @@ private fun DrawScope.drawEffect(
     x(to),
     metrics.baseline,
     metrics.lineHeight,
-    IslandsDark.EDITOR_FONT_SIZE,
+    Islands.EDITOR_FONT_SIZE,
   )
 }
 

@@ -39,7 +39,7 @@ import io.github.safeuq.ideate.client.session.Lookup
 import io.github.safeuq.ideate.client.session.LookupItem
 import io.github.safeuq.ideate.client.session.matchedIndices
 import io.github.safeuq.ideate.client.ui.component.popupContainer
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.UiDensity
 import io.github.safeuq.ideate.client.ui.theme.editor
@@ -252,14 +252,26 @@ internal val LOOKUP_PREFIX_INSET
 
 /** Popup metrics (measured on JetBrains Client 263.7307.200, Islands Dark) and colours. */
 private object Lookups {
-  val border = IslandsDark.popupBorder // the group separator, as the popup's border
-  val foreground = Color(0xFFBCBEC4) // CompletionPopup.foreground = editor-text
-  val match = Color(0xFF538AF9) // CompletionPopup.matchForeground
-  val selection = IslandsDark.selectionBackground // after the user moved the selection
-  val selectionUnfocused = IslandsDark.selectionInactiveBackground // autopopup, no arrow key yet
-  val secondary = IslandsDark.textSecondary // tail, type, group header, footer
+  val border
+    get() = Islands.popupBorder // the group separator, as the popup's border
+
+  val foreground
+    get() = Islands.color("CompletionPopup.foreground") // editor-text
+
+  val match
+    get() = Islands.color("CompletionPopup.matchForeground")
+
+  val selection
+    get() = Islands.selectionBackground // after the user moved the selection
+
+  val selectionUnfocused
+    get() = Islands.selectionInactiveBackground // autopopup, no arrow key yet
+
+  val secondary
+    get() = Islands.textSecondary // tail, type, group header, footer
+
   val rowHeight
-    get() = if (IslandsDark.density == UiDensity.COMPACT) 22.dp else 24.dp // List.rowHeight
+    get() = if (Islands.density == UiDensity.COMPACT) 22.dp else 24.dp // List.rowHeight
 
   val maxRows = 11
   val radius = 6.dp // arc 12
@@ -278,10 +290,10 @@ private object Lookups {
   val footerInset = 12.dp
 
   val footerRightInset
-    get() = if (IslandsDark.density == UiDensity.COMPACT) 8.dp else 12.dp
+    get() = if (Islands.density == UiDensity.COMPACT) 8.dp else 12.dp
 
   val footerVerticalPadding
-    get() = if (IslandsDark.density == UiDensity.COMPACT) 2.dp else 6.dp
+    get() = if (Islands.density == UiDensity.COMPACT) 2.dp else 6.dp
 
   val minWidth = 160.dp
   val maxWidth = 640.dp

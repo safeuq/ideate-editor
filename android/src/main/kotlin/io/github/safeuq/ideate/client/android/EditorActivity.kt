@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -30,7 +31,9 @@ import io.github.safeuq.ideate.client.ui.LocalTitleBarArea
 import io.github.safeuq.ideate.client.ui.component.LocalResizePointers
 import io.github.safeuq.ideate.client.ui.component.ResizePointers
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
+import io.github.safeuq.ideate.client.ui.theme.LafManager
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
+import io.github.safeuq.ideate.client.ui.theme.SyncThemeWithOs
 
 /**
  * What [MainActivity] and [EditorActivity] share, since the session outlives neither's screen:
@@ -119,14 +122,16 @@ class EditorActivity : ComponentActivity() {
 
 /**
  * The app's own backgrounds run behind the status and navigation bars on every Android version
- * (Android 15+ does that anyway), with light bar icons over the dark UI; the content keeps clear of
- * the bars (appInsets). Also lays out into a camera cutout on the short edges, so a phone held
- * sideways has no black strip. Call before `super.onCreate`.
+ * (Android 15+ does that anyway), with bar icons in the OS's dark or light mode, as the theme
+ * ([SyncThemeWithOs]); the content keeps clear of the bars (appInsets). Also lays out into a camera
+ * cutout on the short edges, so a phone held sideways has no black strip. Call before
+ * `super.onCreate`, and again when the mode changes: uiMode is in the manifest's configChanges, so
+ * the activity isn't recreated.
  */
 internal fun ComponentActivity.edgeToEdge() =
   enableEdgeToEdge(
-    statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-    navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+    navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
   )
 
 /** What every Ideate window's content gets from Android. */
@@ -135,7 +140,11 @@ internal fun IdeateWindow(
   fonts: ClientFonts,
   icons: IconProvider,
   content: @Composable () -> Unit,
-) =
+) {
+  SyncThemeWithOs()
+  val activity = LocalActivity.current as? ComponentActivity
+  val dark = LafManager.currentTheme.isDark
+  LaunchedEffect(activity, dark) { activity?.edgeToEdge() }
   CompositionLocalProvider(
     LocalClientFonts provides fonts,
     LocalIcons provides icons,
@@ -151,6 +160,7 @@ internal fun IdeateWindow(
       ),
     content = content,
   )
+}
 
 /**
  * [LocalLandscapeRequest] on Android: the first request saves the activity's orientation and asks

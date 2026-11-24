@@ -56,7 +56,7 @@ import io.github.safeuq.ideate.client.ui.component.IconButton
 import io.github.safeuq.ideate.client.ui.component.Menu
 import io.github.safeuq.ideate.client.ui.component.TooltipAlignment
 import io.github.safeuq.ideate.client.ui.component.keep
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -308,17 +308,15 @@ fun ToolWindowBar(
     // Measured against Gateway (2026-11-17): a 1 dp line as long as the highlight and lined up
     // with it, 5 dp from the buttons on either side.
     val length =
-      IslandsDark.stripeButtonWidth -
-        IslandsDark.stripeHighlightStart -
-        IslandsDark.stripeHighlightEnd
-    val edge = if (mirrored) IslandsDark.stripeHighlightEnd else IslandsDark.stripeHighlightStart
+      Islands.stripeButtonWidth - Islands.stripeHighlightStart - Islands.stripeHighlightEnd
+    val edge = if (mirrored) Islands.stripeHighlightEnd else Islands.stripeHighlightStart
     Box(
       (if (vertical)
           Modifier.padding(start = edge, end = edge, top = 5.dp, bottom = 5.dp).size(length, 1.dp)
         else
-          Modifier.padding(start = 5.dp, end = 5.dp, bottom = IslandsDark.stripeHighlightStart)
+          Modifier.padding(start = 5.dp, end = 5.dp, bottom = Islands.stripeHighlightStart)
             .size(1.dp, length))
-        .background(IslandsDark.toolbarSeparator),
+        .background(Islands.toolbarSeparator),
     )
   }
 
@@ -341,7 +339,7 @@ fun ToolWindowBar(
   }
 
   if (vertical) {
-    BoxWithConstraints(modifier.width(IslandsDark.stripeThickness)) {
+    BoxWithConstraints(modifier.width(Islands.stripeThickness)) {
       Column(
         Modifier.fillMaxWidth().heightIn(min = maxHeight).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.SpaceBetween,
@@ -358,7 +356,7 @@ fun ToolWindowBar(
     }
   } else {
     Row(
-      modifier.height(IslandsDark.stripeThickness).horizontalScroll(rememberScrollState()),
+      modifier.height(Islands.stripeThickness).horizontalScroll(rememberScrollState()),
       verticalAlignment = Alignment.Bottom,
     ) {
       Groups(top + foot)
@@ -434,11 +432,11 @@ private fun StripeButton(
   onClick: () -> Unit,
 ) {
   val icon = iconPath?.let { LocalIcons.current.painter(it) }
-  val across = IslandsDark.stripeButtonWidth
-  val along = IslandsDark.stripeButtonLength
-  val top = IslandsDark.stripeHighlightTop
-  val start = IslandsDark.stripeHighlightStart
-  val end = IslandsDark.stripeHighlightEnd
+  val across = Islands.stripeButtonWidth
+  val along = Islands.stripeButtonLength
+  val top = Islands.stripeHighlightTop
+  val start = Islands.stripeHighlightStart
+  val end = Islands.stripeHighlightEnd
   // IntelliJ's SquareStripeButtonLook: the hover and pressed fills take the selected highlight's
   // place and shape (ActionButton.hoverBackground / pressedBackground), not the whole button.
   val interaction = remember { MutableInteractionSource() }
@@ -464,11 +462,11 @@ private fun StripeButton(
         )
         .background(
           when {
-            selected || pressed -> IslandsDark.stripeHighlight
-            hovered -> IslandsDark.toolbarHover
+            selected || pressed -> Islands.stripeHighlight
+            hovered -> Islands.toolbarHover
             else -> Color.Transparent
           },
-          RoundedCornerShape(IslandsDark.stripeHighlightRadius),
+          RoundedCornerShape(Islands.stripeHighlightRadius),
         ),
       contentAlignment = Alignment.Center,
     ) {
@@ -476,7 +474,7 @@ private fun StripeButton(
         Image(
           it,
           contentDescription = description,
-          modifier = Modifier.size(IslandsDark.stripeIcon),
+          modifier = Modifier.size(Islands.stripeIcon),
         )
       }
     }
@@ -514,9 +512,7 @@ fun ToolWindowPanel(
   val scrolled = remember { mutableStateOf(false) }
   Column(modifier) {
     Row(
-      Modifier.fillMaxWidth()
-        .height(IslandsDark.headerHeight)
-        .padding(start = IslandsDark.headerLeftInset),
+      Modifier.fillMaxWidth().height(Islands.headerHeight).padding(start = Islands.headerLeftInset),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       // Bold in the new UI (ComboContentLayout: BaseLabel(ui, ExperimentalUI.isNewUI())). Inter
@@ -534,7 +530,7 @@ fun ToolWindowPanel(
               fonts
                 .label()
                 .copy(
-                  fontSize = IslandsDark.headerFontSize.sp,
+                  fontSize = Islands.headerFontSize.sp,
                   fontWeight = FontWeight.SemiBold,
                 ),
           )
@@ -653,7 +649,7 @@ fun ToolWindowToolbar(entries: List<MenuEntry>, modifier: Modifier = Modifier) {
           Box(
             Modifier.padding(horizontal = 3.dp)
               .size(1.dp, 18.dp)
-              .background(IslandsDark.toolbarSeparator),
+              .background(Islands.toolbarSeparator),
           )
       }
     }
@@ -663,9 +659,8 @@ fun ToolWindowToolbar(entries: List<MenuEntry>, modifier: Modifier = Modifier) {
 /** IntelliJ draws a disabled action's icon with `IconLoader.getDisabledIcon`, about this faint. */
 private const val DISABLED_ALPHA = 0.4f
 
-/**
- * Colors and fixed sizes of the bars; the sizes that follow the UI density are in [IslandsDark].
- */
+/** Colors and fixed sizes of the bars; the sizes that follow the UI density are in [Islands]. */
 private object Bars {
-  val headerBorder = IslandsDark.toolWindowBorder // ToolWindow.Header.borderColor
+  val headerBorder
+    get() = Islands.toolWindowBorder // ToolWindow.Header.borderColor
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.ui.LocalIcons
+import io.github.safeuq.ideate.client.ui.theme.Islands
 
 /**
  * IntelliJ's `ActionButton` (platform/platform-impl/src/com/intellij/openapi/actionSystem/impl/
@@ -70,10 +71,14 @@ internal object IconButtonLook {
   val iconSize = 16.dp
   // ActionButton.hoverBackground = toolbar-bg-hovered = core-bg-transparent-hovered =
   // transparent-white-20
-  val hoverBackground = Color(0x17FFFFFF)
+  val hoverBackground
+    get() = Islands.color("ActionButton.hoverBackground")
+
   // ActionButton.pressedBackground = toolbar-bg-pressed = core-bg-transparent-pressed =
   // transparent-white-40; also a selected toggle (ActionButtonLook paints PUSHED that way)
-  val pressedBackground = Color(0x29FFFFFF)
+  val pressedBackground
+    get() = Islands.color("ActionButton.pressedBackground")
+
   val shape =
     RoundedCornerShape(4.dp) // IdeaActionButtonLook: DarculaUIUtil.BUTTON_ARC = Button.arc 8
 }

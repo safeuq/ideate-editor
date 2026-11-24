@@ -38,7 +38,7 @@ import io.github.safeuq.ideate.client.ui.dialog.DialogWrapper
 import io.github.safeuq.ideate.client.ui.dialog.MessageDialog
 import io.github.safeuq.ideate.client.ui.dialog.MessageKind
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.editor
 import io.github.safeuq.ideate.client.ui.theme.label
@@ -81,10 +81,10 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
       val reachable = host.phase == SshHostView.Phase.READY
       val (status, color) =
         when (host.phase) {
-          SshHostView.Phase.CONNECTING -> "Connecting…" to IslandsDark.textSecondary
-          SshHostView.Phase.READY -> null to IslandsDark.textSecondary
+          SshHostView.Phase.CONNECTING -> "Connecting…" to Islands.textSecondary
+          SshHostView.Phase.READY -> null to Islands.textSecondary
           SshHostView.Phase.UNREACHABLE -> "Host unreachable" to Gateway.error
-          SshHostView.Phase.AUTHENTICATE -> "Authenticate…" to IslandsDark.link
+          SshHostView.Phase.AUTHENTICATE -> "Authenticate…" to Islands.link
         }
       HostGroup(
         host.entry.name,
@@ -290,7 +290,7 @@ private fun NewConnectionDialog(
         actions.formChanged(form.copy(method = LoginMethod.OPEN_SSH))
       }
       if (form.method == LoginMethod.OPEN_SSH) {
-        val note = fonts.label(IslandsDark.textSecondary)
+        val note = fonts.label(Islands.textSecondary)
         when (val key = dialog.openSshKey) {
           null -> {}
           OpenSshKeyState.Loading ->
@@ -332,7 +332,7 @@ private fun PublicKeyBlock(publicKey: String, fonts: ClientFonts) {
   val clipboard = LocalClipboardManager.current
   BasicText(
     publicKey,
-    style = fonts.editor(IslandsDark.textSecondary).copy(fontSize = 11.sp),
+    style = fonts.editor(Islands.textSecondary).copy(fontSize = 11.sp),
     modifier = Modifier.padding(start = 28.dp),
   )
   Box(Modifier.padding(start = 28.dp)) {
@@ -358,7 +358,7 @@ private fun ChooseIdeDialog(
     onCancel = actions.cancelDialog,
     error = dialog.error,
   ) {
-    BasicText(dialog.host.name, style = fonts.label(IslandsDark.textSecondary))
+    BasicText(dialog.host.name, style = fonts.label(Islands.textSecondary))
     BasicText("IDE version:", style = fonts.label())
     dialog.ides.forEach { ide ->
       RadioButtonRow(

@@ -32,16 +32,22 @@ enum class UiDensity {
 }
 
 /**
- * IntelliJ IDEA 2026.3 "Islands Dark" UI chrome, from the theme files and Swing painting code
- * (values and sources: docs/intellij-look.md, section 11 for the density pairs). Editor text colors
- * don't live here: they come from the backend's color scheme. Sizes that differ between the
- * densities are getters reading [density].
+ * IntelliJ IDEA 2026.3 "Islands" UI chrome, from the theme files and Swing painting code (values
+ * and sources: docs/intellij-look.md, section 11 for the density pairs). Editor text colors don't
+ * live here: they come from the backend's color scheme. Sizes that differ between the densities are
+ * getters reading [density].
  *
- * Each color names the theme key it comes from and how the name resolves in
- * `ManyIslandsDark.theme.json`'s `colors` map, e.g. `Component.borderColor = control-border =
- * gray-50`. A theme value wins over one measured on a screenshot (docs/ui-components.md).
+ * Each color is a getter reading its `UIManager` key in [LafManager.currentTheme], so it follows a
+ * theme change; the comments say how the key resolves in `ManyIslandsDark.theme.json`'s `colors`
+ * map, e.g. `Component.borderColor = control-border = gray-50`.
  */
-object IslandsDark {
+object Islands {
+  /** [key] in the current theme; both themes have every key this file names. */
+  fun color(key: String): Color =
+    checkNotNull(LafManager.currentTheme.color(key)) {
+      "$key is missing from ${LafManager.currentTheme.name}"
+    }
+
   /**
    * Set once by the app before its first composition (desktop: IntelliJ's own setting; Android:
    * compact). Changing it later doesn't redraw what is already on screen.
@@ -53,53 +59,91 @@ object IslandsDark {
   private fun byDensity(normal: Float, compact: Float) =
     if (density == UiDensity.COMPACT) compact else normal
 
-  val windowBackground = Color(0xFF26282C) // main-window-bg, behind the islands
-  // MainWindow.FullScreeControl.Background: the full-screen traffic lights' circles at rest.
-  // Islands
-  // Dark doesn't set it, so IntelliJ's dark default (MacFullScreenControlsManager.configureColors).
-  val fullScreenControlBackground = Color(0xFF57595C)
-  val islandBackground = Color(0xFF191A1C) // layer-0-bg: tool windows and editor
+  val windowBackground
+    get() = color("MainWindow.background") // main-window-bg, behind the islands
+
+  // The full-screen traffic lights' circles at rest; the theme doesn't set it, so it is IntelliJ's
+  // default (MacFullScreenControlsManager.configureColors).
+  val fullScreenControlBackground
+    get() = color("MainWindow.FullScreeControl.Background")
+
+  val islandBackground
+    get() = color("ToolWindow.background") // layer-0-bg: tool windows and editor
+
   val islandRadius
     get() = byDensity(10.dp, 8.dp) // Island.arc 20 (compact 16), halved
 
   val islandGap
     get() = byDensity(6.dp, 4.dp) // Island.borderWidth 6 (compact 4)
 
-  val text = Color(0xFFD1D3D9) // *.foreground = text-default = gray-130
-  val textSecondary = Color(0xFF73767C) // *.infoForeground = text-secondary = gray-80
-  val textDisabled = Color(0xFF4C4F56) // *.disabledForeground = text-disabled = gray-60
-  val textError = Color(0xFFF57E84) // Label.errorForeground = text-error
-  val textSuccess = Color(0xFF6DB083) // text-success = green-100 (a running backend)
-  val textOverAccent = Color(0xFFFFFFFF) // Button.default.foreground = text-over-accent = white
-  val link = Color(0xFF71A1FE) // Link.activeForeground = text-link = blue-100
+  val text
+    get() = color("Label.foreground") // *.foreground = text-default = gray-130
+
+  val textSecondary
+    get() = color("Component.infoForeground") // *.infoForeground = text-secondary = gray-80
+
+  val textDisabled
+    get() = color("Label.disabledForeground") // *.disabledForeground = text-disabled = gray-60
+
+  val textError
+    get() = color("Label.errorForeground") // Label.errorForeground = text-error
+
+  val textSuccess
+    get() = color("Label.successForeground") // text-success = green-100 (a running backend)
+
+  val textOverAccent
+    get() =
+      color("Button.default.foreground") // Button.default.foreground = text-over-accent = white
+
+  val link
+    get() = color("Link.activeForeground") // Link.activeForeground = text-link = blue-100
 
   // Component.borderColor, Button.startBorderColor = control-border = gray-50
-  val controlBorder = Color(0xFF40434A)
+  val controlBorder
+    get() = color("Component.borderColor")
+
   // Button.default.startBackground = control-brand-bg = blue-80
-  val controlBrandBackground = Color(0xFF3871E1)
-  val focusBorder = Color(0xFF3871E1) // Component.focusColor = control-brand-border = blue-80
+  val controlBrandBackground
+    get() = color("Button.default.startBackground")
+
+  val focusBorder
+    get() = color("Component.focusColor") // Component.focusColor = control-brand-border = blue-80
 
   // EditorTabs.underTabsBorderColor = editor-border = layer-0-border = gray-30
-  val underTabsBorder = Color(0xFF26282C)
+  val underTabsBorder
+    get() = color("EditorTabs.underTabsBorderColor")
 
   // Popup.background, PopupMenu.background = popup-bg = gray-30
-  val popupBackground = Color(0xFF26282C)
+  val popupBackground
+    get() = color("Popup.background")
+
   // Popup.borderColor, Separator.separatorColor = popup-border = gray-40
-  val popupBorder = Color(0xFF33353B)
+  val popupBorder
+    get() = color("Popup.borderColor")
 
   // *.selectionBackground = selection-bg-active = blue-50
-  val selectionBackground = Color(0xFF2A4371)
+  val selectionBackground
+    get() = color("Tree.selectionBackground")
+
   // *.selectionInactiveBackground = selection-bg-inactive = gray-40
-  val selectionInactiveBackground = Color(0xFF33353B)
+  val selectionInactiveBackground
+    get() = color("Tree.selectionInactiveBackground")
 
   // *.borderColor = tool-window-border = layer-0-border = gray-30: tool window header line,
   // scroll pane borders
-  val toolWindowBorder = Color(0xFF26282C)
+  val toolWindowBorder
+    get() = color("ToolWindow.Header.borderColor")
+
   // ToolTip.background and ToolTip.borderColor = feedback-bg = layer-2-bg = gray-40
-  val tooltipBackground = Color(0xFF33353B)
+  val tooltipBackground
+    get() = color("ToolTip.background")
+
   // ToolTip.shortcutForeground = text-muted = gray-100
-  val tooltipShortcut = Color(0xFF9FA2A8)
-  val toolbarSeparator = Color(0x21FFFFFF) // ToolBar.separatorColor = toolbar-border
+  val tooltipShortcut
+    get() = color("ToolTip.shortcutForeground")
+
+  val toolbarSeparator
+    get() = color("ToolBar.separatorColor") // ToolBar.separatorColor = toolbar-border
 
   val headerHeight
     get() = byDensity(41.dp, 31.dp) // ToolWindow.Header.height (code default 41, compact 31)
@@ -128,13 +172,20 @@ object IslandsDark {
   val treeIndent = 19.dp // leftChildIndent 7 → 8 + rightChildIndent 11
   val treeIconTextGap = 2.dp // chevron box end to icon: measured
   val treeTextGap = 3.dp // icon to text: measured against Gateway (2026-11-17)
-  val treeHover = Color(0x10FFFFFF) // selection-bg-hovered
-  val toolbarHover = Color(0x17FFFFFF) // toolbar-bg-hovered = transparent-white-20
+  val treeHover
+    get() = color("Tree.hoverBackground") // selection-bg-hovered
+
+  val toolbarHover
+    get() = color("ActionButton.hoverBackground") // toolbar-bg-hovered = transparent-white-20
 
   val tabRowHeight = 32.dp // measured: editor tabs row
   val tabHeight = 24.dp
-  val tabSelectedBackground = Color(0xFF233657) // measured: selected editor tab pill
-  val tabSelectedBorder = Color(0xFF2C4A82)
+  val tabSelectedBackground
+    get() = color("EditorTabs.underlinedTabBackground")
+
+  val tabSelectedBorder
+    get() = color("EditorTabs.underlinedBorderColor")
+
   val tabRadius = 6.dp
   val treeSelectionRadius = 4.dp // Tree.Selection.arc 8 passed as arc diameter
 
@@ -188,7 +239,8 @@ object IslandsDark {
     get() = byDensity(6.dp, 4.dp)
 
   // ActionButton.pressedBackground = toolbar-bg-pressed = transparent-white-40: a shown window.
-  val stripeHighlight = Color(0x29FFFFFF)
+  val stripeHighlight
+    get() = color("ActionButton.pressedBackground")
 
   // Measured 35 in compact against Gateway (2026-11-17): the button and 3 to the islands.
   val stripeThickness

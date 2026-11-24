@@ -70,7 +70,7 @@ import io.github.safeuq.ideate.client.ui.LocalEditorTextInput
 import io.github.safeuq.ideate.client.ui.MenuItem
 import io.github.safeuq.ideate.client.ui.MenuSeparator
 import io.github.safeuq.ideate.client.ui.shortcut
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import kotlin.math.ceil
 import kotlinx.coroutines.delay
@@ -123,7 +123,7 @@ fun TerminalView(
     remember(fonts, palette) {
       TextStyle(
         fontFamily = fonts.editor,
-        fontSize = IslandsDark.EDITOR_FONT_SIZE.sp,
+        fontSize = Islands.EDITOR_FONT_SIZE.sp,
         color = Color(palette.foreground),
       )
     }

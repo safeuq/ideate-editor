@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupPositionProvider
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -95,12 +95,12 @@ private fun TooltipPanel(title: String, shortcut: String?) {
     append(title)
     // HelpTooltip.getShortcutAsHtml: two spaces, then the shortcut in the muted colour.
     if (shortcut != null)
-      withStyle(SpanStyle(color = IslandsDark.tooltipShortcut)) { append("  $shortcut") }
+      withStyle(SpanStyle(color = Islands.tooltipShortcut)) { append("  $shortcut") }
   }
   Box(
     Modifier.clip(shape)
-      .background(IslandsDark.tooltipBackground)
-      .border(1.dp, IslandsDark.tooltipBackground, shape)
+      .background(Islands.tooltipBackground)
+      .border(1.dp, Islands.tooltipBackground, shape)
       .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 9.dp),
   ) {
     BasicText(text, style = LocalClientFonts.current.label())

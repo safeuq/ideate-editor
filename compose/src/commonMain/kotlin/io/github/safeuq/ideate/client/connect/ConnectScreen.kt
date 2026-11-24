@@ -50,7 +50,7 @@ import io.github.safeuq.ideate.client.ui.dialog.DialogAction
 import io.github.safeuq.ideate.client.ui.dialog.MessageDialog
 import io.github.safeuq.ideate.client.ui.dialog.MessageKind
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.h3
 import io.github.safeuq.ideate.client.ui.theme.label
 import java.time.Instant
@@ -548,7 +548,7 @@ private fun LinkPage(state: ConnectScreenState, actions: ConnectActions, styles:
 }
 
 @Composable
-internal fun Notice(text: String, styles: ConnectStyles, color: Color = IslandsDark.textSecondary) =
+internal fun Notice(text: String, styles: ConnectStyles, color: Color = Islands.textSecondary) =
   BasicText(
     text,
     style = styles.body.copy(color = color),
@@ -605,7 +605,7 @@ internal fun HostGroup(
   icons: List<HeaderIcon>,
   /** Gateway's state at the right, e.g. red "Host unreachable" or "Connecting…". */
   status: String? = null,
-  statusColor: Color = IslandsDark.textSecondary,
+  statusColor: Color = Islands.textSecondary,
   onStatusClick: (() -> Unit)? = null,
   /** Gateway's host gear menu; also the header's right-click / long-press menu. */
   menu: List<MenuItem> = emptyList(),
@@ -659,7 +659,7 @@ internal fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
     else
       row.lastActive?.let { "Last active: ${lastActive(it, System.currentTimeMillis())}" }.orEmpty()
   val statusStyle =
-    styles.body.copy(color = if (row.running) Gateway.running else IslandsDark.textSecondary)
+    styles.body.copy(color = if (row.running) Gateway.running else Islands.textSecondary)
   val menu = projectMenu(row)
   // Gateway gives an unreachable host's rows no menu.
   ContextMenuArea(entries = { menu.takeIf { row.enabled } }) {
@@ -794,7 +794,7 @@ internal fun lastActive(
  */
 internal class ConnectStyles(fonts: ClientFonts, val twoLineRows: Boolean) {
   val body = fonts.label()
-  val secondary = fonts.label(IslandsDark.textSecondary)
+  val secondary = fonts.label(Islands.textSecondary)
   val sidebarItem = body
   // JBFont.h3() (label + 3 = 16); semi-bold as measured on Gateway's page titles.
   val title = fonts.h3().copy(fontWeight = FontWeight.SemiBold)
@@ -808,18 +808,32 @@ internal class ConnectStyles(fonts: ClientFonts, val twoLineRows: Boolean) {
  */
 internal object Gateway {
   // WelcomeScreen.Details.background, SidePanel.background = dialog-bg = layer-0-bg
-  val background = IslandsDark.islandBackground
+  val background
+    get() = Islands.islandBackground
+
   // WelcomeScreen.separatorColor, rewritten by *.separatorColor = popup-border
-  val divider = IslandsDark.popupBorder
-  val selection = IslandsDark.selectionBackground // selected sidebar row, full width, square
-  val running = IslandsDark.textSuccess // a running backend
-  val error = IslandsDark.textError // "Host unreachable"
-  val disabledText = IslandsDark.textDisabled // an unreachable host's paths
+  val divider
+    get() = Islands.popupBorder
+
+  val selection
+    get() = Islands.selectionBackground // selected sidebar row, full width, square
+
+  val running
+    get() = Islands.textSuccess // a running backend
+
+  val error
+    get() = Islands.textError // "Host unreachable"
+
+  val disabledText
+    get() = Islands.textDisabled // an unreachable host's paths
+
   val sidebarWidth = 224.dp
   val tabBarHeight = 40.dp // portrait: like the main window's tool window bar
   val tabHeight = 32.dp
   val tabShape = RoundedCornerShape(6.dp)
-  val tabSelected = Color(0xFF393B40)
+  val tabSelected
+    get() = Islands.color("MainWindow.Tab.selectedInactiveBackground")
+
   val twoLineRowHeight = 48.dp
   val sidebarTop = 8.dp // Gateway has its logo here
   val sidebarRowHeight = 33.dp

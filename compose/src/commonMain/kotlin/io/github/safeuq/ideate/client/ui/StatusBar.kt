@@ -58,7 +58,7 @@ import io.github.safeuq.ideate.client.session.SessionState
 import io.github.safeuq.ideate.client.session.StatusWidget
 import io.github.safeuq.ideate.client.ui.component.DeterminateHorizontalProgressBar
 import io.github.safeuq.ideate.client.ui.component.IndeterminateHorizontalProgressBar
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -228,7 +228,7 @@ private fun Info(text: String, isError: Boolean, modifier: Modifier) {
     modifier,
     maxLines = 1,
     overflow = TextOverflow.Ellipsis,
-    style = LocalClientFonts.current.label(if (isError) IslandsDark.textError else Look.text),
+    style = LocalClientFonts.current.label(if (isError) Islands.textError else Look.text),
   )
 }
 
@@ -453,8 +453,8 @@ private fun ProcessesPopup(
   ) {
     Column(
       Modifier.widthIn(min = 300.dp, max = 500.dp)
-        .background(IslandsDark.popupBackground, Look.popupShape)
-        .border(1.dp, IslandsDark.popupBorder, Look.popupShape),
+        .background(Islands.popupBackground, Look.popupShape)
+        .border(1.dp, Islands.popupBorder, Look.popupShape),
     ) {
       Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         BasicText(
@@ -473,8 +473,7 @@ private fun ProcessesPopup(
       }
       Column(Modifier.verticalScroll(rememberScrollState())) {
         tasks.asReversed().forEachIndexed { index, task ->
-          if (index > 0)
-            Box(Modifier.fillMaxWidth().height(1.dp).background(IslandsDark.popupBorder))
+          if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(Islands.popupBorder))
           Column(
             Modifier.fillMaxWidth()
               .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 18.dp),
@@ -492,7 +491,7 @@ private fun ProcessesPopup(
                 lines.joinToString("\n"),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                style = fonts.label(IslandsDark.textSecondary),
+                style = fonts.label(Islands.textSecondary),
               )
           }
         }
@@ -541,9 +540,15 @@ private object Look {
   val footerInset = 4.dp
   val narrowInfoWidth = 220.dp
   val infoMaxWidth = 400.dp
-  val text = Color(0xFF9FA2A8) // StatusBar.Widget.foreground = text-muted = gray-100
-  val hoverText = Color(0xFFD1D3D9) // hoverForeground = text-default = gray-130
-  val hover = Color(0x17FFFFFF) // hoverBackground = toolbar-bg-hovered = transparent-white-20
+  val text
+    get() = Islands.color("StatusBar.Widget.foreground") // text-muted = gray-100
+
+  val hoverText
+    get() = Islands.color("StatusBar.Widget.hoverForeground") // text-default = gray-130
+
+  val hover
+    get() = Islands.color("StatusBar.Widget.hoverBackground") // toolbar-bg-hovered
+
   val shape = RoundedCornerShape(4.dp)
   val popupShape = RoundedCornerShape(8.dp)
 }

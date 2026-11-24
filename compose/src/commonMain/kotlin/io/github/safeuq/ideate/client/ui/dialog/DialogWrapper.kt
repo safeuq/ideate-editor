@@ -38,7 +38,7 @@ import androidx.compose.ui.window.DialogProperties
 import io.github.safeuq.ideate.client.ui.IS_MAC
 import io.github.safeuq.ideate.client.ui.component.DefaultButton
 import io.github.safeuq.ideate.client.ui.component.OutlinedButton
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
 
@@ -98,7 +98,7 @@ fun DialogWrapper(
       error?.let {
         BasicText(
           it,
-          style = fonts.label(IslandsDark.textError),
+          style = fonts.label(Islands.textError),
           modifier = Modifier.padding(horizontal = DialogLook.sideInset).padding(top = 8.dp),
         )
       }
@@ -184,7 +184,7 @@ internal fun DialogButtons(
 
 /** The dialog's own frame: background, rounded corners and outline. */
 internal fun Modifier.dialogFrame(
-  background: Color = IslandsDark.islandBackground,
+  background: Color = Islands.islandBackground,
   outline: Color = DialogLook.outline,
 ) = background(background, DialogLook.shape).border(1.dp, outline, DialogLook.shape)
 

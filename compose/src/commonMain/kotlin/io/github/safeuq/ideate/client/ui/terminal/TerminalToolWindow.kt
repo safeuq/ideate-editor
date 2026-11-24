@@ -23,7 +23,7 @@ import io.github.safeuq.ideate.client.session.terminal.TerminalKeyInput
 import io.github.safeuq.ideate.client.session.terminal.TerminalTabState
 import io.github.safeuq.ideate.client.ui.HeaderTab
 import io.github.safeuq.ideate.client.ui.component.IconButton
-import io.github.safeuq.ideate.client.ui.theme.IslandsDark
+import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 
 /**
@@ -77,7 +77,7 @@ fun TerminalHeaderTabs(
       "New Tab",
       onClick = { if (state.terminalsReady) session.openTerminal() },
       modifier = Modifier.padding(horizontal = 4.dp),
-      size = IslandsDark.tabHeight,
+      size = Islands.tabHeight,
     )
   }
 }
