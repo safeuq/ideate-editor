@@ -109,6 +109,11 @@ fun <K : Any> SlidePager(
   keep: List<K> = emptyList(),
   /** Whether the pages keep the gap and the corners at rest too. */
   alwaysRounded: Boolean = false,
+  /**
+   * Whether the gap is taken out of the page's own width, so the page gets narrower while it slides
+   * (the islands). False puts the gap outside the page, which keeps its size (the projects).
+   */
+  inset: Boolean = true,
   /** One page; [radius] is its corner radius right now: 0 at rest, the islands' while sliding. */
   page: @Composable (key: K, radius: Dp) -> Unit,
 ) {
@@ -139,9 +144,10 @@ fun <K : Any> SlidePager(
   var origin by remember { mutableStateOf(Offset.Zero) }
   BoxWithConstraints(modifier.clipToBounds()) {
     val gapPx = with(LocalDensity.current) { gap.toPx() }
-    // One page is a screen wide plus the gap, so neighbouring pages keep their gap while sliding;
-    // the gap also stands between the pages and the screen's sides.
-    val stride = constraints.maxWidth.toFloat() - gapPx
+    // Inset: one page is a screen wide less the gap on both its sides, so neighbouring pages keep
+    // one gap between them while sliding, and the gap also stands between the pages and the
+    // screen's sides. Not inset: the pages are a full screen wide, one gap apart.
+    val stride = constraints.maxWidth.toFloat() + if (inset) -gapPx else gapPx
     val hidden = constraints.maxWidth * 2
 
     Box(
@@ -216,7 +222,7 @@ fun <K : Any> SlidePager(
       (keep + book.keys).distinct().forEach { pageKey ->
         key(pageKey) {
           Box(
-            Modifier.fillMaxSize().padding(horizontal = gap).offset {
+            Modifier.fillMaxSize().padding(horizontal = if (inset) gap else 0.dp).offset {
               val slot = book.slotOf(pageKey)
               IntOffset(
                 if (slot == null) hidden else ((slot - position.value) * stride).roundToInt(),

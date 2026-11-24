@@ -400,3 +400,24 @@ Limits:
 - The live check used the window tool's `drag`, which presses, moves and lifts in one step: the
   frames show the pages between the two places after the finger lifted, not a finger held half
   way. Not tried on a phone.
+
+## Addendum (2026-11-24, 12:47 IST): a sliding project screen keeps its width
+
+The user saw the project screen get narrower while it slid: `SlidePager` padded every page by
+the gap on both sides (`padding(horizontal = gap)`), so a 420 dp screen was laid out 404 dp wide
+during the slide and its content moved.
+
+`SlidePager` has a new parameter `inset: Boolean = true`:
+
+| `inset` | Page width while sliding (420 dp screen, 8 dp gap) | Distance between pages | Used by |
+|---|---|---|---|
+| `true` | 404 dp (the gap is taken out of the page on both sides) | 412 dp | the island pages in `ClientScreen` |
+| `false` | 420 dp (the page keeps its size; the gap stands outside it) | 428 dp | the projects in `EditorApp` |
+
+The outline of a sliding project is still drawn over the outer 1 dp of the screen, not outside
+it: the pager clips to its bounds and a page is as tall as the pager, so an outline outside the
+page would never show along the top and the bottom. It takes no room, so it resizes nothing.
+
+Checked live at 420 × 800 dp with alpha and beta: mid-slide, alpha's search icon stands 19 dp
+from alpha's right edge, the same as at rest, and the gap, the corners and the outline show. The
+island pages are unchanged; the user asked for a preview before they change too.

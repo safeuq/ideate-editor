@@ -1278,6 +1278,8 @@ fun EditorApp(
         },
         // Shows in the gap and behind the rounded corners while the projects slide.
         modifier = Modifier.fillMaxSize().background(Islands.islandBackground),
+        // The project screen keeps its size while it slides: the gap stands outside it.
+        inset = false,
       ) { shownSession, radius ->
         // The project sliding in or out shows its own state.
         val shownState =
