@@ -202,11 +202,12 @@ private fun PopupListView(list: PopupList, session: ClientSession) {
             .height(1.dp)
             .background(Islands.popupBorder),
         )
-        BasicText(
-          header,
-          Modifier.padding(horizontal = Look.rowInset),
-          style = text.copy(color = Islands.textSecondary),
-        )
+        if (header.isNotEmpty())
+          BasicText(
+            header,
+            Modifier.padding(horizontal = Look.rowInset),
+            style = text.copy(color = Islands.textSecondary),
+          )
       }
       // A project's row (name over path) is as tall as its two lines, with the 6 dp above and
       // below that the backend's BeStyleControl margin asks for.

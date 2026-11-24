@@ -114,6 +114,8 @@ fun MainToolbar(
   onRunConfigurations: () -> Unit = {},
   /** The selector popup's rows; null until the backend has answered. */
   runConfigurationEntries: List<MenuEntry>? = null,
+  /** The project widget was pressed; [bounds]: its place in the window, dp. */
+  onProject: (bounds: IntRect) -> Unit = {},
 ) {
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
@@ -136,7 +138,25 @@ fun MainToolbar(
   ) {
     val name = projectName ?: "…"
     // The project widget keeps its width (up to 200 dp); the run configurations give way first.
-    ToolbarDropdown(control, Modifier.widthIn(max = 200.dp).padding(end = 8.dp)) {
+    var projectBounds by remember { mutableStateOf(IntRect.Zero) }
+    val density = LocalDensity.current
+    ToolbarDropdown(
+      control,
+      Modifier.widthIn(max = 200.dp).padding(end = 8.dp).onGloballyPositioned { coordinates ->
+        // The popup's place is in dp.
+        val box = coordinates.boundsInWindow()
+        projectBounds =
+          with(density) {
+            IntRect(
+              box.left.toDp().value.roundToInt(),
+              box.top.toDp().value.roundToInt(),
+              box.right.toDp().value.roundToInt(),
+              box.bottom.toDp().value.roundToInt(),
+            )
+          }
+      },
+      onClick = { onProject(projectBounds) },
+    ) {
       // Sized like the toolbar icons (RecentProject.Avatar.iconSize falls back to
       // MainToolbar.Button.iconSize).
       ProjectAvatar(

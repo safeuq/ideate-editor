@@ -375,6 +375,9 @@ class ConnectController(
    * The session ended: back to the connect screen, or on to Termux when our saved link was refused.
    */
   internal fun connectionLost(lost: String) {
+    // A reconnect is already replacing this session, e.g. [switchProject]'s: the backend closes the
+    // old session when the new one connects.
+    if (reconnectJob?.isActive == true) return
     val failed = attempt
     session?.stop()
     // Like JetBrains Client ("No connection to IDE Backend. Trying to reconnect…"): keep the screen
@@ -458,6 +461,11 @@ class ConnectController(
         resumed,
         editorsKey(kind, joinLink, project, sshHost),
       )
+    startSession(current, certificate)
+  }
+
+  /** Makes [current] the attempt and starts its session, which replaces the shown one. */
+  private fun startSession(current: Attempt, certificate: ClientCertificate?) {
     attempt = current
     accepted = false
     message = null
@@ -465,17 +473,49 @@ class ConnectController(
     handOverFrom = null
     session =
       ClientSession(
-          joinLink,
-          openFile,
+          current.link,
+          current.openFile,
           certificate,
           openEditors.slot(current.editorsKey),
           current.project,
           inForeground = { inForeground },
+          onProjectSwitch = projectSwitch(current),
         ) { acceptedCertificate ->
           val encoded = acceptedCertificate.encode()
           main.launch { onAccepted(current, encoded) }
         }
         .also { it.start() }
+  }
+
+  private fun projectSwitch(current: Attempt): (String) -> Unit = { hostPath ->
+    main.launch { switchProject(current, hostPath) }
+  }
+
+  /**
+   * The backend showed another project (a row of the project widget's popup): a new session over
+   * the same link and identity shows it, through [reconnect]. The new session connects while the
+   * old one is still open, and the backend then closes the old one "in favor of another
+   * connection". Stopping the old session first made the backend decline the new one (DECLINED,
+   * "Closed", seen 2026-11-24). // ponytail: the first project of a link keeps the link's own
+   * editors key, so its tabs are not restored after switching away and back; give every project its
+   * own key when that matters.
+   */
+  private fun switchProject(current: Attempt, hostPath: String) {
+    if (attempt !== current) return
+    val identity = current.identity ?: return
+    val next =
+      Attempt(
+        current.kind,
+        current.link,
+        current.text,
+        project = hostPath,
+        openFile = null,
+        resumed = true,
+        editorsKey = "${current.editorsKey}:$hostPath",
+      )
+    next.identity = identity
+    attempt = next
+    reconnect(next, identity, "Switching to $hostPath")
   }
 
   /**
@@ -619,6 +659,7 @@ class ConnectController(
             .orEmpty(),
         selectedPath = shownTree?.let { tree -> tree.selected?.let { tree.nodes[it]?.path } },
         inForeground = { inForeground },
+        onProjectSwitch = projectSwitch(current),
       ) { acceptedCertificate ->
         val encoded = acceptedCertificate.encode()
         main.launch {

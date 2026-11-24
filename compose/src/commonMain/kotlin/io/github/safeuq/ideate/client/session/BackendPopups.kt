@@ -21,6 +21,7 @@ import com.jetbrains.ide.model.uiautomation.BeTreeGrid
 import com.jetbrains.ide.model.uiautomation.BeTreeGridLine
 import com.jetbrains.ide.model.uiautomation.BeneluxView
 import com.jetbrains.ide.model.uiautomation.DialogResult
+import com.jetbrains.ide.model.uiautomation.UIElementId
 import com.jetbrains.ide.model.uiautomation.ValidationStates
 import com.jetbrains.ide.model.uiautomation.uIAutomationInteractionModel
 import com.jetbrains.rd.framework.IProtocol
@@ -28,6 +29,7 @@ import com.jetbrains.rd.ide.model.ActionPopupContent
 import com.jetbrains.rd.ide.model.AvatarIconModel
 import com.jetbrains.rd.ide.model.BeAbstractPopup
 import com.jetbrains.rd.ide.model.BeListPopupLine
+import com.jetbrains.rd.ide.model.BePopupPositionComponentContext
 import com.jetbrains.rd.ide.model.BePopupPositionDirectTransferContext
 import com.jetbrains.rd.ide.model.BePopupPositionScreenPointContext
 import com.jetbrains.rd.ide.model.DefaultPopupContent
@@ -145,6 +147,11 @@ internal class BackendPopups(
   private val log: (String) -> Unit,
   /** A backend icon's path in the client's icon jar, e.g. `expui/nodes/class.svg`. */
   private val iconPath: (IconModel) -> String?,
+  /**
+   * Where a popup anchored to a client component goes: the window point for the component's id,
+   * e.g. "44".
+   */
+  private val componentPlace: (ownerId: String) -> LxPoint?,
   private val publish: (List<BackendPopup>) -> Unit,
 ) {
   private val shown = linkedMapOf<Int, BackendPopup>()
@@ -159,15 +166,15 @@ internal class BackendPopups(
   private fun row(line: BeTreeGridLine): PopupRow {
     val row = BeRow.of(line, iconPath)
     return PopupRow(row.icon, row.text, line, row.header, row.description, row.deferredIcon).also {
+      it.avatar = row.avatar
       readyIcons[row.deferredIcon]?.let { icon -> showIcon(it, icon) }
     }
   }
 
   /** [icon] is [row]'s real icon: a project's avatar, or an icon of the client's icon jar. */
   private fun showIcon(row: PopupRow, icon: IconModel) {
-    val project =
-      (icon as? AvatarIconModel)?.presentation as? FullProjectAvatarIconPresentationModel
-    if (project != null) row.avatar = project.name else row.iconPath = iconPath(icon)
+    val project = avatarProject(icon)
+    if (project != null) row.avatar = project else row.iconPath = iconPath(icon)
   }
 
   fun bind() {
@@ -365,6 +372,11 @@ internal class BackendPopups(
       popup.anchor = LxPoint(position.x.toDouble(), position.y.toDouble())
       return
     }
+    if (position is BePopupPositionComponentContext) {
+      popup.anchor =
+        componentPlace(position.point.ownerID.let { (it as? UIElementId)?.id ?: it.toString() })
+      return
+    }
     val context = position as? BePopupPositionDirectTransferContext ?: return
     val panel = protocol.luxModel.components[context.luxId] as? LxPanel
     val origin = panel?.position?.valueOrNull
@@ -466,6 +478,10 @@ internal class BackendPopups(
   }
 }
 
+/** The project an [AvatarIconModel] is the avatar of, e.g. `beta`; null for any other icon. */
+internal fun avatarProject(icon: IconModel?): String? =
+  ((icon as? AvatarIconModel)?.presentation as? FullProjectAvatarIconPresentationModel)?.name
+
 /**
  * The icon and text of a [BeTreeGridLine], e.g. a New ▸ Java Class kind (BeStyleControl → BeGrid
  * [BeIcon, BeLabel]) or a Packages pane row (BeGrid [BeIcon, BeRichText], the rich text in parts
@@ -480,6 +496,11 @@ internal class BeRow(
   val description: String? = null,
   /** The id of the row's [DeferredIconModel]: `ShellModel.deferredIconReady` brings the icon. */
   val deferredIcon: Long? = null,
+  /**
+   * The project whose avatar is the row's icon, when the backend sends the `AvatarIconModel` with
+   * the row instead of deferring it (seen 2026-11-24 for the popup opened from the second project).
+   */
+  val avatar: String? = null,
 ) {
   val text
     get() = fragments.joinToString("") { it.text }
@@ -490,20 +511,25 @@ internal class BeRow(
       var header: String? = null
       var description: String? = null
       var deferredIcon: Long? = null
+      var avatar: String? = null
       val fragments = mutableListOf<TextFragment>()
+      fun special(model: IconModel?) {
+        if (model is DeferredIconModel) deferredIcon = model.id
+        avatarProject(model)?.let { avatar = it }
+      }
       fun look(each: BeControl) {
         when (each) {
           is BeHeader -> header = each.text.value
           is BeIcon -> {
             if (icon == null) icon = each.icon.valueOrNull?.let(iconPath)
-            (each.icon.valueOrNull as? DeferredIconModel)?.let { deferredIcon = it.id }
+            special(each.icon.valueOrNull)
           }
           is BeLabel -> fragments += TextFragment(each.text.value, 0, null)
           is BeRichText -> {
             // Gradle's rows carry the icon on the text, e.g. `icons/expui/gradle.svg` on
             // "gradle-smoke" and `expui/build/taskGroup.svg` on "Tasks".
             if (icon == null) icon = each.icon.value?.let(iconPath)
-            (each.icon.value as? DeferredIconModel)?.let { deferredIcon = it.id }
+            special(each.icon.value)
             each.text.valueOrNull?.parts.orEmpty().forEach { part ->
               fragments +=
                 TextFragment(
@@ -539,7 +565,7 @@ internal class BeRow(
         }
       }
       line.columnElements.forEach(::look)
-      return BeRow(icon, fragments, header, description, deferredIcon)
+      return BeRow(icon, fragments, header, description, deferredIcon, avatar)
     }
   }
 }

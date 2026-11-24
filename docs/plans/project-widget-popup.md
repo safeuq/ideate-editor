@@ -561,3 +561,31 @@ arrive in the first second) must not make the session jump.
 - A row with `hasSubstep = true` (not seen in this popup).
 - The top rows' dialogs (New Project…, Open…, Clone Repository…) are `LxDialog`s and need no work
   here; they open as any Lux dialog does.
+
+## Addendum (2026-11-24, 15:10 IST): built; what the live check changed in the plan
+
+Steps 1 to 4 of the build plan above are in the code. Checked in the desktop app against a
+263.7307.200 backend with `alpha` and `beta` open: one click opens the popup under the widget; the
+rows are New Project…, Open…, Clone Repository…, IntelliJ IDEA Home, Open Projects, `[B] beta` and
+`[A] alpha` with their paths; choosing `beta` shows beta (toolbar, Project tree), choosing `alpha`
+in beta's popup shows alpha again; repeated twice in each direction.
+
+Four things were not as the plan said:
+
+| Plan | Seen | Code |
+|---|---|---|
+| `ProjectWidget.click` fires `doAction` inside `getComponent`'s answer | that `doAction` is lost: the first click after connecting opened nothing, the second did. rd binds the answered component after the answer's handlers ran | after storing the button, `click(bounds)` runs again: one more `expandGroup` round trip, then `fire` |
+| `switchProject` stops the session and starts the next one | the backend declined the next one: `Backend refused the connection: DECLINED`; its log: `Connection with client … was closed in favor of another connection`, then `Connection flow. failed with code DECLINED and message Closed` | `switchProject` only makes the next `Attempt` and calls `reconnect(next, identity, …)`: the new session connects while the old one is open. The first try is still declined after 4 s and closes the old session; the retry 1 s later is accepted. A switch takes about 5 s. `connectionLost` returns at once while `reconnectJob` is active, so the old session's end does not start a second reconnect |
+| a project row's icon is a `DeferredIconModel` | in the popup opened from the second project (`beta`) the rows carry the `AvatarIconModel` itself, no deferred icon | `BeRow.avatar` (through `avatarProject(icon)`) is read from the row; `ClientSession.iconPaths` knows `AvatarIconModel` (no path) |
+| `focusProjectWindow.adviseOn(…)`; `ownerID.id` | `focusProjectWindow` is an `ISignal` (no `adviseOn`; it is fired on the rd thread); `ownerID` is a `ComponentId`, only `UIElementId` has `id` | `advise`; `(ownerID as? UIElementId)?.id` |
+
+The popup's owner id changes with every popup (21, 51, 81, 111, 141, 171 in one run) and the
+button's `uniqueId` is not set, so the two cannot be compared; the popup goes under the widget that
+was clicked.
+
+Not checked: Escape and a click outside on this popup (the test tool cannot press them; both are
+`BackendPopups`' existing handling of `cancelKeyEnabled` and `cancelOnClickOutside`), a row under
+Recent Projects, and the top rows' dialogs from Ideate.
+
+Open: the 5 s a switch takes. The backend keeps a client's first connection until it has declined
+the second; whether JetBrains Client's own reconnect avoids that wait is not looked at yet.

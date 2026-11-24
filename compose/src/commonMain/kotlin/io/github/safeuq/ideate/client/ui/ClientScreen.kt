@@ -476,6 +476,7 @@ fun ClientScreen(
         onRunButton = { actionId, bounds -> session.runToolbarAction(actionId, bounds) },
         onRunConfigurations = session::runConfigurationsMenu,
         runConfigurationEntries = state.contextMenu?.entries,
+        onProject = session::projectWidgetClicked,
       )
       // Any open soft keyboard has a bottom inset. A floating one keeps only a strip for its back
       // and

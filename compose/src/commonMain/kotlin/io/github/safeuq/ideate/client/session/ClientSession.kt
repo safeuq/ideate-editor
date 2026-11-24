@@ -30,6 +30,7 @@ import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
 import com.jetbrains.rd.ide.model.ActionTimestampSetModel
+import com.jetbrains.rd.ide.model.AvatarIconModel
 import com.jetbrains.rd.ide.model.BadgeIconModel
 import com.jetbrains.rd.ide.model.BasicIdeRootMarshallersProvider
 import com.jetbrains.rd.ide.model.BrowseMode
@@ -171,6 +172,11 @@ class ClientSession(
    * Called on the connect thread once the backend has accepted the connection, with the identity it
    * accepted.
    */
+  /**
+   * The backend asked to show another project, e.g. after a row of the project widget's popup: its
+   * host path.
+   */
+  private val onProjectSwitch: (hostPath: String) -> Unit = {},
   private val onAccepted: (ClientCertificate) -> Unit = {},
 ) {
   private val lifetimeDefinition = LifetimeDefinition()
@@ -240,6 +246,8 @@ class ClientSession(
       log = ::log,
     )
   private var runToolbar: RunToolbar? = null
+  private var projectWidget: ProjectWidget? = null
+  private var switchedTo: String? = null
   private val statusWidgets =
     StatusBarWidgets({ icon -> iconPaths(icon).firstOrNull() }) { widgets ->
       mutableState.update { it.copy(statusWidgets = widgets) }
@@ -672,6 +680,23 @@ class ClientSession(
     )
   }
 
+  /** The project widget was pressed; [bounds]: its place in the window, dp. */
+  fun projectWidgetClicked(bounds: IntRect) = onRd {
+    projectWidget?.click(bounds) ?: log("No project yet; no project popup")
+  }
+
+  /**
+   * Another project is wanted after the project widget's popup was used: a new session shows it.
+   * Not before the widget was clicked: the solutions there at connect must not make the session
+   * jump.
+   */
+  private fun switchTo(hostPath: String?) {
+    if (projectWidget?.clicked != true || hostPath == null || hostPath == switchedTo) return
+    switchedTo = hostPath
+    log("Project switch to $hostPath")
+    onProjectSwitch(hostPath)
+  }
+
   /**
    * A left click in the middle of [bounds] (the button's place in the window, dp), as JetBrains
    * Client sends for a button that opens a popup: the backend puts the popup at that point.
@@ -947,8 +972,13 @@ class ClientSession(
         }
         .also { it.bind() }
     backendPopups =
-      BackendPopups(lifetime, protocol, ::log, { icon -> iconPaths(icon).firstOrNull() }) { popups
-          ->
+      BackendPopups(
+          lifetime,
+          protocol,
+          ::log,
+          { icon -> iconPaths(icon).firstOrNull() },
+          { ownerId -> projectWidget?.popupPlace(ownerId) },
+        ) { popups ->
           mutableState.update { it.copy(backendPopups = popups) }
         }
         .also { it.bind() }
@@ -1243,6 +1273,11 @@ class ClientSession(
             },
           )
           .also { it.bind(solutionLifetime, newSolution.codeWithMeRunConfigurationsModel) }
+      projectWidget =
+        ProjectWidget(protocol.asyncActionsModel, newSolution.projectId, ::log).also {
+          it.bind(solutionLifetime)
+        }
+      solutionLifetime.onTermination { projectWidget = null }
       breadcrumbs.bind(solutionLifetime, newSolution.navigationBarModel, ::refreshBreadcrumbs)
       bindStructure(solutionLifetime, newSolution)
       bindUsages(solutionLifetime, newSolution)
@@ -1281,6 +1316,9 @@ class ClientSession(
       val description =
         (newSolution.solutionOpenStrategy as? RdOpenSolution)?.description as? RdCodeWithMeProject
       val hostPath = description?.hostProjectBasePath
+      newSolution.projectViewModel.focusProjectWindow.advise(solutionLifetime) {
+        if (solution !== newSolution) switchTo(hostPath)
+      }
       if (isShownProject(project, hostPath, showing = solution != null)) {
         return@view bindSolution(solutionLifetime, newSolution, description, hostPath)
       }
@@ -1299,6 +1337,7 @@ class ClientSession(
         return@view
       }
       log("Project ${newSolution.projectId.value} ($hostPath) added; showing $project")
+      switchTo(hostPath)
     }
   }
 
@@ -2161,6 +2200,8 @@ class ClientSession(
         is DeferredIconModel -> icon.baseIcon?.let(::iconPaths).orEmpty()
         // A blank slot, e.g. the visibility place in a Structure row's icon.
         is EmptyIconModel -> emptyList()
+        // A project's avatar is drawn, not loaded from the icon jar (BackendPopups' avatarProject).
+        is AvatarIconModel -> emptyList()
         // An icon with something on or around it (a badge dot, an overlay, a tint, an offset):
         // the icon itself, without the extra. E.g. a tool window button with a badge.
         is BadgeIconModel -> iconPaths(icon.icon)

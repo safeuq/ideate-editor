@@ -10,10 +10,12 @@ import com.jetbrains.ide.model.uiautomation.BeMarginItem
 import com.jetbrains.ide.model.uiautomation.BeMarginType
 import com.jetbrains.ide.model.uiautomation.BeRichText
 import com.jetbrains.ide.model.uiautomation.BeTreeGridLine
+import com.jetbrains.rd.ide.model.AvatarIconModel
 import com.jetbrains.rd.ide.model.DeferredIconModel
 import com.jetbrains.rd.ide.model.EffectStyle
 import com.jetbrains.rd.ide.model.EmptyIconModel
 import com.jetbrains.rd.ide.model.FontStyle
+import com.jetbrains.rd.ide.model.FullProjectAvatarIconPresentationModel
 import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.RichStringModel
 import com.jetbrains.rd.ide.model.RichTextModel
@@ -67,5 +69,17 @@ class BackendPopupRowTest {
     assertEquals("beta", row.text)
     assertEquals("/projects/beta", row.description)
     assertEquals(63L, row.deferredIcon)
+  }
+
+  // The same row in the popup opened from the second project: the avatar comes with the row.
+  @Test
+  fun aProjectRowCanCarryItsAvatar() {
+    val avatar =
+      AvatarIconModel(20, 0.4, FullProjectAvatarIconPresentationModel("beta", "/projects/beta"))
+    val panel = BeGridLayoutPanel()
+    panel.items.set(listOf(cell(0, text("", avatar)), cell(2, text("beta"))))
+    val row = BeRow.of(BeTreeGridLine(listOf(panel))) { null }
+    assertEquals("beta", row.avatar)
+    assertEquals(null, row.deferredIcon)
   }
 }

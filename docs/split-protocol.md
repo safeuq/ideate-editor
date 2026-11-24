@@ -1010,3 +1010,13 @@ All from JetBrains Client 263.7307.200 on the Mac:
 | `lib/fleet.rpc.jar` | `TransportMessage` JSON serialization |
 
 Class and method names are given above rather than line numbers, because Fernflower's line numbers change between runs and versions.
+
+## Addendum (2026-11-24): the project drop-down's rows come from the backend
+
+The paragraph under "One backend, several projects, one connection" says the JetBrains Client's
+project drop-down takes its rows from client classes (`RecentProjectListActionProvider` and the
+Gateway plugin's lists). A running JetBrains Client showed otherwise: the backend builds the popup
+and sends it as `UIAutomationInteractionModel.activePopups` (`WizardPopupContent`), with the open
+and the recent projects as rows. Ideate does the same since this date: `session/ProjectWidget.kt`
+sends the widget's click, and a chosen project is shown by a new `ClientSession(project = …)` over
+the same link (`ConnectController.switchProject`). Details: `docs/plans/project-widget-popup.md`.
