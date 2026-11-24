@@ -52,16 +52,22 @@ fun IconButton(
    * pressed backgrounds are blended over it, as `RunWidgetButtonLook` does. Not when disabled.
    */
   fill: Color? = null,
-  /** Paints every stroke of the icon in this colour (IntelliJ's `toStrokeIcon`). */
+  /**
+   * Paints the icon's strokes in this colour, as IntelliJ's `toStrokeIcon`: an icon with a stroke
+   * variant is drawn from it, e.g. `expui/run/run.svg` (a green outline around a pale green fill)
+   * from `expui/run/run_stroke.svg` (a white outline only).
+   */
   tint: Color? = null,
 ) {
   val interaction = remember { MutableInteractionSource() }
   val hovered by interaction.collectIsHoveredAsState()
   val pressed by interaction.collectIsPressedAsState()
+  val path = if (hovered && hoveredIconPath != null) hoveredIconPath else iconPath
+  val icons = LocalIcons.current
   val icon =
-    LocalIcons.current.painter(
-      if (hovered && hoveredIconPath != null) hoveredIconPath else iconPath,
-    ) ?: return
+    tint?.let { icons.painter(path.removeSuffix(".svg") + "_stroke.svg") }
+      ?: icons.painter(path)
+      ?: return
   val background =
     when {
       !enabled -> Color.Transparent

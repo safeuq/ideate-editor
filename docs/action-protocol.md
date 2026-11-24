@@ -224,3 +224,21 @@ The fill blends `RunWidget.hoverBackground` on hover and `RunWidget.pressedBackg
 **Stop while debugging (open).** `StopAction` is `ActionRemoteBehaviorSpecification.FrontendOtherwiseBackend`. JetBrains Client updates Stop itself, from its own run sessions (`StopAction.getActiveStoppableDescriptors`), and doesn't use the backend's answer. While a Gradle task was being debugged, the backend answered `Stop` 0x880 (hidden) for the whole session, so Ideate shows no Stop button then. For a plain Run the backend's answer shows Stop. To fix this, Ideate needs the list of running sessions that the client builds its Stop from.
 
 **Updates.** While Run or Debug reports RUNNING or LOADING, Ideate asks for the buttons again every 500 ms, as IntelliJ's toolbar updates on a timer. A Gradle debug session changes no `executingConfigurations` entry, so without this nothing would show Pause, Resume or the end of the session.
+
+## Addendum (2026-11-24): run widget icons are drawn from their stroke variants
+
+`RunWidgetButtonLook.paintIcon` passes every button's icon through `toStrokeIcon(icon, colour)`
+(`platform/util/ui/src/com/intellij/ui/icons/stroke.kt`). An icon that has a `_stroke.svg` sibling
+in the icons jar is drawn from that file, a white outline recoloured to the colour. Other icons
+keep their shape, and only their known stroke colours change:
+
+| Button | File drawn | Colour (Islands Dark, idle) |
+|---|---|---|
+| Run | `expui/run/run_stroke.svg` (outline, 1.5 wide) | `RunWidget.runIconColor` (green) |
+| Debug | `expui/run/debug_stroke.svg` | `RunWidget.runIconColor` |
+| Stop | `expui/run/stop_stroke.svg` | `RunWidget.runningIconColor` (white, on red) |
+| Rerun | `expui/run/restart.svg` (no stroke file; one `#6C707E` shape) | white on green while running |
+
+Before this, Ideate tinted `run.svg` and `debug.svg` whole, so the pale inner fill (`#F2FCF3`) took
+the tint too and Run and Debug showed as solid green shapes. `IconButton` now loads the
+`_stroke.svg` file when it has a tint and the jar has one.
