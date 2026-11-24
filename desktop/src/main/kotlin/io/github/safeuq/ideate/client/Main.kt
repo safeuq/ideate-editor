@@ -63,6 +63,9 @@ fun main(arguments: Array<String>) {
         "System property jetbrains.client.lib is not set (the Gradle run task sets it)"
       },
     )
+  // As JetBrains Client's jetbrains_client.vmoptions: AWT's own parts (menus, file choosers)
+  // follow macOS's dark or light mode; before AWT starts.
+  System.setProperty("apple.awt.application.appearance", "system")
   MacFullScreenControlsManager.configureEnable()
   val fonts = DesktopResources.fonts(clientLib)
   Islands.density = DesktopResources.uiDensity()

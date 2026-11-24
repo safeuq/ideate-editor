@@ -16,8 +16,10 @@ import androidx.compose.ui.unit.toSize
 import com.jetbrains.JBR
 import io.github.safeuq.ideate.client.ui.TitleBarArea
 import io.github.safeuq.ideate.client.ui.theme.Islands
+import io.github.safeuq.ideate.client.ui.theme.LafManager
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import javax.swing.JRootPane
 
 /**
  * IntelliJ's merged title bar on macOS (`MacToolbarFrameHeader`): JetBrains Runtime's
@@ -45,6 +47,11 @@ fun rememberMacTitleBar(window: ComposeWindow): TitleBarArea? {
     titleBar.height = height.value
     decorations.setCustomTitleBar(window, titleBar)
   }
+  // The traffic lights' look, e.g. grey circles in a dark theme when the window isn't focused
+  // (black outlines without it): ProjectFrameCustomHeaderHelper calls decorateWindowHeader when it
+  // builds the frame and again on each UI settings change, so on a theme switch too.
+  val isDark = LafManager.currentTheme.isDark
+  remember(window, isDark) { decorateWindowHeader(window.rootPane, isDark) }
   DisposableEffect(window, titleBar) {
     val listener =
       object : MouseAdapter() {
@@ -84,6 +91,14 @@ fun rememberMacTitleBar(window: ComposeWindow): TitleBarArea? {
       control = Modifier.then(ControlAreaElement(controls)),
     )
   }
+}
+
+/** `ComponentUtil.decorateWindowHeader`: the window's macOS appearance from the theme. */
+private fun decorateWindowHeader(rootPane: JRootPane, isDark: Boolean) {
+  rootPane.putClientProperty(
+    "apple.awt.windowAppearance",
+    if (isDark) "NSAppearanceNameVibrantDark" else "NSAppearanceNameVibrantLight",
+  )
 }
 
 /**

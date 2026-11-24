@@ -1000,3 +1000,27 @@ Project tree scope colors (Settings | Appearance | File Colors) are resolved as 
 `SyncThemeWithOs()` is IntelliJ's "Sync with OS". It sits at the top of both `IdeateWindow`s (Android and desktop) and sets `defaultDarkTheme` or `defaultLightTheme` from `isSystemInDarkTheme()`. It does this only when that window's own reading changes. On Android, the connect screen stays alive behind the editor and does not get the uiMode change until it shows again. When every composition set the window's reading, the two windows flipped the theme between dark and light every frame. The log showed "Color scheme Light ready" and "Color scheme Islands Dark ready" alternating every 16 ms.
 
 On Android, the bar icons use `SystemBarStyle.auto` and are set again when the theme changes, because uiMode is in `configChanges` and the activity is not recreated. The launch window color is `#FFFFFF`, with `#191A1C` in `values-night`.
+
+## 27. The traffic lights in an unfocused window follow the theme (2026-11-24)
+
+An unfocused Ideate window showed black circles in a dark theme where IntelliJ, Firefox and other
+apps show grey ones. macOS draws the window buttons for the window's appearance, and Ideate never set
+one, so every window stayed light (`effectiveAppearance` = `NSAppearanceNameAqua`); light-appearance
+inactive buttons are dark outlines, black on a dark title bar.
+
+IntelliJ (JetBrains Client 263.7307.200) does two things, both read from its files:
+
+| Where | What | Ideate |
+|---|---|---|
+| `bin/jetbrains_client.vmoptions` | `-Dapple.awt.application.appearance=system`: AWT's own parts follow the OS | `Main.kt` sets the same property before AWT starts |
+| `ComponentUtil.decorateWindowHeader(rootPane)` (intellij.platform.util.ui.jar), called by `ProjectFrameCustomHeaderHelper` when it builds the frame and again on each UI settings change | root pane property `apple.awt.windowAppearance` = `NSAppearanceNameVibrantDark` when `StartupUiUtil.isDarkTheme`, else `NSAppearanceNameVibrantLight`; JBR's `CPlatformWindow` applies it to the NSWindow live | `MacTitleBar.kt` `decorateWindowHeader`, run again whenever `LafManager.currentTheme.isDark` changes |
+
+Measured with a read-only probe on the NSWindow, dark OS, Islands Dark:
+
+| | `apple.awt.windowAppearance` | `effectiveAppearance` | Unfocused buttons |
+|---|---|---|---|
+| Before | null | `NSAppearanceNameAqua` | black |
+| After | `NSAppearanceNameVibrantDark` | `NSAppearanceNameVibrantDark` | grey, as IntelliJ |
+
+The full-screen buttons (`MacFullScreenControlsManager`, §26) are JBR's own view with their own
+colour and are not affected.
