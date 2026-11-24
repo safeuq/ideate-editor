@@ -643,3 +643,44 @@ For a dialog the client can't shrink (the startup trust dialog above), Ideate no
 - `LuxDialogWindow` (not popups) calls `LocalLandscapeRequest.current(clipped(shortSide − 16, width))`. The test uses the screen's short side, so the answer stays the same after turning and the screen doesn't go back and forth.
 - Android (`EditorActivity.kt`, `LandscapeRequest`): the first request saves `requestedOrientation` and sets `SCREEN_ORIENTATION_SENSOR_LANDSCAPE`; when the last request leaves (the dialog closes), the saved value comes back. It does nothing on a device without `FEATURE_SCREEN_LANDSCAPE`, in a split screen (`isInMultiWindowMode`: Android ignores the request there), or when the screen is already landscape. The activities handle orientation changes themselves (`configChanges`), so turning keeps the session. Desktop: nothing.
 - Checked on the Pixel 3a emulator with auto-rotate off: the trust dialog for a new folder turned the screen; all three buttons showed (Trust Project had been entirely off screen in portrait); Trust Project closed it and the screen went back to portrait.
+
+## Addendum (2026-11-24): named colors resolve from JetBrains Client's own UIManager table
+
+User report: a selected toggle in a Lux toolbar (the console's Soft-Wrap) showed as a light square. Measured on the emulator: (207,207,207) on a (25,26,28) toolbar.
+
+**Cause.** Lux sends theme colors by name with IntelliJ's fallback, e.g. `NamedColor("ActionButton.pressedBackground", RgbaColor(207,207,207))`, which is `JBUI.CurrentTheme.ActionButton.pressedBackground()` = `JBColor.namedColor(key, Gray.xCF)`. The client resolves the name. Ideate's `ThemeKeys` was a hand-kept list without that key, so it drew the fallback. The backend itself was fine: probed in-process, it is Islands Dark and returns `#29FFFFFF`.
+
+**What JetBrains Client does** (263.7307.200, `intellij.rd.platform.jar`, checked in the bytecode):
+1. `ColorHostKt.toColor(AbstractColor)` sends a `NamedColor` to `ColorHost.getColor(NamedColor)`.
+2. That returns `JBColor.namedColor(name, toColor(fallback))`, or `JBColor.namedColor(name)` when there is no fallback. `namedColorCache` only keeps those objects.
+3. `JBColor.calculateColorOrNull` looks the key up in this order:
+   - `UIManager.getColor(key)`;
+   - otherwise the theme's `"*"` map: the first suffix, in map order, that the key ends with (plain `endsWith`, no dot);
+   - otherwise the fallback. With no fallback the result is transparent (`Gray.TRANSPARENT`).
+
+**Change.** Ideate now follows those same steps over the client's real table:
+
+| Piece | What it is |
+|---|---|
+| `IslandsDarkUiColors.kt` | generated: 1,603 `key → ARGB` entries and 29 `"*"` suffixes in map order, dumped from a running JetBrains Client 263.7307.200 with Islands Dark |
+| `ThemeKeys.color(key)` | `named[key] ?: first wildcard suffix the key ends with`; null lets the caller take the fallback |
+| `resolveLuxColor` | a `NamedColor` without a fallback is now transparent, as in JBColor (it was `Color.Gray`) |
+
+The table comes from the client, not the backend. Their Swing base defaults differ in 224 lines, for example `Button.shadow` is `44000000` in the client and `FFB8CFE5` in the backend. The `"*"` map is the same in both.
+
+Checked on the emulator (Run window, Gradle `tasks`, Soft-Wrap on): the button went from (207,207,207) to (62,63,65), which is `#29FFFFFF` over (25,26,28).
+
+**Regenerating** (after a JetBrains Client update; tools in `tools/ui-colors/`):
+1. Start JetBrains Client with Islands Dark joined to any backend. A fresh join link is needed, because Ideate uses up a link's token when it joins.
+2. Dump its table:
+   ```
+   javac -d out tools/ui-colors/UiColorsDump.java tools/ui-colors/Attach.java
+   jar cfm dump.jar <(printf 'Agent-Class: UiColorsDump\n') -C out UiColorsDump.class
+   java -cp out Attach <client pid> dump.jar colors.tsv
+   ```
+   An agent class already loaded into the target JVM is reused, so rename the class to load a changed one.
+3. Generate the Kotlin file:
+   ```
+   java tools/ui-colors/GenerateUiColors.java colors.tsv compose/src/commonMain/kotlin/io/github/safeuq/ideate/client/ui/theme/IslandsDarkUiColors.kt <build>
+   ```
+   The table is split into string constants of at most 30 KB each, because a class-file constant holds at most 65,535 bytes.

@@ -98,8 +98,8 @@ import io.github.safeuq.ideate.client.ui.theme.ThemeKeys
  * - text is drawn at its baseline and shrunk sideways when it measures wider than the box the
  *   backend measured (the client's default `lux.fonts.transform.bounds=shrink`).
  *
- * Colors are IntelliJ theme keys with fallbacks; [ThemeKeys] resolves them as Islands Dark does.
- * Inter maps to `fonts.ui` and JetBrains Mono to `fonts.editor`.
+ * Colors are IntelliJ theme keys with fallbacks; [ThemeKeys] resolves them as JetBrains Client
+ * does. Inter maps to `fonts.ui` and JetBrains Mono to `fonts.editor`.
  *
  * [density] isn't used for text: text is measured in backend pixels and scaled with the canvas.
  */
@@ -371,12 +371,17 @@ class LuxPainter(
 }
 
 /**
- * A theme key resolved as Islands Dark does ([ThemeKeys]), else down the fallback chain the backend
- * sent: `NamedColor(name, fallback)` → … → `RgbaColor`; a `DualColor` gives its dark color.
+ * A theme key resolved as JetBrains Client does ([ThemeKeys]), else down the fallback chain the
+ * backend sent: `NamedColor(name, fallback)` → … → `RgbaColor`; a `DualColor` gives its dark color.
+ * A name without a fallback is transparent, as `JBColor.namedColor(name)` is.
  */
 internal fun resolveLuxColor(color: AbstractColor?): Color? =
   when (color) {
-    is NamedColor -> ThemeKeys.color(color.name) ?: resolveLuxColor(color.defaultColor)
+    is NamedColor ->
+      ThemeKeys.color(color.name)
+        ?: color.defaultColor.let { fallback ->
+          if (fallback == null) Color.Transparent else resolveLuxColor(fallback)
+        }
     is RgbaColor -> Color(color.red, color.green, color.blue, color.alpha)
     is DualColor -> resolveLuxColor(color.darkColor)
     else -> null
