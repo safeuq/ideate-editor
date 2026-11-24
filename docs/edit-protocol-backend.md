@@ -512,3 +512,26 @@ Confirmed by the code: document hash formula and examples, editor hash formula a
 - How `PatchEngineSynchronizationData.lastQueuedRequest` is filled on the client side (not read).
 - `RdUndoManagerBase.isUndoAvailable` / `undoOrRedo` internals and the exact `Undo <name>` naming (jar not read) [Inferred].
 - `shiftRange` is summarised only.
+
+## Addendum (2026-11-24, 12:10 IST): "Out of step" on every reopened editor
+
+Seen on connect and on every project switch that reopens saved editors:
+
+```
+[edit] updated version: ours RdEditorVersion(caretModelVersion = 1 …), backend's RdEditorVersion(caretModelVersion = 0 …)
+Out of step with the backend (backend patch expects [-1, -1] leaves [0, 0] ours 1/0 [reset(423 chars, v0), caret(0 0..0)])
+Taking the backend's editor state
+```
+
+Cause: the order inside `EditSession.applyChecked`. A reopened editor's first patch carries the
+text and the caret together. `applyChecked` applied the items, called `changed(null)`, and only
+then compared our versions with the patch's `updatedItemVersions`. `changed` reaches
+`ClientSession.restoreCaret`, which puts the saved caret back with `moveCaret`, and that moves our
+editor version one step on (`caretModelVersion` 0 → 1) before the comparison (backend: 0). The
+recovery that followed took the backend's state, so the caret that had just been put back was
+lost again.
+
+Fix: `applyChecked` compares first and calls `changed(null)` after. Test:
+`CaretRestoreOrderTest.aCaretMovedByTheListenerIsNotOutOfStep` (fails on the old order with the
+same message). Checked live with alpha and beta, two saved editors each: no `Out of step` line on
+connect or on the switch.

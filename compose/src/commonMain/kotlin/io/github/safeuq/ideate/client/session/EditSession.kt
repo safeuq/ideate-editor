@@ -927,8 +927,11 @@ class EditSession(
   private fun applyChecked(patch: RdPatch): Boolean {
     if (!versionsMatch(patch.expectedItemVersions, "expected")) return false
     for (item in patch.changes) applyItem(item)
+    // Compared before the listeners hear of it: one of them puts a saved caret back
+    // (ClientSession.restoreCaret → moveCaret), which moves our editor version one step on.
+    val matches = versionsMatch(patch.updatedItemVersions, "updated")
     changed(null)
-    return versionsMatch(patch.updatedItemVersions, "updated")
+    return matches
   }
 
   /**
