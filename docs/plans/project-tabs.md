@@ -421,3 +421,13 @@ page would never show along the top and the bottom. It takes no room, so it resi
 Checked live at 420 × 800 dp with alpha and beta: mid-slide, alpha's search icon stands 19 dp
 from alpha's right edge, the same as at rest, and the gap, the corners and the outline show. The
 island pages are unchanged; the user asked for a preview before they change too.
+
+## Addendum (2026-11-24, 12:58 IST): correction to the widths above
+
+The 12:47 addendum used an 8 dp gap. `Islands.islandGap` is 6 dp (4 dp in compact mode), so on a
+420 dp screen the numbers are:
+
+| `inset` | Page width while sliding | Distance between pages |
+|---|---|---|
+| `true` | 408 dp (was written as 404) | 414 dp (was written as 412) |
+| `false` | 420 dp | 426 dp (was written as 428) |
