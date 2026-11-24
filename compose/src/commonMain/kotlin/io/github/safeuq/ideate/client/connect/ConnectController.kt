@@ -179,9 +179,6 @@ class ConnectController(
   private companion object {
     /** How long a dropped connection is retried before the app shows the connect screen. */
     const val RECONNECT_FOR_MILLIS = 120_000L
-
-    /** Between stopping a session and connecting the next one for another project. */
-    const val SWITCH_WAIT_MILLIS = 500L
   }
 
   /**
@@ -281,7 +278,7 @@ class ConnectController(
   }
 
   fun close() {
-    session?.stop()
+    stopSessions()
     sshController?.close()
     main.cancel()
   }
@@ -297,7 +294,7 @@ class ConnectController(
     reconnecting = null
     pending?.stop()
     pending = null
-    session?.stop()
+    stopSessions()
     endSession()
     inform("Disconnected. The backend keeps running; tap it under History to reconnect.")
   }
@@ -375,6 +372,7 @@ class ConnectController(
         saved.project,
       )
     session = standIn
+    opener = standIn
     val screen = saved.screen.toState()
     lastShown = standIn to screen
     handOverFrom = standIn to screen
@@ -390,7 +388,7 @@ class ConnectController(
     // old session when the new one connects.
     if (reconnectJob?.isActive == true) return
     val failed = attempt
-    session?.stop()
+    stopSessions()
     // Like JetBrains Client ("No connection to IDE Backend. Trying to reconnect…"): keep the screen
     // and connect again with the same link and identity. Not when another client took the backend
     // over (that asks "Take back").
@@ -496,28 +494,65 @@ class ConnectController(
           main.launch { onAccepted(current, encoded) }
         }
         .also { it.start() }
+    opener = session
   }
 
   private fun projectSwitch(current: Attempt): (String) -> Unit = { hostPath ->
     main.launch { switchProject(current, hostPath) }
   }
 
+  /** The session that opened the connection; the others in [joined] show their project on it. */
+  private var opener: ClientSession? = null
+
+  /** The sessions of the other open projects, by host path, e.g. `/work/beta`. */
+  private val joined = mutableMapOf<String, ClientSession>()
+
+  /** Ends every session of the connection: the joined ones, then the one that opened it. */
+  private fun stopSessions() {
+    joined.values.forEach { it.stop() }
+    joined.clear()
+    (opener ?: session)?.stop()
+    opener = null
+  }
+
   /**
-   * The backend showed another project (a row of the project widget's popup): a new session over
-   * the same link and identity shows it, through [reconnect].
+   * Another open project is to be shown (a project tab, or a row of the project widget's popup).
+   * The backend lists every open project on the one connection, so the project gets a session of
+   * its own on it the first time, and after that the screen only changes which session it shows: no
+   * new connection, nothing the backend could refuse. Every project stays live.
    *
-   * The old session is stopped first, which tells the backend to drop its wire (`SplitWire
-   * .terminate`). The backend then needs a moment to close that session: a connection 5 ms after
-   * the stop was declined ("closed in favor of another connection", and the refusal arrives 4 s
-   * later), one 300 ms after it was accepted in 20 ms (seen 2026-11-24). So the first try waits
-   * [SWITCH_WAIT_MILLIS]; a declined try is retried by [reconnect] as any other.
-   *
-   * ponytail: the first project of a link keeps the link's own editors key, so its tabs are not
-   * restored after switching away and back; give every project its own key when that matters.
+   * ponytail: the tool window layout on screen is one for all projects (`ToolWindowState` belongs
+   * to the screen); give each session its own when that matters. The first project of a link keeps
+   * the link's own editors key, the others get `<key>:<host path>`.
    */
   private fun switchProject(current: Attempt, hostPath: String) {
-    if (attempt !== current) return
-    val identity = current.identity ?: return
+    if (attempt?.link != current.link) return
+    val first = opener ?: session ?: return
+    val shown = session
+    val target =
+      first.takeIf { it.state.value.shownProject == hostPath }
+        ?: joined.getOrPut(hostPath) {
+          ClientSession(
+              current.link,
+              null,
+              null,
+              openEditors.slot("${current.editorsKey}:$hostPath"),
+              hostPath,
+              inForeground = { inForeground },
+              onProjectSwitch = projectSwitch(current),
+              sharedConnection = first.connection,
+            )
+            .also { it.start() }
+        }
+    if (session === target) return
+    // A closed project's session goes with its tab; the one that opened the connection stays.
+    val open = shown?.state?.value?.openProjects.orEmpty().map { it.hostPath }
+    joined.entries
+      .filter { (path, session) -> session !== target && open.isNotEmpty() && path !in open }
+      .forEach { (path, session) ->
+        session.stop()
+        joined.remove(path)
+      }
     val next =
       Attempt(
         current.kind,
@@ -526,14 +561,12 @@ class ConnectController(
         project = hostPath,
         openFile = null,
         resumed = true,
-        editorsKey = "${current.editorsKey}:$hostPath",
+        editorsKey = current.editorsKey,
       )
-    next.identity = identity
+    next.identity = attempt?.identity ?: current.identity
     attempt = next
-    switching = hostPath.trimEnd('/').substringAfterLast('/')
-    // The reconnect job first, so the stopped session's end is not taken for a lost connection.
-    reconnect(next, identity, "Switching to $hostPath", SWITCH_WAIT_MILLIS)
-    session?.stop()
+    handOverFrom = null
+    session = target
   }
 
   /**
@@ -717,8 +750,9 @@ class ConnectController(
       return false
     }
     handOverFrom = if (projectSwitch) null else shownBeforeReconnect()?.let { candidate to it }
-    session?.stop()
+    stopSessions()
     session = candidate
+    opener = candidate
     return true
   }
 

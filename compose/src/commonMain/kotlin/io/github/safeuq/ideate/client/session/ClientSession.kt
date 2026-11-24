@@ -16,8 +16,6 @@ import com.jetbrains.codeWithMe.model.navigationBarModel
 import com.jetbrains.codeWithMe.model.projectViewModel
 import com.jetbrains.codeWithMe.model.vfsModel
 import com.jetbrains.ide.model.highlighterRegistration.ColorsSchemeModel
-import com.jetbrains.ide.model.highlighterRegistration.DefaultRegistryModel
-import com.jetbrains.ide.model.highlighterRegistration.highlighterRegistrationHostModel
 import com.jetbrains.rd.framework.IProtocol
 import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.UnsafeBuffer
@@ -165,11 +163,18 @@ class ClientSession(
    * host path.
    */
   private val onProjectSwitch: (hostPath: String) -> Unit = {},
+  /**
+   * Another session's connection to show [project] on, next to that session's project: the backend
+   * lists every open project on one connection. Null opens a connection for this session.
+   */
+  private val sharedConnection: BackendConnection? = null,
   private val onAccepted: (ClientCertificate) -> Unit = {},
 ) {
   /** The connection; one per session until every open project shares one (shared-connection.md). */
-  private val connection = BackendConnection(link, identity, inForeground, ::log)
-  private val lifetime: Lifetime = connection.lifetime
+  internal val connection =
+    sharedConnection ?: BackendConnection(link, identity, inForeground, ::log)
+  private val lifetimeDefinition = connection.lifetime.createNested()
+  private val lifetime: Lifetime = lifetimeDefinition
   private val mutableState = MutableStateFlow(SessionState())
   val state: StateFlow<SessionState> = mutableState
 
@@ -237,7 +242,6 @@ class ClientSession(
     )
   private var runToolbar: RunToolbar? = null
   private var projectWidget: ProjectWidget? = null
-  private var switchedTo: String? = null
   /** Host path to solution of every open project; rd thread only. */
   private val openSolutions = mutableMapOf<String, Solution>()
   private val statusWidgets =
@@ -285,10 +289,24 @@ class ClientSession(
    * comes first).
    */
   private val earlyPatches = mutableMapOf<RdDocumentId, MutableList<RdPatch>>()
-  private val commands = CommandChain()
-  private var requestIds = 0L
+  private val commands
+    get() = connection.commands
+
+  /** Documents whose editor is another open project's; their text is that project's session's. */
+  private val foreignDocuments = mutableSetOf<RdDocumentId>()
+  private var requestIds
+    get() = connection.requestIds
+    set(value) {
+      connection.requestIds = value
+    }
+
   /** The backend's retry timestamp; it comes with every `RdRetryResponse`. */
-  private var retryTimestamp = RdRetryTimestamp(0, 0)
+  private var retryTimestamp
+    get() = connection.retryTimestamp
+    set(value) {
+      connection.retryTimestamp = value
+    }
+
   private var fleet: FleetRpc? = null
   private var completion: Completion? = null
 
@@ -358,7 +376,9 @@ class ClientSession(
    */
   fun stop() {
     markupTimer.shutdownNow()
-    connection.close()
+    // A session on another session's connection ends alone; the one that opened it ends it.
+    if (sharedConnection == null) connection.close()
+    else thread(name = "client-session-stop", isDaemon = true) { lifetimeDefinition.terminate() }
   }
 
   // ---- Actions from the UI (any thread) ----
@@ -679,8 +699,7 @@ class ClientSession(
 
   /** A project tab was chosen: a new session shows [hostPath], as after the widget's popup. */
   fun showProject(hostPath: String) = onRd {
-    if (hostPath == mutableState.value.shownProject || hostPath == switchedTo) return@onRd
-    switchedTo = hostPath
+    if (hostPath == mutableState.value.shownProject) return@onRd
     log("Project switch to $hostPath (tab)")
     onProjectSwitch(hostPath)
   }
@@ -703,8 +722,7 @@ class ClientSession(
    * jump.
    */
   private fun switchTo(hostPath: String?) {
-    if (projectWidget?.clicked != true || hostPath == null || hostPath == switchedTo) return
-    switchedTo = hostPath
+    if (projectWidget?.clicked != true || hostPath == null) return
     log("Project switch to $hostPath")
     onProjectSwitch(hostPath)
   }
@@ -944,7 +962,13 @@ class ClientSession(
   // ---- Connection and models ----
 
   private fun connect() {
-    connection.open(onAccepted, { failure -> fail(failure, connectionLost = true) }) { protocol ->
+    val lost = { failure: Throwable -> fail(failure, connectionLost = true) }
+    if (sharedConnection != null)
+      return sharedConnection.attach(lifetime, lost) { protocol ->
+        createModels(protocol)
+        log("Joined the open connection for $project, models created")
+      }
+    connection.open(onAccepted, lost) { protocol ->
       createModels(protocol)
       log("rd protocol up, models created")
     }
@@ -973,8 +997,21 @@ class ClientSession(
           mutableState.update { it.copy(backendPopups = popups) }
         }
         .also { it.bind() }
-    val registry = DefaultRegistryModel()
-    protocol.highlighterRegistrationHostModel.registry.set(registry)
+    // On a joined connection the project is open already: its id is needed before the documents
+    // below arrive, for their markup and to leave the other projects' editors alone.
+    if (sharedConnection != null && project != null)
+      projectId =
+        protocol.solutionModel.solutions.values
+          .firstOrNull { open ->
+            val opened = (open.solutionOpenStrategy as? RdOpenSolution)?.description
+            (opened as? RdCodeWithMeProject)?.hostProjectBasePath?.trimEnd('/') ==
+              project.trimEnd('/')
+          }
+          ?.projectId
+    val registry = connection.registry(protocol)
+    // A session that joins later has missed the schemes the backend sent once.
+    schemes.putAll(connection.schemes)
+    if (schemes.isNotEmpty()) applyEditorScheme(LafManager.currentTheme)
     // The backend sends every installed scheme (Default, Darcula, Islands Dark, …), each with only
     // its own entries.
     registry.colorsScheme.advise(lifetime) { scheme ->
@@ -995,7 +1032,7 @@ class ClientSession(
       handled.forEach { it.backendPatch(patch) }
       for (change in patch.changes) {
         val documentId = (change as? RdDocumentChangeBase)?.documentId ?: continue
-        if (documentId in consoles) continue
+        if (documentId in consoles || documentId in foreignDocuments) continue
         if (editSessions[documentId] == null) {
           earlyPatches.getOrPut(documentId) { mutableListOf() } += patch
           if (change is RdResetDocumentChange) {
@@ -1061,7 +1098,9 @@ class ClientSession(
       // warnings, unused).
       document.extensions.filterIsInstance<MarkupDocumentExtension>().firstOrNull()?.markups?.let {
         markups ->
-        markups[RdMarkupKey(null)] = MarkupExtensions.documentMarkup()
+        // Once per document, whichever session sees it first.
+        if (RdMarkupKey(null) !in markups)
+          markups[RdMarkupKey(null)] = MarkupExtensions.documentMarkup()
         projectId?.let { id ->
           val projectMarkup = MarkupExtensions.documentMarkup()
           markups[RdMarkupKey(id)] = projectMarkup
@@ -1069,6 +1108,19 @@ class ClientSession(
         }
       }
       document.textControls.view(documentLifetime) { controlLifetime, controlId, control ->
+        // Another open project's editor belongs to that project's session.
+        val shownId = projectId
+        if (shownId != null && controlId.projectId != shownId) {
+          // Its first text may have come before the editor did: take that back.
+          foreignDocuments += documentId
+          earlyPatches.remove(documentId)
+          documentTexts.remove(documentId)
+          val path = pathOf(documentId)
+          mutableState.update { state ->
+            state.copy(editors = state.editors.filterNot { it.path == path })
+          }
+          return@view
+        }
         if (controlId.kind == TextControlLocation.Console) {
           registerConsole(documentId, controlId)
         } else createEditSession(controlLifetime, documentId, controlId)
@@ -1091,6 +1143,7 @@ class ClientSession(
       }
       documentLifetime.onTermination {
         editSessions.remove(documentId)
+        foreignDocuments.remove(documentId)
         earlyPatches.remove(documentId)
         documentTexts.remove(documentId)
         consoles.kernelEditorId(documentId)?.let { id ->
@@ -1108,14 +1161,7 @@ class ClientSession(
     // Fleet RPC rides on this rd model; completion uses it (docs/split-protocol.md, "Code
     // completion").
     val rdScheduler = requireNotNull(scheduler) { "rd scheduler not set" }
-    val rpc =
-      FleetRpc(
-        protocol.fleetRpcModel,
-        lifetime,
-        rdScheduler,
-        { if (requestIds == 0L) -1 else requestIds },
-        ::log,
-      )
+    val rpc = connection.fleet(protocol)
     fleet = rpc
     backgroundTasks =
       BackgroundTasks(rpc, { tasks -> mutableState.update { it.copy(tasks = tasks) } }, ::log)
@@ -1144,8 +1190,7 @@ class ClientSession(
           shownSolutionLifetime = null
           // The shown project was closed: show another one still open, if any.
           val remaining = openSolutions.keys.firstOrNull { it != hostPath }
-          if (remaining != null && remaining != switchedTo) {
-            switchedTo = remaining
+          if (remaining != null) {
             log("Shown project closed; switching to $remaining")
             onProjectSwitch(remaining)
           }
@@ -1161,6 +1206,8 @@ class ClientSession(
         completion =
           Completion(
             rpc,
+            { handler -> connection.completionResponses(solutionLifetime, handler) },
+            connection.completionCommands,
             kernelProjectId,
             editSessionFor = { editorId ->
               editSessions.entries
@@ -1276,6 +1323,7 @@ class ClientSession(
         ProjectWidget(
             protocol.asyncActionsModel,
             newSolution.projectId,
+            connection.nextFactoryId(),
             ::log,
             { icon -> iconPaths(icon).firstOrNull() },
             { id, use -> backendPopups?.whenIconReady(id, use) },

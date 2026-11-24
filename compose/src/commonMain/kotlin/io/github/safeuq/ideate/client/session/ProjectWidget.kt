@@ -31,6 +31,8 @@ data class ProjectWidgetLook(val text: String, val iconPath: String?, val avatar
 internal class ProjectWidget(
   private val model: AsyncActionsModel,
   private val projectId: RdProjectId,
+  /** This project's toolbar id, see [BackendConnection.nextFactoryId]. */
+  private val factoryId: Int,
   private val log: (String) -> Unit,
   private val iconPath: (IconModel) -> String?,
   /** Runs the action with the icon of `DeferredIconModel` [id] once the backend has sent it. */
@@ -73,7 +75,7 @@ internal class ProjectWidget(
         ActionTimestampSetModel(listOf(ProjectTimestampModel(projectId))),
         PLACE,
         ToolbarKindModel(true),
-        FACTORY,
+        factoryId,
       )
     model.expandGroup.start(lifetime, request).result.advise(lifetime) { expanded ->
       runCatching { expanded.unwrap() }
@@ -84,7 +86,7 @@ internal class ProjectWidget(
       val known = button
       if (known != null) return@advise then(known)
       model.getComponent
-        .start(lifetime, ActionComponentRequest(ACTION, PLACE, FACTORY, projectId))
+        .start(lifetime, ActionComponentRequest(ACTION, PLACE, factoryId, projectId))
         .result
         .advise(lifetime) { answer ->
           val control = runCatching {
@@ -154,6 +156,5 @@ internal class ProjectWidget(
 
 private const val ACTION = "main.toolbar.Project"
 private const val PLACE = "MainToolbar"
-private const val FACTORY = 1
 private const val TOOLBAR_GROUP =
   "composite:MainToolbarGeneralActionsGroup;MainToolbarLeft;MainToolbarVCSGroup;ToolboxProjectPopupAction;UnattendedHostMenuGroup;main.toolbar.Project"

@@ -14,6 +14,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
+internal const val COMPLETION_SERVICE =
+  "com.intellij.platform.completion.common.split.RpcCompletionService"
 private const val SERVICE = "com.intellij.platform.completion.common.split.RpcCompletionService"
 private const val PROTOCOL = "com.intellij.platform.completion.common.protocol"
 
@@ -31,13 +33,20 @@ private const val PROTOCOL = "com.intellij.platform.completion.common.protocol"
  */
 class Completion(
   private val fleet: FleetRpc,
+  /**
+   * Hands every element of the service's `responseFlow` to the handler. The backend keeps one such
+   * flow per client and ends the earlier one with "Reconnection" when it is asked again, so the
+   * connection subscribes once for all its projects ([BackendConnection.completionResponses]).
+   */
+  subscribeResponses: ((JsonObject) -> Unit) -> Unit,
+  /** The connection's one `commandFlow` ([BackendConnection.completionCommands]). */
+  private val commands: FleetRpc.OutgoingStream,
   /** `RdCodeWithMeProject.kernelProjectId`, e.g. `m3nniruk9k7j4qsibjui`. */
   private val kernelProjectId: String,
   private val editSessionFor: (kernelEditorId: String) -> Pair<String, EditSession>?,
   private val publish: (Lookup?) -> Unit,
   private val log: (String) -> Unit,
 ) {
-  private val commands = fleet.openStream(SERVICE, "commandFlow", "commands")
   private var popup: Popup? = null
 
   /**
@@ -47,7 +56,7 @@ class Completion(
   private var autopopupLost = false
 
   init {
-    fleet.subscribe(SERVICE, "responseFlow", JsonObject(emptyMap())) { onResponse(it.jsonObject) }
+    subscribeResponses(::onResponse)
     // The backend reads its autopopup channel with consumeAsFlow
     // (BackendAutopopupScheduler.getRequestFlow), so a
     // client id gets it once: when a connection ends, the channel is closed for that client id. A

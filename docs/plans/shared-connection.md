@@ -84,3 +84,55 @@ Step 1 is built: `session/BackendConnection.kt` has the body of the old `ClientS
 `ProtocolMarshallers`. `ClientSession` makes one for itself (`connection`), takes its `lifetime`
 and `scheduler` from it, and `stop()` calls `connection.close()`. No change in behaviour: connect,
 a tab click and the switch were checked live.
+
+## Addendum (2026-11-24, 11:40 IST): every open project now uses the one connection
+
+Built and checked live (backend on 5997 with `alpha` and `beta`, both project tabs clicked back
+and forth, a file edited and completion used in each).
+
+What was built:
+
+- `ClientSession` has a new constructor parameter `sharedConnection: BackendConnection? = null`.
+  The first session opens the connection; a session for another project gets the first one's
+  `connection`, calls `BackendConnection.attach(sessionLifetime, onLost, onReady)` and binds its
+  own solution on the protocol that is already there. Its lifetime is nested in the connection's;
+  `stop()` closes the connection only in the session that opened it.
+- `ConnectController.switchProject(current, hostPath)` no longer disconnects. It keeps the opening
+  session in `opener` and the others in `joined` (key: host path, e.g. `/work/beta`), makes a
+  joined session the first time a project is shown, and afterwards only changes which session is
+  on screen. `stopSessions()` stops all of them. `SWITCH_WAIT_MILLIS` and the `switchedTo` guard
+  are gone.
+- The log shows one `Connection accepted` for both projects, and
+  `Joined the open connection for /work/beta, models created` for the second.
+
+Things that exist once per connection, each found by a failure when two sessions made their own:
+
+| Thing | Where it lives now | What went wrong with one per session |
+|---|---|---|
+| highlighter registry and colour schemes | `BackendConnection.registry(protocol)`, `schemes` | schemes arrive once; the joined session's editor stayed empty because `state.scheme` was null. A joined session now copies `connection.schemes` and applies the current theme's |
+| request id sequence, retry timestamp | `requestIds`, `retryTimestamp` | two sessions would reuse ids on the same wire |
+| `CommandChain` | `commands` | the backend's command order is per client, not per project |
+| `FleetRpc` | `fleet(protocol)` | a second one took over the first one's streams |
+| completion `responseFlow` | `completionResponses(sessionLifetime, handler)` | the backend ended the earlier flow with `RuntimeException: Reconnection` |
+| completion `commandFlow` | `completionCommands` | the backend closed the earlier stream: `Fleet RPC stream … (commandFlow) closed` |
+| toolbar `factoryId` | `nextFactoryId()` (1, 2, …) | with the constant `1` in both, alpha's project widget showed "beta" |
+
+Also needed:
+
+- A joined session finds its `projectId` in `solutionModel.solutions` by host path.
+- Text controls of another project arrive on the same connection. A session skips them and keeps
+  their document ids in `foreignDocuments`, otherwise the other project's file showed up as a tab
+  named `document-<id>`.
+- The markup model without a project (`RdMarkupKey(null)`) is set by the first session only.
+
+Not checked, or left as it is:
+
+- Backend popups and Lux dialogs are bound per session; a session that is not on screen does not
+  show its own.
+- The tool window layout is one for all projects.
+- Closing the last project, and a tab for IntelliJ IDEA Home.
+- Seen once in the opening session, one second after connect, not looked into:
+  `Out of step with the backend (backend patch expects [-1, -1] …)` while `alpha.iml` was restored.
+
+Live checks here used the two MCP servers of `docs/mcp/setup.md`; the app has to be started with
+`-PagentMcpPort=5979` for `ideate-window` to connect.
