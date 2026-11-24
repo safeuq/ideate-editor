@@ -52,8 +52,10 @@ internal class ActionMenus(
    */
   private val applyPatch: (RdPatch) -> Unit,
 ) {
-  /** Requests of chosen items, to log the backend's answer. */
-  private val running = mutableMapOf<Long, String>()
+  /** Requests of chosen items, to log the backend's answer and then call [Running.done]. */
+  private val running = mutableMapOf<Long, Running>()
+
+  private data class Running(val actionId: String, val done: () -> Unit)
 
   /**
    * Asks for [groupId]'s items in [place] and publishes them as menu number [serial]. The backend
@@ -94,7 +96,10 @@ internal class ActionMenus(
           log("Menu $groupId: ${requested.size} requests, $milliseconds ms")
           // Debug aid: CLIENT_MENU_DUMP=1 logs each item's action id, text and flags.
           if (System.getenv("CLIENT_MENU_DUMP") != null) menu.dump()
-          publish(serial, tidy(menu.entries(groupId, inUnshownGroup = false)))
+          publish(
+            serial,
+            tidy(menu.entries(groupId.removePrefix(COMPOSITE), inUnshownGroup = false)),
+          )
         }
       }
     }
@@ -103,11 +108,12 @@ internal class ActionMenus(
 
   /** The backend's answer to a chosen item; false when it isn't one. */
   fun response(response: RdResponse): Boolean {
-    val actionId = running.remove(response.requestId) ?: return false
+    val (actionId, done) = running.remove(response.requestId) ?: return false
     if (response is RdSuccessResponse) {
       log("$actionId ran")
       response.patch?.takeIf { it.changes.isNotEmpty() }?.let(applyPatch)
     } else log("$actionId did not run: $response")
+    done()
     return true
   }
 
@@ -115,13 +121,14 @@ internal class ActionMenus(
    * Runs [actionId] in [place] and the context [timestamps] without a menu, as a shortcut does: the
    * backend's `update` gives the presentation for that context, and the action runs only when it is
    * enabled there (e.g. `GotoDeclaration` with the caret on a reference). [disabled] is called
-   * otherwise.
+   * otherwise. [done] is called when the backend has answered the run.
    */
   fun runAction(
     actionId: String,
     place: String,
     timestamps: ActionTimestampSetModel,
     disabled: () -> Unit = {},
+    done: () -> Unit = {},
   ) {
     val request =
       AsyncActionUpdateRequest(actionId, timestamps, place, PopupKindModel(false, false), null)
@@ -130,7 +137,7 @@ internal class ActionMenus(
         runCatching { result.unwrap() }
           .onFailure { failure -> log("$actionId not updated: ${failure.message}") }
           .getOrNull() ?: return@advise
-      if (presentation.isEnabled) send(actionId, presentation, place, timestamps)
+      if (presentation.isEnabled) send(actionId, presentation, place, timestamps, done)
       else {
         log("$actionId is disabled here")
         disabled()
@@ -147,12 +154,13 @@ internal class ActionMenus(
     presentation: PresentationModel,
     place: String,
     timestamps: ActionTimestampSetModel,
+    done: () -> Unit = {},
   ) {
     // The backend runs only an action whose presentation, as sent back, is enabled: the one the
     // menu showed, or the one `update` returned.
     val requestId =
       sendRequest(RdCallActionRequest(timestamps, actionId, place, presentation, null, false, null))
-    running[requestId] = actionId
+    running[requestId] = Running(actionId, done)
     log("Running $actionId")
   }
 
@@ -161,19 +169,7 @@ internal class ActionMenus(
     val children = mutableMapOf<String, List<ActionRegistrationModel>>()
 
     /** The state the backend computed in this context; the registered one when it sent none. */
-    fun presentationOf(action: ActionBaseModel): PresentationModel {
-      val template = action.presentation
-      val updated = presentations[action.actionId] ?: return template
-      // The update leaves out (null) what is the same as the action's template, e.g. Cut's text.
-      return PresentationModel(
-        updated.flags,
-        updated.text ?: template.text,
-        updated.icon ?: template.icon,
-        updated.description ?: template.description,
-        updated.clientProperties,
-        updated.shouldCache,
-      )
-    }
+    fun presentationOf(action: ActionBaseModel) = presentationOf(action, presentations)
 
     fun dump() {
       for ((group, items) in children) {
@@ -199,6 +195,18 @@ internal class ActionMenus(
           val unshown = inUnshownGroup || child.actionId in UNSHOWN_GROUPS
           when {
             !presentation.isVisible -> emptyList()
+            // A group that can be performed is chosen like an item, e.g. a run configuration's row
+            // in the run widget's popup; its submenu (Run with Coverage…) is the inline part.
+            presentation.isPerformGroup ->
+              listOf(
+                MenuItem(
+                  label = label(presentation),
+                  enabled = presentation.isEnabled && !unshown,
+                  iconPath = presentation.icon?.icon?.let(iconPath),
+                  id = child.actionId,
+                  onClick = { run(child.actionId, presentation, this) },
+                ),
+              )
             // A group that isn't a submenu shows its items in place.
             !presentation.isPopup -> entries(child.actionId, unshown)
             else -> {
@@ -244,6 +252,12 @@ internal class ActionMenus(
   }
 
   private companion object {
+    /**
+     * A group id that asks as JetBrains Client does, e.g. `composite:RunConfigurationsActionGroup`:
+     * the answer's children are listed under the plain id, `RunConfigurationsActionGroup`.
+     */
+    const val COMPOSITE = "composite:"
+
     /** Bounds the submenu requests for one menu. */
     const val MAX_REQUESTS = 40
 
@@ -291,20 +305,6 @@ internal class ActionMenus(
         "sql.SelectInDatabaseView",
       )
 
-    // PresentationModel.flags (ActionsKt in intellij.rd.platform.jar).
-    const val ENABLED = 0x1
-    const val VISIBLE = 0x2
-    const val POPUP_GROUP = 0x10
-
-    val PresentationModel.isEnabled
-      get() = flags and ENABLED != 0
-
-    val PresentationModel.isVisible
-      get() = flags and VISIBLE != 0
-
-    val PresentationModel.isPopup
-      get() = flags and POPUP_GROUP != 0
-
     /** Without the mnemonic mark: `Rena_me...` is `Rename...`; `__` is a real underscore. */
     fun label(presentation: PresentationModel): String =
       presentation.text.orEmpty().replace("__", "\u0000").replace("_", "").replace("\u0000", "_")
@@ -336,6 +336,48 @@ internal class ActionMenus(
     const val DEFAULT_KEYMAP = "\$default"
     val MAC_KEYMAPS = setOf("macOS", "Mac OS X 10.5+")
   }
+}
+
+// PresentationModel.flags: IntelliJ's `Presentation.myFlags` as they are (ActionsKt in
+// intellij.rd.platform.jar), so the bits are Presentation's IS_ENABLED, IS_VISIBLE, IS_POPUP_GROUP
+// and IS_PERFORM_GROUP. A run configuration's row in the run widget's popup is 0x8b3: a popup group
+// that is also performed when chosen.
+private const val ENABLED = 0x1
+private const val VISIBLE = 0x2
+private const val POPUP_GROUP = 0x10
+private const val PERFORM_GROUP = 0x20
+
+internal val PresentationModel.isEnabled
+  get() = flags and ENABLED != 0
+
+internal val PresentationModel.isVisible
+  get() = flags and VISIBLE != 0
+
+internal val PresentationModel.isPopup
+  get() = flags and POPUP_GROUP != 0
+
+private val PresentationModel.isPerformGroup
+  get() = flags and PERFORM_GROUP != 0
+
+/**
+ * [action]'s state in the context the backend answered for: [updated] by action id, merged over the
+ * action's registered (template) presentation. The update leaves out (null) what is the same as the
+ * template, e.g. Cut's text. The registered presentation when the backend sent none.
+ */
+internal fun presentationOf(
+  action: ActionBaseModel,
+  updated: Map<String, PresentationModel>,
+): PresentationModel {
+  val template = action.presentation
+  val presentation = updated[action.actionId] ?: return template
+  return PresentationModel(
+    presentation.flags,
+    presentation.text ?: template.text,
+    presentation.icon ?: template.icon,
+    presentation.description ?: template.description,
+    presentation.clientProperties,
+    presentation.shouldCache,
+  )
 }
 
 /**

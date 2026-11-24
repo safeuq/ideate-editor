@@ -186,3 +186,20 @@ Test-tool notes:
   greyed items.
 - `uiAutomationInteractionModel.contextMenu`: a menu the backend pushes, in the same
   `AsyncActionGroupExpandResponse` shape.
+
+## Addendum (2026-11-24): the run widget in the main toolbar
+
+What JetBrains Client 263.7307.200 does was traced by the intellij-fable session (docs/plans/run-toolbar.md). Ideate now does the same:
+
+| Control | Ideate sends | Example answer |
+|---|---|---|
+| The buttons | `expandGroup("composite:Debug;MoreRunToolbarActions;Run;RunToolbarMainActionGroup;RunToolbarTopLevelExecutorActionGroup;Stop;compositeResumeGroup", place "NewUiRunToolbar", ToolbarKindModel(true), factoryId = null)` | idle: Run, Debug, More, `InactiveStopActionPlaceholder`; running: Rerun, Debug, Stop, More |
+| Selector name | nothing; `clientCurrentConfiguration` looked up in `runConfigurations` | `null` → "Current File"; `"Gradle.forever"` → "forever" |
+| Selector popup | `expandGroup("composite:RunConfigurationsActionGroup", "popup@RunToolbarPopup", [ProjectTimestampModel])`; the children come under the plain id `RunConfigurationsActionGroup` | the configuration rows, "Current File", "Edit Configurations…" |
+| Run, Debug, Stop | `update`, then `RdCallActionRequest(id, "NewUiRunToolbar")` with the editor's timestamps (or the project's alone); no `ControlTimestampModel` needed | `executingConfigurations[id]` goes to 1, then to 0 after Stop |
+
+A `null` factoryId is accepted for a toolbar. The buttons are asked for again when `clientCurrentConfiguration` or `executingConfigurations` change, when the selected editor changes, and after one of the buttons' actions has run.
+
+`PresentationModel.flags` are IntelliJ's `Presentation.myFlags` copied as they are (`ActionsKt` copies them through a VarHandle on `myFlags`). Their bits are `IS_ENABLED` 0x1, `IS_VISIBLE` 0x2, `IS_KEEP_POPUP_IF_REQUESTED` 0x4, `IS_KEEP_POPUP_IF_PREFERRED` 0x8, `IS_POPUP_GROUP` 0x10, `IS_PERFORM_GROUP` 0x20, `IS_HIDE_GROUP_IF_EMPTY` 0x40, `IS_DISABLE_GROUP_IF_EMPTY` 0x80 and `IS_TEMPLATE` 0x1000. A run configuration's row is 0x8b3, a popup group that is also performed when chosen, so Ideate's menu shows it as an item that runs.
+
+Build is not in the row any more, because IntelliJ's run widget has no Build button. More Actions still says "not supported" until `ActionPopupContent` is handled.

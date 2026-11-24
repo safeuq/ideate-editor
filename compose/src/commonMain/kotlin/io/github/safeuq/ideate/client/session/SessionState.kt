@@ -233,6 +233,10 @@ data class SessionState(
   val searchAvailable: Boolean = false,
   /** The Structure tool window's tree, for the file the backend sees as selected. */
   val structure: StructureTree = StructureTree(),
+  /** The run widget's buttons after the selector, as the backend says they are now. */
+  val runButtons: List<RunToolbarButton> = emptyList(),
+  /** The run widget's selector: the selected configuration, or "Current File". */
+  val runSelector: RunSelector = RunSelector(),
   /** The open context menu built by the backend (ActionMenus). */
   val contextMenu: BackendMenu? = null,
   /** The backend's open dialogs over Lux (LuxDialogs), oldest first. */

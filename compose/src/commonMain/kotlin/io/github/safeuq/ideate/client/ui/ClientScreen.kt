@@ -472,6 +472,11 @@ fun ClientScreen(
         back =
           if (editorCovered) ToolbarBack(pointsRight = page == Page.LEFT, onClick = ::backToEditor)
           else null,
+        runSelector = state.runSelector,
+        runButtons = state.runButtons,
+        onRunButton = session::runToolbarAction,
+        onRunConfigurations = session::runConfigurationsMenu,
+        runConfigurationEntries = state.contextMenu?.entries,
       )
       // Any open soft keyboard has a bottom inset. A floating one keeps only a strip for its back
       // and

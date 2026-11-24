@@ -235,6 +235,7 @@ class ClientSession(
       luxComponent = { id -> luxProtocol?.luxModel?.components?.get(id) },
       log = ::log,
     )
+  private var runToolbar: RunToolbar? = null
   private val statusWidgets =
     StatusBarWidgets({ icon -> iconPaths(icon).firstOrNull() }) { widgets ->
       mutableState.update { it.copy(statusWidgets = widgets) }
@@ -650,6 +651,40 @@ class ClientSession(
       log("$actionId is disabled")
     }
   }
+
+  /**
+   * A run widget button, e.g. `Run`, `Debug` or `Stop`: the backend's action in the widget's place,
+   * in the selected editor's context ("Cannot run the current file" when there is none).
+   */
+  fun runToolbarAction(actionId: String) = onRd {
+    val context = actionContext() ?: return@onRd log("No project is open; $actionId not run")
+    actionMenus?.runAction(
+      actionId,
+      RunToolbar.PLACE,
+      context,
+      disabled = { log("$actionId is disabled") },
+      done = { runToolbar?.refresh() },
+    )
+  }
+
+  /** The run configuration selector's click: its popup as [SessionState.contextMenu]. */
+  fun runConfigurationsMenu() {
+    val serial = startMenu()
+    onRd {
+      val id = projectId ?: return@onRd log("No project yet; no menu")
+      actionMenus?.show(
+        serial,
+        "composite:RunConfigurationsActionGroup",
+        "popup@RunToolbarPopup",
+        ActionTimestampSetModel(listOf(ProjectTimestampModel(id))),
+      )
+    }
+  }
+
+  /** The selected editor's action context (which has the project), else just the project's. */
+  private fun actionContext(): ActionTimestampSetModel? =
+    selectedEditSession()?.actionTimestamps()
+      ?: projectId?.let { ActionTimestampSetModel(listOf(ProjectTimestampModel(it))) }
 
   /**
    * A shortcut in the editor, e.g. ⌘B: runs [actionId] on the backend at the selected editor's
@@ -1173,6 +1208,16 @@ class ClientSession(
       toolWindows.bind(solutionLifetime, newSolution)
       backendViews.bind(solutionLifetime, newSolution)
       statusWidgets.bind(solutionLifetime, newSolution)
+      runToolbar =
+        RunToolbar(
+            protocol.asyncActionsModel,
+            { icon -> iconPaths(icon).firstOrNull() },
+            ::actionContext,
+            { buttons -> mutableState.update { it.copy(runButtons = buttons) } },
+            { selector -> mutableState.update { it.copy(runSelector = selector) } },
+            ::log,
+          )
+          .also { it.bind(solutionLifetime, newSolution.codeWithMeRunConfigurationsModel) }
       breadcrumbs.bind(solutionLifetime, newSolution.navigationBarModel, ::refreshBreadcrumbs)
       bindStructure(solutionLifetime, newSolution)
       bindUsages(solutionLifetime, newSolution)
@@ -1624,6 +1669,7 @@ class ClientSession(
   private fun showEditor(path: String) {
     mutableState.update { it.copy(selectedEditor = path) }
     refreshBreadcrumbsSoon()
+    onRd { runToolbar?.refresh() }
     val fileEditors = solution?.fileEditorsModel ?: return
     val compositeId = compositeIds[path] ?: return
     val editorId = EditorIdentity.textEditorId(compositeId)

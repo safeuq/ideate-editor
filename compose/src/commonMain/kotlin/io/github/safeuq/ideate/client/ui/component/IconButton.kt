@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,10 @@ fun IconButton(
   iconSize: Dp = IconButtonLook.iconSize,
   selected: Boolean = false,
   hoveredIconPath: String? = null,
+  /** False greys the icon out and ignores the pointer, as a disabled action's button is. */
+  enabled: Boolean = true,
+  /** For a button wider than high, e.g. the run widget's 34 × 32. */
+  width: Dp = size,
 ) {
   val interaction = remember { MutableInteractionSource() }
   val hovered by interaction.collectIsHoveredAsState()
@@ -50,21 +55,33 @@ fun IconButton(
     ) ?: return
   val background =
     when {
+      !enabled -> Color.Transparent
       pressed || selected -> IconButtonLook.pressedBackground
       hovered -> IconButtonLook.hoverBackground
       else -> Color.Transparent
     }
   Box(
     modifier
-      .size(size)
+      .size(width, size)
       .background(background, IconButtonLook.shape)
       .hoverable(interaction)
-      .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+      .clickable(
+        interactionSource = interaction,
+        indication = null,
+        enabled = enabled,
+        onClick = onClick,
+      ),
     contentAlignment = Alignment.Center,
   ) {
-    Image(icon, contentDescription = contentDescription, modifier = Modifier.size(iconSize))
+    Image(
+      icon,
+      contentDescription = contentDescription,
+      modifier = Modifier.size(iconSize).alpha(if (enabled) 1f else DISABLED_ALPHA),
+    )
   }
 }
+
+private const val DISABLED_ALPHA = 0.4f
 
 internal object IconButtonLook {
   val size = 22.dp // ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE 22,22

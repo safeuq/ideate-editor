@@ -206,6 +206,10 @@ object Islands {
   val toolbarIcon
     get() = byDensity(20.dp, 16.dp)
 
+  // The run widget's buttons are wider than the other toolbar buttons: 34 × 32 measured in
+  // JetBrains Client's accessibility tree (docs/plans/run-toolbar.md).
+  val runButtonWidth = 34.dp
+
   val toolbarHeight
     get() = byDensity(40.dp, 32.dp) // 30 + 6 + 4; compact 26 + 3 + 3
 

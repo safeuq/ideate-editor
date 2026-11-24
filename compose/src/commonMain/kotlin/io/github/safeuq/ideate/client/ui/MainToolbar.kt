@@ -9,6 +9,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,6 +37,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.safeuq.ideate.client.session.RunSelector
+import io.github.safeuq.ideate.client.session.RunToolbarButton
 import io.github.safeuq.ideate.client.ui.component.IconButton
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
@@ -72,10 +76,13 @@ private fun ToolbarDropdown(
   }
 }
 
+private const val INACTIVE_STOP = "InactiveStopActionPlaceholder"
+private const val MORE_ACTIONS = "MoreRunToolbarActions"
+
 /**
- * IntelliJ's main toolbar, reduced: the project widget on the left; the run widget, Build, Run,
- * Debug and More, then Search Everywhere, on the right. Only the project name is live; the rest
- * reports "not supported yet" through [onUnsupported].
+ * IntelliJ's main toolbar, reduced: the project widget on the left; the run widget (selector, Run,
+ * Debug, Stop, More), then Search Everywhere, on the right. The project name and the run widget are
+ * live; the rest reports "not supported yet" through [onUnsupported].
  */
 @Composable
 fun MainToolbar(
@@ -93,6 +100,15 @@ fun MainToolbar(
   islandsStart: Dp = Islands.islandGap,
   /** Phone upright, away from the editor: the button back to it, at the row's right end. */
   back: ToolbarBack? = null,
+  /** The run widget: the selected configuration, then the backend's buttons (RunToolbar). */
+  runSelector: RunSelector = RunSelector(),
+  runButtons: List<RunToolbarButton> = emptyList(),
+  /** A run button was pressed, e.g. `Run`, `Debug`, `Stop`. */
+  onRunButton: (actionId: String) -> Unit = {},
+  /** The selector was pressed: asks for its popup, which [runConfigurationEntries] then holds. */
+  onRunConfigurations: () -> Unit = {},
+  /** The selector popup's rows; null until the backend has answered. */
+  runConfigurationEntries: List<MenuEntry>? = null,
 ) {
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
@@ -156,33 +172,57 @@ fun MainToolbar(
       horizontalArrangement = Arrangement.End,
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      ToolbarDropdown(
-        control,
-        Modifier.weight(1f, fill = false),
-        onClick = { onUnsupported("Run configurations") },
-      ) {
-        BasicText("Current File", style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        icons.painter("expui/general/chevronDown.svg")?.let {
-          Image(it, null, Modifier.padding(start = 2.dp).size(16.dp))
+      var selectorOpen by remember { mutableStateOf(false) }
+      Box(Modifier.weight(1f, fill = false)) {
+        ToolbarDropdown(
+          control,
+          onClick = {
+            selectorOpen = true
+            onRunConfigurations()
+          },
+        ) {
+          runSelector.iconPath?.let { path ->
+            icons.painter(path)?.let {
+              Image(it, null, Modifier.padding(end = 6.dp).size(Islands.toolbarIcon))
+            }
+          }
+          BasicText(runSelector.name, style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          icons.painter("expui/general/chevronDown.svg")?.let {
+            Image(it, null, Modifier.padding(start = 2.dp).size(16.dp))
+          }
         }
+        if (selectorOpen)
+          DropDownMenu(
+            runConfigurationEntries ?: listOf(MenuItem("Loading…", enabled = false)),
+            beside = false,
+          ) {
+            selectorOpen = false
+          }
       }
       Row(control, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        listOf(
-            "expui/build/build.svg" to "Build",
-            "expui/run/run.svg" to "Run",
-            "expui/run/debug.svg" to "Debug",
-            // The run widget's More Actions (run configurations), not a general menu.
-            "expui/general/moreVertical.svg" to "More actions",
-          )
-          .forEach { (path, label) ->
+        runButtons.forEach { button ->
+          val iconPath = button.iconPath
+          // The placeholder keeps Stop's place while nothing runs: an empty slot of a button's
+          // size.
+          if (button.actionId == INACTIVE_STOP || iconPath == null)
+            Spacer(Modifier.size(Islands.runButtonWidth, Islands.toolbarButton))
+          else {
+            val label = button.description ?: button.text ?: button.actionId
             IconButton(
-              path,
+              iconPath,
               label,
-              onClick = { onUnsupported(label) },
+              // The run widget's More Actions popup is a later step.
+              onClick = {
+                if (button.actionId == MORE_ACTIONS) onUnsupported(label)
+                else onRunButton(button.actionId)
+              },
               size = Islands.toolbarButton,
               iconSize = Islands.toolbarIcon,
+              enabled = button.enabled,
+              width = Islands.runButtonWidth,
             )
           }
+        }
       }
       onSearch?.let { search ->
         IconButton(
