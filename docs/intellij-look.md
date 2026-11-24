@@ -1024,3 +1024,22 @@ Measured with a read-only probe on the NSWindow, dark OS, Islands Dark:
 
 The full-screen buttons (`MacFullScreenControlsManager`, §26) are JBR's own view with their own
 colour and are not affected.
+
+## Addendum (2026-11-24): a row's selection band scrolls with the content
+
+IntelliJ paints a tree row's selection across the tree's width, which is the wider of the viewport
+and the widest row, inset at both ends, and the viewport clips it. Ideate's band was right-anchored to
+the viewport (`size.width - treeSideInset`), so the left end was cut square when scrolled but the
+right end always showed a rounded corner and a gap. `drawRowBand` (SidewaysScroll.kt) now places
+both ends on the content: `left = start - x`, `right = viewport + max - end - x`.
+
+| Panel 163 dp, deep row | Left end | Right end |
+|---|---|---|
+| fits (no scroll) | rounded, 9 | rounded, 12 |
+| not scrolled | rounded, 9 | square at the panel edge |
+| scrolled 40 | square | square |
+| scrolled to the end | square | rounded, 12 |
+
+Every tree draws its rows through `ProjectTreeView`, so this covers Project, Structure, the folder
+chooser and the backend dialogs' trees. A future list that scrolls sideways should call
+`drawRowBand` too.

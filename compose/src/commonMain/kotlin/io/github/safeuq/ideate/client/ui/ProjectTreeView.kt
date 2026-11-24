@@ -40,9 +40,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -278,20 +275,17 @@ private fun TreeRow(
     // Selection and hover: a rounded rectangle inset 9 from the left (the root chevron's inset,
     // measured against Gateway) and 12 from the right, not indented with the node.
     if (highlight != null) {
-      // When the row is scrolled sideways, its left side follows the content out of view and the
-      // row's edge cuts it square, as the viewport clips IntelliJ's tree: scroll.x = 40 draws from
-      // -31, so no rounded corner shows at the edge. Drawn, not laid out, so a sideways scroll only
-      // redraws it.
+      // It scrolls with the content (drawRowBand), so the viewport cuts it square on a side where
+      // the tree goes on, as IntelliJ's tree is clipped. Drawn, not laid out, so a sideways scroll
+      // only redraws it.
       Box(
         Modifier.fillMaxSize().clipToBounds().drawBehind {
-          val left = Islands.treeChevronInset.toPx() - scroll.x
-          val right = size.width - Islands.treeSideInset.toPx()
-          val radius = Islands.treeSelectionRadius.toPx()
-          drawRoundRect(
+          drawRowBand(
             highlight,
-            topLeft = Offset(left, 0f),
-            size = Size(right - left, size.height),
-            cornerRadius = CornerRadius(radius, radius),
+            scroll,
+            start = Islands.treeChevronInset.toPx(),
+            end = Islands.treeSideInset.toPx(),
+            radius = Islands.treeSelectionRadius.toPx(),
           )
         },
       )
