@@ -499,6 +499,12 @@ fun ClientScreen(
               val scroll = scrollOf(it)
               scroll.bounds.contains(down) && scroll.canScroll(dragX)
             }
+          fun twoIslands(target: Page) =
+            when (target) {
+              Page.LEFT -> windows.openOn(Side.LEFT).size > 1
+              Page.MIDDLE -> bottomShown && windows.openOn(Side.BOTTOM).size > 1
+              Page.RIGHT -> windows.openOn(Side.RIGHT).size > 1
+            }
           SlidePager(
             current = page,
             // A side page shows when it has windows open or to open again.
@@ -536,20 +542,20 @@ fun ClientScreen(
             keep = Page.entries,
             // Two islands on a page (the side's halves, or both bottom windows) keep their gap and
             // corners.
-            alwaysRounded =
-              when (page) {
-                Page.LEFT -> windows.openOn(Side.LEFT).size > 1
-                Page.MIDDLE -> bottomShown && windows.openOn(Side.BOTTOM).size > 1
-                Page.RIGHT -> windows.openOn(Side.RIGHT).size > 1
-              },
+            alwaysRounded = twoIslands(page),
           ) { target, radius ->
+            // A page with two islands is always inset by the gap, at rest and while it slides, so
+            // no page changes size during a swipe.
+            val area =
+              Modifier.fillMaxSize()
+                .padding(horizontal = if (twoIslands(target)) Islands.islandGap else 0.dp)
             CompositionLocalProvider(LocalIslandRadius provides radius) {
               when (target) {
-                Page.LEFT -> Area(Side.LEFT, stacked = true, Modifier.fillMaxSize())
+                Page.LEFT -> Area(Side.LEFT, stacked = true, area)
                 Page.MIDDLE ->
-                  if (bottomShown) Area(Side.BOTTOM, stacked = true, Modifier.fillMaxSize())
+                  if (bottomShown) Area(Side.BOTTOM, stacked = true, area)
                   else Editor(Modifier.fillMaxSize())
-                Page.RIGHT -> Area(Side.RIGHT, stacked = true, Modifier.fillMaxSize())
+                Page.RIGHT -> Area(Side.RIGHT, stacked = true, area)
               }
             }
           }

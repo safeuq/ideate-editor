@@ -280,3 +280,28 @@ Checked on the emulator (Pixel 3a, Wide.java at 123 lines × about 330 columns):
 upright are slid by the generic `SlidePager` in `ui/SlidePager.kt`, which also slides the open
 projects on a phone. The behaviour described above is unchanged; its parameters and how each of
 the two uses fills them are in `docs/plans/project-tabs.md`, the addendum of 2026-11-24, 12:40 IST.
+
+## Addendum (2026-11-24, 13:10 IST): an island page keeps its width while it is swiped
+
+User request, after the same fix for the project screens (`docs/plans/project-tabs.md`,
+addendum of 12:47 IST) and an interactive preview: the island pages on a phone held upright
+no longer get narrower during a swipe.
+
+`SlidePager` no longer pads its pages, and its short-lived `inset` parameter is gone: the gap
+always stands outside a page. On a 420 dp screen with the 6 dp gap:
+
+| | Page width while sliding | Distance between pages |
+|---|---|---|
+| Before | 408 dp (the gap was taken out of the page on both sides) | 414 dp |
+| Now | 420 dp | 426 dp |
+
+A page with two stacked islands (for example Project above Structure) still has the gap on its
+left and right, at rest and while sliding. That padding moved from the pager into the page:
+`ClientScreen`'s local `twoIslands(target: Page)` decides it per page, so it is constant and
+resizes nothing. Between such a page and its neighbour the space while sliding is 12 dp (the
+page's own 6 dp plus the pager's 6 dp).
+
+Checked live at 420 × 800 dp with alpha: mid-swipe from the editor to Project, the Project
+header's hide button stands 19 dp from the page's right edge, the same as at rest; with
+Structure opened under Project, both islands are inset by the gap and rounded at rest. Not
+checked: a held drag (the window tool's `drag` lifts at once) and a phone.

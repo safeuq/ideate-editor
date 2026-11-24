@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -107,13 +106,8 @@ fun <K : Any> SlidePager(
   modifier: Modifier = Modifier,
   /** Pages that stay composed while off screen, so they keep what they remember. */
   keep: List<K> = emptyList(),
-  /** Whether the pages keep the gap and the corners at rest too. */
+  /** Whether the pages keep the corners at rest too. */
   alwaysRounded: Boolean = false,
-  /**
-   * Whether the gap is taken out of the page's own width, so the page gets narrower while it slides
-   * (the islands). False puts the gap outside the page, which keeps its size (the projects).
-   */
-  inset: Boolean = true,
   /** One page; [radius] is its corner radius right now: 0 at rest, the islands' while sliding. */
   page: @Composable (key: K, radius: Dp) -> Unit,
 ) {
@@ -144,10 +138,9 @@ fun <K : Any> SlidePager(
   var origin by remember { mutableStateOf(Offset.Zero) }
   BoxWithConstraints(modifier.clipToBounds()) {
     val gapPx = with(LocalDensity.current) { gap.toPx() }
-    // Inset: one page is a screen wide less the gap on both its sides, so neighbouring pages keep
-    // one gap between them while sliding, and the gap also stands between the pages and the
-    // screen's sides. Not inset: the pages are a full screen wide, one gap apart.
-    val stride = constraints.maxWidth.toFloat() + if (inset) -gapPx else gapPx
+    // The pages are a full screen wide and one gap apart: the gap stands outside a page, so a
+    // page keeps its size while it slides.
+    val stride = constraints.maxWidth.toFloat() + gapPx
     val hidden = constraints.maxWidth * 2
 
     Box(
@@ -222,7 +215,7 @@ fun <K : Any> SlidePager(
       (keep + book.keys).distinct().forEach { pageKey ->
         key(pageKey) {
           Box(
-            Modifier.fillMaxSize().padding(horizontal = if (inset) gap else 0.dp).offset {
+            Modifier.fillMaxSize().offset {
               val slot = book.slotOf(pageKey)
               IntOffset(
                 if (slot == null) hidden else ((slot - position.value) * stride).roundToInt(),
