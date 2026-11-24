@@ -344,3 +344,59 @@ Known limits:
   shown, the notice line) starts again on a switch: the project switched to opens on its editor.
   A tablet turned between upright and sideways changes between the two branches, with the same
   effect.
+
+## Addendum (2026-11-24, 12:40 IST): one generic pager for the island pages and the projects
+
+The project screens now follow the finger, and the tool window swipe and the project slide are
+the same code: `ui/SlidePager.kt`. `SwipePager` in `ClientScreen.kt` and the `AnimatedContent`
+slide in `EditorApp` are gone.
+
+`SlidePager<K>(current, neighbour, order, onShow, canSlide, modifier, keep, alwaysRounded, page)`:
+
+| Parameter | Meaning | Island pages (`ClientScreen`, upright phone) | Projects (`EditorApp`, phone layouts) |
+|---|---|---|---|
+| `K`, `current` | the page's key | `Page.LEFT`, `Page.MIDDLE`, `Page.RIGHT` | the project's `ClientSession` |
+| `neighbour(step)` | the page on the left (`-1`) or right (`1`) of `current`, or null | a side page when `windows.canShow(side)` | `neighbourProject(...)` then `ConnectController.projectSession(hostPath)` |
+| `order(K)` | lower is further left; the side a page comes in from when `current` changed without a drag | `ordinal` | index in `openProjects` |
+| `onShow(K)` | a drag ended on that page | sets `page` | `ConnectController.showProject(hostPath)` |
+| `canSlide(down, dragX)` | may this drag slide the pages; `down` in window px | false while the content can scroll that way | true when the drag starts on the title bar (`ProjectSwipeArea`) |
+| `keep` | pages composed while off screen | all three | none |
+| `alwaysRounded` | gap and corners at rest too | a page with two islands | never |
+| `page(key, radius)` | the content; `radius` is 0 at rest and `Islands.islandRadius` while sliding | gives it to the islands (`LocalIslandRadius`) | clips the whole project screen with it |
+
+What every user of it gets: the pages follow a sideways drag; while a finger drags or a page still
+moves, the pages are `Islands.islandGap` apart and `radius` is on; a drag past a third of the
+width, or a flick faster than 1000 px/s, moves one page, anything less springs back; a change of
+`current` made elsewhere (the toolbar's back button, a project chosen in the project popup)
+slides the same way.
+
+How it places pages: `PagerSlots` gives a slot (an Int, one screen apart) to the pages on screen
+only: the current page, and the one sliding in or out. A page the finger brings in takes the slot
+beside the current one (`placeBeside`), and keeps it when it becomes current (`show`), so nothing
+jumps at that moment; a page shown from elsewhere takes the slot on the side `order` says. The
+screen's place is one `Animatable` in slots. Tests: `PagerSlotsTest`.
+
+For the projects, on top of that (`EditorApp`):
+
+- The backdrop is `Islands.islandBackground`, and a sliding project screen has a 1 dp outline in
+  `Islands.controlBorder` that fades in and out with the corners. The backdrop alone is nearly the
+  editor's colour, so without the outline the gap did not show between two editors.
+- The tool windows inside a project screen get no gap or corners from this slide.
+- `MainToolbar` reports the title bar's top and bottom into `LocalProjectSwipeArea`; the pager
+  takes drags that start between them. The old `Modifier.projectSwipe` (switch when the finger
+  lifts) is removed.
+- `ConnectController`: `sessionFor(current, hostPath)` (taken out of `switchProject`) finds or
+  makes a project's session without changing the screen; `projectSession`, `projectPath` and
+  `showProject` are what the pager calls. `switchedForward` is gone (`order` replaces it).
+
+Checked live at 420 × 800 dp with alpha and beta: the island pages still slide between Project
+and the editor; a drag on the title bar slides between alpha and beta both ways with the gap, the
+corners and the outline; at rest there is no gap, corner or outline.
+
+Limits:
+
+- A neighbouring project that has no session yet gets one when a drag first goes towards it, so
+  its empty screen ("Connecting…") is what slides in the first time.
+- The live check used the window tool's `drag`, which presses, moves and lifts in one step: the
+  frames show the pages between the two places after the finger lifted, not a finger held half
+  way. Not tried on a phone.

@@ -1,14 +1,10 @@
 package io.github.safeuq.ideate.client.ui
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -44,12 +40,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -64,22 +58,16 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreInterceptKeyBeforeSoftKeyboard
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.session.ClientSession
 import io.github.safeuq.ideate.client.session.SearchTab
@@ -96,10 +84,7 @@ import io.github.safeuq.ideate.client.ui.terminal.TerminalToolWindow
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
-import kotlin.math.abs
-import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 // Only common Compose APIs here (no AWT, no desktop-only modules), so this screen can move to
 // Android as is.
@@ -462,11 +447,16 @@ fun ClientScreen(
       MainToolbar(
         state.projectName,
         state.projectWidget,
-        // Phone layouts have no project tab bar; a sideways slide on this row switches instead.
+        // Phone layouts have no project tab bar; a sideways drag that starts on this row slides
+        // between the projects (EditorApp's SlidePager), so the row says where it is.
         modifier =
-          if (layout != ScreenLayout.WIDE && state.openProjects.size > 1)
-            Modifier.projectSwipe(state.openProjects, state.shownProject, session::showProject)
-          else Modifier,
+          LocalProjectSwipeArea.current?.let { area ->
+            Modifier.onGloballyPositioned {
+              val bounds = it.boundsInRoot()
+              area.top = bounds.top
+              area.bottom = bounds.bottom
+            }
+          } ?: Modifier,
         onSearch =
           if (state.searchAvailable) {
             { session.searchEverywhere?.open(SearchTab.FILES) }
@@ -509,17 +499,29 @@ fun ClientScreen(
               val scroll = scrollOf(it)
               scroll.bounds.contains(down) && scroll.canScroll(dragX)
             }
-          SwipePager(
-            page = page,
-            onPage = { target ->
+          SlidePager(
+            current = page,
+            // A side page shows when it has windows open or to open again.
+            neighbour = { step ->
+              when (page) {
+                Page.LEFT -> Page.MIDDLE.takeIf { step > 0 }
+                Page.MIDDLE ->
+                  if (step < 0) Page.LEFT.takeIf { windows.canShow(Side.LEFT) }
+                  else Page.RIGHT.takeIf { windows.canShow(Side.RIGHT) }
+                Page.RIGHT -> Page.MIDDLE.takeIf { step < 0 }
+              }
+            },
+            order = { it.ordinal },
+            onShow = { target ->
               // A swipe to an empty side page opens its last windows again.
               if (target != Page.MIDDLE)
                 windows.reopen(if (target == Page.LEFT) Side.LEFT else Side.RIGHT)
               page = target
             },
-            canShow = { side -> windows.canShow(side) },
-            canScroll = { onPage, dragX, down ->
-              when (onPage) {
+            // A sideways swipe scrolls the page's content (the editor's text, its tab row or a
+            // tool window's tree, SidewaysScroll.canScroll) unless it is already at that edge.
+            canSlide = { down, dragX ->
+              !when (page) {
                 Page.LEFT -> scrolls(Side.LEFT, dragX, down)
                 Page.MIDDLE ->
                   when {
@@ -530,22 +532,27 @@ fun ClientScreen(
                 Page.RIGHT -> scrolls(Side.RIGHT, dragX, down)
               }
             },
-            left = { Area(Side.LEFT, stacked = true, Modifier.fillMaxSize()) },
-            middle = {
-              if (bottomShown) Area(Side.BOTTOM, stacked = true, Modifier.fillMaxSize())
-              else Editor(Modifier.fillMaxSize())
-            },
-            right = { Area(Side.RIGHT, stacked = true, Modifier.fillMaxSize()) },
-            // Two islands on a page: the side's halves, or both bottom windows.
-            split = { onPage ->
-              when (onPage) {
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            keep = Page.entries,
+            // Two islands on a page (the side's halves, or both bottom windows) keep their gap and
+            // corners.
+            alwaysRounded =
+              when (page) {
                 Page.LEFT -> windows.openOn(Side.LEFT).size > 1
                 Page.MIDDLE -> bottomShown && windows.openOn(Side.BOTTOM).size > 1
                 Page.RIGHT -> windows.openOn(Side.RIGHT).size > 1
+              },
+          ) { target, radius ->
+            CompositionLocalProvider(LocalIslandRadius provides radius) {
+              when (target) {
+                Page.LEFT -> Area(Side.LEFT, stacked = true, Modifier.fillMaxSize())
+                Page.MIDDLE ->
+                  if (bottomShown) Area(Side.BOTTOM, stacked = true, Modifier.fillMaxSize())
+                  else Editor(Modifier.fillMaxSize())
+                Page.RIGHT -> Area(Side.RIGHT, stacked = true, Modifier.fillMaxSize())
               }
-            },
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-          )
+            }
+          }
           // A docked keyboard leaves little height, so the bar and the status bar give way to the
           // keyboard bar; a floating keyboard changes nothing.
           if (!keyboardDocked)
@@ -822,145 +829,6 @@ private fun BackendToolWindowContent(
       modifier = Modifier.fillMaxWidth().weight(1f),
       scroll = scroll,
     )
-  }
-}
-
-/**
- * Phone upright: the left page, the middle page (editor or bottom windows) and the right page side
- * by side, one screen wide each; the content follows the finger (dragging right reveals the left
- * page). From the middle a swipe opens either side when [canShow] allows it; from a side page only
- * the swipe back to the middle works. Horizontal drags are taken before the editor sees them, so
- * selecting text by dragging sideways doesn't work in this layout.
- *
- * A page at rest with one island draws it flush with the screen's sides and square: the island gap
- * and the rounded corners come back while the pages move (a swipe, or a slide after a bar button)
- * and while the page shows two islands ([split]), so neighbouring islands keep their gap while
- * sliding. The side bars of the other layouts don't exist here, so the gap would only waste room.
- */
-@Composable
-private fun SwipePager(
-  page: Page,
-  onPage: (Page) -> Unit,
-  /**
-   * Whether a sideways drag of this many px, started at this point (in the window), would scroll
-   * the content of this page (SidewaysScroll.canScroll): the editor's text, its tab row or a tool
-   * window's tree.
-   */
-  canScroll: (Page, Float, Offset) -> Boolean,
-  /** Whether a swipe may show that side's page: it has windows open or to open again. */
-  canShow: (Side) -> Boolean,
-  left: @Composable () -> Unit,
-  middle: @Composable () -> Unit,
-  right: @Composable () -> Unit,
-  /** Whether that page shows two islands, which keep their gap and corners. */
-  split: (Page) -> Boolean,
-  modifier: Modifier,
-) {
-  // Where the pages are, in pages: 0 shows the middle, 1 the left page, -1 the right page. Kept in
-  // pages, not px, so the gap growing or shrinking doesn't move them.
-  fun positionOf(target: Page) =
-    when (target) {
-      Page.LEFT -> 1f
-      Page.MIDDLE -> 0f
-      Page.RIGHT -> -1f
-    }
-  val position = remember { Animatable(positionOf(page)) }
-  var dragging by remember { mutableStateOf(false) }
-  val scope = rememberCoroutineScope()
-  LaunchedEffect(page) { position.animateTo(positionOf(page)) }
-
-  val rounded = dragging || position.isRunning || split(page)
-  val gap by animateDpAsState(if (rounded) Islands.islandGap else 0.dp)
-  val radius by animateDpAsState(if (rounded) Islands.islandRadius else 0.dp)
-
-  // The pager's top left in the window, so a drag's start can be compared with the tab row's.
-  var origin by remember { mutableStateOf(Offset.Zero) }
-  BoxWithConstraints(modifier.clipToBounds()) {
-    val density = LocalDensity.current
-    val gapPx = with(density) { gap.toPx() }
-    // One page is a screen wide plus the gap, so neighbouring islands keep their gap while sliding;
-    // the gap also stands between the islands and the screen's sides.
-    val width = constraints.maxWidth.toFloat() - gapPx
-
-    Box(
-      Modifier.fillMaxSize()
-        .onGloballyPositioned { origin = it.positionInRoot() }
-        .pointerInput(page) {
-          val range =
-            when (page) {
-              Page.LEFT -> 0f..1f
-              Page.MIDDLE ->
-                (if (canShow(Side.RIGHT)) -1f else 0f)..(if (canShow(Side.LEFT)) 1f else 0f)
-              Page.RIGHT -> -1f..0f
-            }
-          awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            val velocity = VelocityTracker()
-            var travelled = Offset.Zero
-            var swiping = false
-            try {
-              while (true) {
-                val change =
-                  awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull {
-                    it.id == down.id
-                  } ?: break
-                if (!change.pressed) break
-                val delta = change.positionChange()
-                if (!swiping) {
-                  travelled += delta
-                  if (travelled.getDistance() < viewConfiguration.touchSlop) continue
-                  // Mostly sideways: a swipe. Anything else belongs to the content (scrolling,
-                  // taps).
-                  if (abs(travelled.x) < ONE_AXIS_RATIO * abs(travelled.y)) return@awaitEachGesture
-                  // A sideways swipe scrolls the page's content (editor text, tool window tree)
-                  // unless it is already at that edge. Decided once here, so one swipe never turns
-                  // from scrolling into switching.
-                  if (canScroll(page, travelled.x, origin + down.position)) return@awaitEachGesture
-                  swiping = true
-                  dragging = true
-                }
-                change.consume()
-                velocity.addPosition(change.uptimeMillis, change.position)
-                val pageWidth = size.width.toFloat()
-                scope.launch {
-                  position.snapTo((position.value + delta.x / pageWidth).coerceIn(range))
-                }
-              }
-              if (!swiping) return@awaitEachGesture
-              // Past a third of the screen, or a quick flick, moves one page; otherwise it springs
-              // back.
-              val flick = velocity.calculateVelocity().x
-              val moved = position.value - positionOf(page)
-              val target =
-                when {
-                  moved > 1f / 3 || flick > 1000f ->
-                    if (page == Page.RIGHT) Page.MIDDLE else Page.LEFT
-                  moved < -1f / 3 || flick < -1000f ->
-                    if (page == Page.LEFT) Page.MIDDLE else Page.RIGHT
-                  else -> page
-                }.takeIf { positionOf(it) in range } ?: page
-              if (target == page) scope.launch { position.animateTo(positionOf(page)) }
-              else onPage(target)
-            } finally {
-              dragging = false
-            }
-          }
-        },
-    ) {
-      CompositionLocalProvider(LocalIslandRadius provides radius) {
-        listOf(Page.LEFT to left, Page.MIDDLE to middle, Page.RIGHT to right).forEach {
-          (target, content) ->
-          val base = -positionOf(target)
-          Box(
-            Modifier.fillMaxSize().padding(horizontal = gap).offset {
-              IntOffset(((base + position.value) * width).roundToInt(), 0)
-            },
-          ) {
-            content()
-          }
-        }
-      }
-    }
   }
 }
 

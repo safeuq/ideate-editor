@@ -3,7 +3,6 @@ package io.github.safeuq.ideate.client.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -24,9 +23,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,7 +35,6 @@ import io.github.safeuq.ideate.client.session.OpenProject
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
-import kotlin.math.abs
 
 /** Each tab's width for [count] tabs in [total]: equal, the last takes the remainder. */
 internal fun projectTabWidths(total: Int, count: Int): List<Int> {
@@ -52,26 +50,17 @@ internal fun neighbourProject(projects: List<OpenProject>, shown: String?, step:
 }
 
 /**
- * Phone layouts have no tab bar: sliding a finger sideways on the title bar shows the next project
- * (slide left) or the previous one (slide right), as the toolbar of Chrome on Android does.
+ * Where the title bar is in the window, top and bottom in px. Phone layouts have no tab bar: a
+ * sideways drag that starts on the title bar slides between the projects, as the toolbar of Chrome
+ * on Android does.
  */
-fun Modifier.projectSwipe(
-  projects: List<OpenProject>,
-  shown: String?,
-  onShow: (hostPath: String) -> Unit,
-): Modifier =
-  pointerInput(projects, shown) {
-    var travelled = 0f
-    detectHorizontalDragGestures(
-      onDragStart = { travelled = 0f },
-      onDragEnd = {
-        if (abs(travelled) > 48.dp.toPx())
-          neighbourProject(projects, shown, if (travelled < 0) 1 else -1)?.let(onShow)
-      },
-    ) { _, amount ->
-      travelled += amount
-    }
-  }
+class ProjectSwipeArea {
+  var top = 0f
+  var bottom = 0f
+}
+
+/** Set where the projects slide (EditorApp on a phone); null elsewhere. */
+val LocalProjectSwipeArea = staticCompositionLocalOf<ProjectSwipeArea?> { null }
 
 /**
  * IntelliJ's macOS project tabs (WindowTabsComponent, IslandsUICustomization.paintProjectTab): one

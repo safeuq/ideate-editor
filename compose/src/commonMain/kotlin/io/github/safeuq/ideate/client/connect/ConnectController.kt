@@ -1,20 +1,16 @@
 package io.github.safeuq.ideate.client.connect
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.VisibilityThreshold
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,7 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.connection.ClientCertificate
 import io.github.safeuq.ideate.client.connection.JoinLink
@@ -35,11 +31,15 @@ import io.github.safeuq.ideate.client.session.SessionState
 import io.github.safeuq.ideate.client.session.handOver
 import io.github.safeuq.ideate.client.ui.ClientScreen
 import io.github.safeuq.ideate.client.ui.LocalBackHandler
+import io.github.safeuq.ideate.client.ui.LocalProjectSwipeArea
 import io.github.safeuq.ideate.client.ui.LocalTitleBarArea
+import io.github.safeuq.ideate.client.ui.ProjectSwipeArea
 import io.github.safeuq.ideate.client.ui.ScreenLayout
+import io.github.safeuq.ideate.client.ui.SlidePager
 import io.github.safeuq.ideate.client.ui.TitleBarSpacer
 import io.github.safeuq.ideate.client.ui.ToolWindowState
 import io.github.safeuq.ideate.client.ui.dialog.MessageKind
+import io.github.safeuq.ideate.client.ui.neighbourProject
 import io.github.safeuq.ideate.client.ui.screenLayout
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
 import io.github.safeuq.ideate.client.ui.theme.Islands
@@ -538,40 +538,8 @@ class ConnectController(
    */
   private fun switchProject(current: Attempt, hostPath: String) {
     if (attempt?.link != current.link) return
-    val first = opener ?: session ?: return
     val shown = session
-    val target =
-      first.takeIf { it.state.value.shownProject == hostPath }
-        ?: joined[hostPath]?.takeUnless { it.projectClosed }
-        ?: run {
-          // A session whose project was closed is never used again: the project opened again
-          // starts from an empty screen.
-          joined.remove(hostPath)?.stop()
-          lateinit var made: ClientSession
-          made =
-            ClientSession(
-              current.link,
-              null,
-              null,
-              openEditors.slot("${current.editorsKey}:$hostPath"),
-              hostPath,
-              inForeground = { inForeground },
-              onProjectSwitch = { path ->
-                main.launch {
-                  // Its project was closed while another one is on screen (the close button of a
-                  // tab that is not selected): the screen stays, only the session ends.
-                  if (made.projectClosed && session !== made) {
-                    if (joined[hostPath] === made) joined.remove(hostPath)
-                    made.stop()
-                  } else switchProject(current, path)
-                }
-              },
-              sharedConnection = first.connection,
-            )
-          joined[hostPath] = made
-          made.start()
-          made
-        }
+    val target = sessionFor(current, hostPath) ?: return
     if (session === target) return
     // A closed project's session goes with its tab; the one that opened the connection stays.
     val open = shown?.state?.value?.openProjects.orEmpty().map { it.hostPath }
@@ -594,17 +562,60 @@ class ConnectController(
     next.identity = attempt?.identity ?: current.identity
     attempt = next
     handOverFrom = null
-    val order = (shown ?: first).state.value.openProjects.map { it.hostPath }
-    switchedForward = order.indexOf(hostPath) >= order.indexOf(shown?.state?.value?.shownProject)
     session = target
   }
 
   /**
-   * Whether the last project switch went to a project later in the open projects' order (its screen
-   * slides in from the right on a phone) or to an earlier one (from the left).
+   * The session that shows the open project at [hostPath], made on the open connection when the
+   * project has none yet. It does not change what is on screen.
    */
-  internal var switchedForward = true
-    private set
+  private fun sessionFor(current: Attempt, hostPath: String): ClientSession? {
+    val first = opener ?: session ?: return null
+    return (first.takeIf { it.state.value.shownProject == hostPath }
+      ?: joined[hostPath]?.takeUnless { it.projectClosed }
+      ?: run {
+        // A session whose project was closed is never used again: the project opened again
+        // starts from an empty screen.
+        joined.remove(hostPath)?.stop()
+        lateinit var made: ClientSession
+        made =
+          ClientSession(
+            current.link,
+            null,
+            null,
+            openEditors.slot("${current.editorsKey}:$hostPath"),
+            hostPath,
+            inForeground = { inForeground },
+            onProjectSwitch = { path ->
+              main.launch {
+                // Its project was closed while another one is on screen (the close button of a
+                // tab that is not selected): the screen stays, only the session ends.
+                if (made.projectClosed && session !== made) {
+                  if (joined[hostPath] === made) joined.remove(hostPath)
+                  made.stop()
+                } else switchProject(current, path)
+              }
+            },
+            sharedConnection = first.connection,
+          )
+        joined[hostPath] = made
+        made.start()
+        made
+      })
+  }
+
+  /** [sessionFor] for the screen: a project sliding in next to the one shown needs its session. */
+  fun projectSession(hostPath: String): ClientSession? = attempt?.let { sessionFor(it, hostPath) }
+
+  /** The open project [shownSession] shows, e.g. `/work/beta`; null before it knows. */
+  fun projectPath(shownSession: ClientSession): String? =
+    joined.entries.firstOrNull { it.value === shownSession }?.key
+      ?: shownSession.state.value.shownProject
+
+  /** Shows the open project at [hostPath] at once (the end of a slide on a phone). */
+  fun showProject(hostPath: String) {
+    attempt?.let { switchProject(it, hostPath) }
+  }
 
   /**
    * Which project a connection's editors belong to. E.g. `link:192.168.0.105:5990`,
@@ -1245,29 +1256,51 @@ fun EditorApp(
     }
     controller.windows = windows
     if (!phone) ClientScreen(state, session, insets = modifier, windows = windows)
-    else
-    // A phone has no project tabs: the project switched to slides in and the other slides out,
-    // as the pages of the islands do (SwipePager's spring), but edge to edge, with no gap.
-    // ponytail: a tablet turned between upright and sideways changes branch here, which resets
-    // what ClientScreen remembers (its page, the notice); movableContentOf if that matters.
-    AnimatedContent(
-        session,
-        transitionSpec = {
-          val forward = controller.switchedForward
-          val slide =
-            spring(
-              stiffness = Spring.StiffnessMedium,
-              visibilityThreshold = IntOffset.VisibilityThreshold,
-            )
-          slideInHorizontally(slide) { width -> if (forward) width else -width } togetherWith
-            slideOutHorizontally(slide) { width -> if (forward) -width else width }
+    else {
+      // A phone has no project tabs: the projects are pages that slide, title bar included, as
+      // the island pages do (SlidePager). A drag that starts on the title bar moves them with the
+      // finger; a project chosen in the project popup slides in as well.
+      // ponytail: a tablet turned between upright and sideways changes branch here, which resets
+      // what ClientScreen remembers (its page, the notice); movableContentOf if that matters.
+      val titleBar = remember { ProjectSwipeArea() }
+      SlidePager(
+        current = session,
+        neighbour = { step ->
+          neighbourProject(state.openProjects, controller.projectPath(session), step)
+            ?.let(controller::projectSession)
         },
-      ) { shownSession ->
-        // The session sliding out keeps showing its own last state.
+        order = { shownSession ->
+          state.openProjects.indexOfFirst { it.hostPath == controller.projectPath(shownSession) }
+        },
+        onShow = { target -> controller.projectPath(target)?.let(controller::showProject) },
+        canSlide = { down, _ ->
+          state.openProjects.size > 1 && down.y >= titleBar.top && down.y <= titleBar.bottom
+        },
+        // Shows in the gap and behind the rounded corners while the projects slide.
+        modifier = Modifier.fillMaxSize().background(Islands.islandBackground),
+      ) { shownSession, radius ->
+        // The project sliding in or out shows its own state.
         val shownState =
           if (shownSession === session) state else shownSession.state.collectAsState().value
-        ClientScreen(shownState, shownSession, insets = modifier, windows = windows)
+        val shape = RoundedCornerShape(radius)
+        Box(Modifier.fillMaxSize().clip(shape)) {
+          CompositionLocalProvider(LocalProjectSwipeArea provides titleBar) {
+            ClientScreen(shownState, shownSession, insets = modifier, windows = windows)
+          }
+          // An outline while the project slides, fading in and out with the corners: the backdrop
+          // alone is nearly the editor's colour, so the gap would not show between two editors.
+          if (radius > 0.dp)
+            Box(
+              Modifier.matchParentSize()
+                .border(
+                  1.dp,
+                  Islands.controlBorder.copy(alpha = radius / Islands.islandRadius),
+                  shape,
+                ),
+            )
+        }
       }
+    }
     controller.reconnecting?.let { attemptNumber ->
       val project = controller.switching
       if (project != null)
