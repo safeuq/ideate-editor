@@ -496,8 +496,9 @@ class ConnectController(
     opening =
       OpeningProgress(
         opening?.project ?: current.project ?: "${current.link.host}:${current.link.port}",
-        "Connecting…",
+        "Performing handshake with remote host",
         cancellable = true,
+        title = "Establishing connection",
       )
     var failure: Job? = null
     lateinit var candidate: ClientSession

@@ -98,7 +98,12 @@ data class ConnectScreenState(
  * intellij-backend start for commons; this takes up to 3 minutes". [cancellable]: only while
  * `start` runs, as before.
  */
-data class OpeningProgress(val project: String, val detail: String, val cancellable: Boolean)
+data class OpeningProgress(
+  val project: String,
+  val detail: String,
+  val cancellable: Boolean,
+  val title: String? = null,
+)
 
 /** The sidebar's connection kinds: this device, Gateway's SSH and Link. */
 enum class ConnectPage {
@@ -213,7 +218,7 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
   }
   state.opening?.let { progress ->
     StartProgress(
-      "Connecting to ${progress.project.trimEnd('/').substringAfterLast('/')}",
+      progress.title ?: "Connecting to ${progress.project.trimEnd('/').substringAfterLast('/')}",
       progress.detail,
       fonts,
       if (progress.cancellable) actions.cancelStart else null,

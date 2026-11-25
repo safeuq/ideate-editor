@@ -247,3 +247,7 @@ Connections: on the desktop (macOS and Linux) the **This device** page lists thi
 way the SSH page lists a host's: "Recent Projects" with New Project (Choose IDE and folder browser), search, then one
 **This device** group. Opening a project uses the backend's link without a port forward; **Running** rows have the
 stop square. Windows keeps the old page with "Use SSH or Link." ([`local-backends.md`](local-backends.md)).
+
+## Addendum (2026-11-25): connecting popup text
+
+Update (2026-11-25): the popup reads "Establishing connection / Performing handshake with remote host".
