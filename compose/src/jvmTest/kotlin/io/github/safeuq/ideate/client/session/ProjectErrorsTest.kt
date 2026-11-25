@@ -48,4 +48,13 @@ class ProjectErrorsTest {
     )
     assertEquals(listOf("Build file is fine"), problems.values.map { it.text })
   }
+
+  @Test
+  fun offsetAtFollowsLineAndColumn() {
+    val text = "package demo;\n\n    Strin greeting;\n}"
+    assertEquals(19, ProblemsView.offsetAt(text, line = 2, column = 4))
+    // A column past the line's end stops at the line's end, a line past the text at its end.
+    assertEquals(13, ProblemsView.offsetAt(text, line = 0, column = 99))
+    assertEquals(text.length, ProblemsView.offsetAt(text, line = 9, column = 0))
+  }
 }

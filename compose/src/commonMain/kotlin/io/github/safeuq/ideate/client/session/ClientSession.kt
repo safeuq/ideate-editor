@@ -568,6 +568,27 @@ class ClientSession(
   }
 
   /**
+   * Opens [path] with the caret at [line] and [column] (both from 0) and that line centred, as
+   * `OpenFileDescriptor(project, file, line, column).navigate` does for a Project Errors row. The
+   * caret moves once the editor has its document, through the path a saved caret is put back by.
+   */
+  fun open(path: String, line: Int, column: Int) = onRd {
+    caretsToRestore[path] = { text -> ProblemsView.offsetAt(text, line, column).let { it to it } }
+    scrollsToRestore.remove(path)
+    if (mutableState.value.editors.any { it.path == path }) {
+      showEditor(path)
+      editSessions.entries
+        .firstOrNull { pathOf(it.key) == path }
+        ?.value
+        ?.let {
+          restoreCaret(path, it)
+        }
+    } else {
+      openFile(path)
+    }
+  }
+
+  /**
    * A Project tree row's file. A file inside a jar or the JDK image (`…/21.0.6-tem!/java.base/…`)
    * isn't found by path, so the backend opens that row itself, as JetBrains Client's double-click
    * does; Ideate then follows its editor selection.

@@ -114,6 +114,23 @@ object ProblemsView {
   const val FILE_LEVEL = 12
 
   /**
+   * The offset of [line] and [column] (both from 0) in [text], e.g. line 5, column 4 of a build
+   * error. A line past the end gives the text's end, a column past the line's end that line's end.
+   */
+  // ponytail: a column counts characters, so a tab is one column; IntelliJ's logical column counts
+  // a tab as its width. Add the tab width when a tab-indented file lands on the wrong column.
+  fun offsetAt(text: String, line: Int, column: Int): Int {
+    var start = 0
+    repeat(line) {
+      val lineEnd = text.indexOf('\n', start)
+      if (lineEnd < 0) return text.length
+      start = lineEnd + 1
+    }
+    val end = text.indexOf('\n', start).let { if (it < 0) text.length else it }
+    return (start + column).coerceIn(start, end)
+  }
+
+  /**
    * The problems of [text]'s highlighters, in the File tab's order. A highlighter counts when
    * `ProblemsViewHighlightingWatcher.isValid` holds: it has a description and its severity is at
    * least [level].

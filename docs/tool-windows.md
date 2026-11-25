@@ -438,3 +438,30 @@ icons that arrive as rd `IconModel` objects (`ClientSession.iconPaths`) still dr
 `ColorizedIconModel`'s tint.
 
 Still open in this tab: a double click opens the file but does not move the caret to the line.
+
+## Addendum (2026-11-26, 00:00 IST): a Project Errors row opens its file at the problem
+
+A double click on a problem row now puts the caret on the problem, as IntelliJ's
+`OpenFileDescriptor(project, file, line, column)` does; on a file row it only opens the file.
+
+| Piece | Where | What it does |
+|---|---|---|
+| `ClientSession.open(path, line, column)` | `session/ClientSession.kt` | records the position in `caretsToRestore[path]` and drops any saved scroll, then shows or opens the file; the caret moves in `restoreCaret` once the editor has its document, and the view centres that line (`caretToShow`) |
+| `ProblemsView.offsetAt(text, line, column)` | `session/ProblemsView.kt` | line and column (both from 0) to an offset; past the end of a line or of the text it stops at that end |
+| `ProjectErrorsPanel` `onOpen` | `ui/ProblemsToolWindow.kt` | a problem row calls `open(path, problem.line, problem.column)` |
+
+Checked live with the build error `cannot find symbol class Strin` (line 5, column 4 from 0, shown
+as 6:5):
+
+| Before the double click | After |
+|---|---|
+| `Main.java` open, caret at 1:14 | caret at 6:5 |
+| `Main.java`'s tab closed (its caret was at 1:14) | the tab opens again, caret at 6:5 |
+
+Limit: a column counts characters, so in a tab-indented file the caret can land left of where
+IntelliJ puts it (IntelliJ's column counts a tab as its width).
+
+Side finding, not fixed here: with the app started on `problems-demo.iml` and then switched to the
+`Main.java` tab, the run widget's More Actions popup said "Nothing here" and Run stayed grey, even
+after closing the `.iml` tab. Started on `Main.java` directly, the popup listed Run 'Main.java'.
+The cause was not looked into.

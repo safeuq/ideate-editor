@@ -99,10 +99,9 @@ fun ProblemsToolWindow(
 
 /**
  * The Project Errors tab (`FrontendProblemsViewProjectErrorsRoot`): the backend's project problems,
- * grouped under a row per file; problems without a file come first. A double tap opens the file.
+ * grouped under a row per file; problems without a file come first. A double tap on a problem opens
+ * its file at the problem's line and column; on a file row it opens the file.
  */
-// ponytail: opens the file without moving the caret to the problem's line and column; add when
-// ClientSession can open a file at a position.
 @Composable
 private fun ProjectErrorsPanel(
   state: SessionState,
@@ -147,8 +146,10 @@ private fun ProjectErrorsPanel(
     onOpen = { node ->
       val row = byId[node.id] ?: return@ProjectTreeView
       row.problem?.let { selected = it.id }
-      row.filePath?.let {
-        session.open(it)
+      row.filePath?.let { path ->
+        val problem = row.problem
+        if (problem == null) session.open(path)
+        else session.open(path, problem.line, problem.column)
         onNavigated()
       }
     },
