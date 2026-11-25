@@ -234,3 +234,7 @@ entries are named like `This device · smoke`; entries saved earlier keep their 
 ## Addendum (2026-11-25): Connecting popup
 
 When a connection starts (a link, a history entry, a Termux project or an SSH project), the connect window stays open and shows the "Connecting to <project>" popup, with Cancel, until the backend accepts the session. Only then does the session become the controller's `session`, so the editor window opens at that point (on Android, EditorActivity opens at that point). If the connection fails first, the error replaces the popup on the connect window ("Couldn't connect: …"), and the window never switches. Cancel stops the waiting session and returns to the plain connect screen without a message. In code, `ConnectController.startSession` keeps the new session in `pending` and watches it for `connectionLost`, like `reconnect` does.
+
+## Addendum (2026-11-25): window title
+
+Where the app draws the title bar itself (macOS windowed mode, Android desktop windowing), the connections window's title strip shows "Ideate", centred, in `JBFont.label()` with `Label.foreground`, like the macOS title of IntelliJ's welcome frame (the Islands themes set no `TitlePane.foreground`). `TitleBarSpacer(title)` in `ui/TitleBar.kt` only draws the text, so the strip still drags the window. In macOS full screen nothing is added. The editor window keeps its main toolbar.

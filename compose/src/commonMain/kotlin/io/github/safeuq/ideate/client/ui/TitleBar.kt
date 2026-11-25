@@ -1,10 +1,13 @@
 package io.github.safeuq.ideate.client.ui
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -15,6 +18,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.ui.theme.Islands
+import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
+import io.github.safeuq.ideate.client.ui.theme.label
 
 /**
  * The window's title bar, when the app draws into it as IntelliJ's new UI does: the main toolbar
@@ -42,11 +47,20 @@ class TitleBarArea(
 
 val LocalTitleBarArea = staticCompositionLocalOf<TitleBarArea?> { null }
 
-/** An empty, draggable strip where the title bar is, for screens without the main toolbar. */
+/**
+ * A draggable strip where the title bar is, for screens without the main toolbar, with [title]
+ * centred.
+ */
 @Composable
-fun TitleBarSpacer() {
+fun TitleBarSpacer(title: String? = null) {
   val area = LocalTitleBarArea.current ?: return
-  Spacer(Modifier.fillMaxWidth().height(maxOf(area.height, Islands.toolbarHeight)))
+  val strip = Modifier.fillMaxWidth().height(maxOf(area.height, Islands.toolbarHeight))
+  if (title == null) return Spacer(strip)
+  // Like the macOS title of IntelliJ's welcome frame: centred, JBFont.label(), Label.foreground
+  // (Islands sets no TitlePane.foreground). Only drawn: no pointer handling, so it still drags.
+  Box(strip, contentAlignment = Alignment.Center) {
+    BasicText(title, style = LocalClientFonts.current.label())
+  }
 }
 
 /**

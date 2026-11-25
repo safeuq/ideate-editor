@@ -1167,10 +1167,11 @@ fun ConnectApp(controller: ConnectController, fonts: ClientFonts, modifier: Modi
   Box(Modifier.fillMaxSize().background(Gateway.background)) {
     LaunchedEffect(Unit) { controller.refresh() }
     Column(modifier) {
-      // Where the app draws the window's title bar (ui/TitleBar.kt): an empty strip that drags
+      // Where the app draws the window's title bar (ui/TitleBar.kt): a strip titled "Ideate" that
+      // drags
       // the window, with IntelliJ's welcome screen separator under it.
       if (LocalTitleBarArea.current != null) {
-        TitleBarSpacer()
+        TitleBarSpacer("Ideate")
         Box(Modifier.fillMaxWidth().height(1.dp).background(Gateway.divider))
       }
       ConnectScreen(controller.screenState(), controller.actions, fonts)
