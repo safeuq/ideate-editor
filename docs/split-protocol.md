@@ -1063,3 +1063,7 @@ passes that to `ProblemsViewHighlightingWatcher`). In Ideate: `ProblemsView.FILE
 
 Not yet seen live: the `info` of a real error and a real warning from a backend
 (`CLIENT_HIGHLIGHT_DUMP`); that check comes with the File tab.
+
+## Addendum (2026-11-25, 23:40 IST): corrections
+
+The addendum above headed "16:10 IST" was written at about 23:00 IST on 2026-11-25. The live check it asks for is done: the backend sent `info` for an error, a warning and a hint (`docs/tool-windows.md`, addendum of 2026-11-25, 23:35 IST).

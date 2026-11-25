@@ -207,3 +207,7 @@ Phase 1 is built (`Highlight.info`, `SessionState.severities`, `session/Problems
 
 `highlightingProblems` takes `(text, highlights, level)` instead of an `EditorFile`, so the test
 needs no editor state. Details in `docs/split-protocol.md`, addendum of the same time.
+
+## Addendum (2026-11-25, 23:40 IST): corrections
+
+The plan's header says it was written 2026-11-26; it was written 2026-11-25. The addendum above headed "16:10 IST" was written at about 23:00 IST on 2026-11-25. Phase 2 (the File tab) is built and checked live: `docs/tool-windows.md`, addendum of 2026-11-25, 23:35 IST. One change from the plan: `ToolWindow.PROBLEMS` is not added to the `own` list in `toolWindowButtons`, because the backend always lists `Problems View`; and the stripe icon does not switch, because the new UI maps the "empty" icon to the same file.
