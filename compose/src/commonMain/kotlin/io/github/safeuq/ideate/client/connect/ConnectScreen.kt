@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -47,6 +48,7 @@ import io.github.safeuq.ideate.client.ui.component.OutlinedButton
 import io.github.safeuq.ideate.client.ui.component.SearchHistory
 import io.github.safeuq.ideate.client.ui.component.SearchTextField
 import io.github.safeuq.ideate.client.ui.component.TextField
+import io.github.safeuq.ideate.client.ui.component.calcShownText
 import io.github.safeuq.ideate.client.ui.dialog.DialogAction
 import io.github.safeuq.ideate.client.ui.dialog.MessageDialog
 import io.github.safeuq.ideate.client.ui.dialog.MessageKind
@@ -701,15 +703,20 @@ internal fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
       icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(16.dp)) }
       val title =
         @Composable { modifier: Modifier ->
-          Link(
-            row.title,
-            row.onOpen,
-            modifier,
-            enabled = row.enabled,
-            style = styles.body,
-            overflow =
-              if (row.middleEllipsis) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
-          )
+          if (row.middleEllipsis) {
+            // Gateway's OurTextCutStrategy: the toolkit's middle ellipsis doesn't apply here.
+            BoxWithConstraints(modifier) {
+              val measurer = rememberTextMeasurer()
+              val shown = calcShownText(row.title, styles.body, constraints.maxWidth, measurer)
+              Link(
+                shown,
+                row.onOpen,
+                enabled = row.enabled,
+                style = styles.body,
+                overflow = TextOverflow.Clip,
+              )
+            }
+          } else Link(row.title, row.onOpen, modifier, enabled = row.enabled, style = styles.body)
         }
       if (styles.twoLineRows) {
         Column(Modifier.weight(1f).padding(start = 9.dp)) {

@@ -320,3 +320,12 @@ Live check on this Mac (desktop app from the worktree, IntelliJ IDEA 2026.3 open
 | This device rows | `~/Files/Projects/XFlow/bankgateway`, `~/Files/Projects/XFlow/xtool`, …; paths outside home stay full (`/private/tmp/…`, `/opt/homebrew/…`). IDE text: `IntelliJ IDEA 2026.3` on most rows, `PyCharm 2024.3` on `scratchpad/device-proj`, `CLion 2024.3` on `~/CLionProjects/TestCPP`. |
 | Remove `…/widget-backend/beta` (an old scratch row from `recentProjects.xml`) | `~/.ideate/hidden-projects.json` got its entry; after an app restart, searching `widget-backend` lists 4 rows (alpha, gtwo, gone, projects/IdeaHome), not 5. |
 | (1) with PyCharm 2024.3 | Not repeated live; covered by the code path only. |
+
+Follow-up, cutting long paths: `TextOverflow.MiddleEllipsis` has no effect on the desktop (rows were cut at the end,
+e.g. `~/Files/Projects/XFlo…`, which loses the project name). Gateway cuts the text itself
+(`OurTextCutStrategy.calcShownText`: measure, then `StringUtil.shortenPathWithEllipsis` with a smaller length until it
+fits). Ported to `ui/component/TextCut.kt`: `shortenTextWithEllipsis` and `shortenPathWithEllipsis` (suffix =
+`(int) (maxLength * 0.7)`, `...` unless the ellipsis symbol is asked for; read from util-8.jar 263.7307.200) and
+`calcShownText` (binary search on the length). `ProjectRowView` uses it for `middleEllipsis` rows. Live at the default
+window width: `~/Fil...jects/XFlow/xtool`, `~/Fi...ow/bankgateway`, `/priv...tchpad/device-proj`. No tooltip with the
+full path: the only tooltip component is `HelpTooltip`, made for action help. Test: `TextCutTest`.
