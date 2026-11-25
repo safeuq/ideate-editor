@@ -33,6 +33,7 @@ docs/           all documentation (below)
 | [`local-backends.md`](docs/local-backends.md) | plan for the desktop's This computer page: find installed IDEs (Toolbox, Applications folders), list projects from IDE and backend history, start, stop and reconnect without pasting a link |
 | [`feature-parity-plan.md`](docs/feature-parity-plan.md) | plan for undo/redo, Cmd+Click (go to declaration or usages), Search Everywhere, Find in Files and Find in the editor: how IntelliJ and JetBrains Client do each, the design and the open questions |
 | [`plans/project-widget-popup.md`](docs/plans/project-widget-popup.md) | plan for the project widget's popup (New Project…, Open…, Clone Repository…, open and recent projects): how IntelliJ builds it, what JetBrains Client leaves out, the design and the open questions |
+| [`plans/problems-view.md`](docs/plans/problems-view.md) | plan for the Problems tool window (File and Project Errors tabs) and problems in the editor (scrollbar marks, hover text, the corner counter): how JetBrains Client builds each on its own side, the design in four phases |
 | [`plans/run-toolbar.md`](docs/plans/run-toolbar.md) | plan for the main toolbar's run controls (configuration selector, Run, Debug, Stop, More Actions): how IntelliJ builds them, what JetBrains Client sends for each, the design and the open questions |
 | [`mcp/setup.md`](docs/mcp/setup.md) | set up the two MCP servers that let an agent see and drive the running desktop app (Compose Hot Reload's, and Ideate's own for clicks at points) |
 
