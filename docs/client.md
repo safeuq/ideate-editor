@@ -168,3 +168,50 @@ DRIVER_LINK="$(cat link.txt)" DRIVER_OUT=/tmp/driver \
 ```
 
 Known limits: keys reach an editor only after a click gave it Compose focus (the window never has real focus). Escape and a click outside don't close a popup window, because a popup closes when its window loses real focus; `dismissPopups()` sends that event. A right click on a Project tree row opened no menu in the self-test.
+
+## Addendum (2026-11-25, 11:16 IST): the build downloads JetBrains Client when none is named
+
+`jetbrains.client.lib` is now optional on macOS. Without it, the build downloads JetBrains Client
+itself, so a Mac with nothing from JetBrains installed can build the desktop app, the DMG and the
+Android APK.
+
+| Case | What `jetbrainsClientLib` becomes |
+|---|---|
+| `-Pjetbrains.client.lib=…`, `local.properties` or `JETBRAINS_CLIENT_LIB` is set (same order as before) | that folder; nothing is downloaded |
+| none is set, on macOS | `~/.gradle/caches/<gradle version>/transforms/<hash>/transformed/jetbrains-client/IntelliJ IDEA.app/Contents/lib` |
+| none is set, on Linux or Windows | the build fails at once and says to set `jetbrains.client.lib` |
+
+How it works, in `ideate-gradle/` (an included build with our own Gradle plugins, applied in
+`settings.gradle.kts` as `io.github.safeuq.ideate.jetbrains-client`; class
+`JetBrainsClientPlugin`). It copies what the IntelliJ Platform Gradle Plugin does for an IDE:
+
+1. An Ivy repository over `https://download.jetbrains.com` with the pattern
+   `[organization]/[module]-[revision](-[classifier]).[ext]` and no metadata files.
+2. The dependency `idea/code-with-me:JetBrainsClient:<build>:aarch64@sit`, which is the file
+   `idea/code-with-me/JetBrainsClient-263.7307.200-aarch64.sit` (924 MB; an Intel Mac gets the one
+   without `-aarch64`). `<build>` is `jetbrains.client.build` in `gradle.properties`.
+3. An artifact transform, `ExtractJetBrainsClient`, that unpacks it once with `/usr/bin/unzip`
+   (2.6 GB). `unzip` and not Gradle's `zipTree`, because the app bundle has symbolic links.
+
+The download happens while Gradle configures the build, the first time only (about 2 minutes here).
+
+Why this package and not another, all for build 263.7307.200:
+
+| Package | Size | Has everything? |
+|---|---|---|
+| JetBrains Client for macOS (`.sit`) | 924 MB | yes: all 25 jars, the plugins' icons, and the macOS runtime with the fonts, in the layout the build already reads |
+| JetBrains Client for Linux (`.tar.gz`) | 921 MB | the jars and icons, but a Linux runtime; the macOS runtime would be 98 MB more |
+| IntelliJ IDEA Community (Maven `ideaIC` zip) | 662 MB | no: lacks `intellij.platform.split.protocol.jar` and `intellij.rd.ide.model.generated.jar`, has no runtime, and lacks 24 of the client's plugin folders (JavaScript, CSS, database, Docker and others), so their icons would be missing |
+| IntelliJ IDEA Ultimate (Maven `ideaIU` zip) | 1,531 MB | the jars and icons, no runtime |
+
+The 25 jars in the three complete packages are the same bytes as in the installed client (size and
+CRC compared through each archive's file list).
+
+Checked with `jetbrains.client.lib` removed from `local.properties`: `./gradlew help` downloaded and
+unpacked the client; `:desktop:packageDmg` and `:android:assembleDebug` built; the app copied out of
+that DMG drew the component gallery, the same image byte for byte as the one built from the
+installed client; `:compose:jvmTest` passed. Not checked: an Intel Mac, and a machine that truly has
+no JetBrains software (this Mac has IntelliJ installed, though the build did not read it).
+
+Still needed on the machine: a JDK to run Gradle (a full JDK 25 for the DMG's `jpackage`), the
+Android SDK for the APK, and Xcode's command line tools for the DMG.

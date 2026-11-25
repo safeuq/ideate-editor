@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
   alias(libs.plugins.kotlin.jvm) apply false
   alias(libs.plugins.kotlin.compose) apply false
@@ -13,27 +11,13 @@ plugins {
 }
 
 // The rd library and the generated protocol models are taken from JetBrains Client itself. They
-// must be
-// the same build as the backend (263.7307.200): both sides compare a schema hash per model.
+// must be the same build as the backend (263.7307.200): both sides compare a schema hash per model.
 // Example:
 // ~/Library/Caches/JetBrains/JetBrainsClientDist/JetBrainsClient-263.7307.200-aarch64.sit-…/IntelliJ IDEA.app/Contents/lib
-// Looked up in this order: -Pjetbrains.client.lib, local.properties (not committed, also holds
-// sdk.dir; the IDE's
-// Gradle sync sees it, unlike shell variables), JETBRAINS_CLIENT_LIB.
-val localProperties =
-  Properties().apply {
-    val localFile = file("local.properties")
-    if (localFile.isFile) localFile.inputStream().use(::load)
-  }
-val jetbrainsClientLib by
-  extra(
-    providers.gradleProperty("jetbrains.client.lib").orNull
-      ?: localProperties.getProperty("jetbrains.client.lib")
-      ?: providers.environmentVariable("JETBRAINS_CLIENT_LIB").orNull
-      ?: error(
-        "Set jetbrains.client.lib in local.properties (or JETBRAINS_CLIENT_LIB, or -Pjetbrains.client.lib=…) to JetBrains Client 263.7307.200's Contents/lib folder",
-      ),
-  )
+// Set by the io.github.safeuq.ideate.jetbrains-client plugin (settings.gradle.kts,
+// ideate-gradle/): the folder named by -Pjetbrains.client.lib, local.properties or
+// JETBRAINS_CLIENT_LIB, or else a client it downloads.
+val jetbrainsClientLib: String by extra
 
 /**
  * File names in [jetbrainsClientLib]. compose compiles against them; each app adds them at run time

@@ -116,3 +116,10 @@ fixed version `1.0.0` (`jpackageVersion` in `desktop/build.gradle.kts`) and then
 
 Checked on the rebuilt DMG: both `Info.plist` keys print `0.1.0`, `codesign --verify --deep
 --strict` passes, and the launcher still shows `sdk 26.0`.
+
+## Addendum (2026-11-25, 11:16 IST): no JetBrains Client install is needed
+
+"`jetbrains.client.lib` must be set" under "Build" no longer holds on macOS: without it the build
+downloads JetBrains Client 263.7307.200 itself ([`client.md`](client.md), addendum of 2026-11-25).
+The DMG built that way was checked the same way as before: signature valid, launcher `sdk 26.0`, 79
+jars, six fonts, 6,101 icons in `icons.jar`, and the component gallery drawn by the packaged app.
