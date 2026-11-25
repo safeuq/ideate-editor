@@ -80,6 +80,7 @@ import io.github.safeuq.ideate.client.session.EditorFile
 import io.github.safeuq.ideate.client.session.EditorKey
 import io.github.safeuq.ideate.client.session.EditorKind
 import io.github.safeuq.ideate.client.session.EditorScheme
+import io.github.safeuq.ideate.client.session.ErrorStripe
 import io.github.safeuq.ideate.client.session.Highlight
 import io.github.safeuq.ideate.client.session.IndentGuide
 import io.github.safeuq.ideate.client.session.Lookup
@@ -868,6 +869,16 @@ fun EditorView(
                 strokeWidth = 1.dp.toPx(),
               )
             }
+            drawErrorStripe(
+              ErrorStripe.spots(
+                currentFile.highlights,
+                lines::lineOf,
+                lines.count,
+                metrics.lineHeight,
+                size.height,
+                ErrorStripe.MIN_MARK_HEIGHT.dp.toPx(),
+              ),
+            )
           }
           .focusRequester(focusRequester)
           .onFocusChanged { focused = it.hasFocus }

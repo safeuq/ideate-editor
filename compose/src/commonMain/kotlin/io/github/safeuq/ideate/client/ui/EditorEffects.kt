@@ -8,6 +8,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.unit.dp
+import io.github.safeuq.ideate.client.session.ErrorStripe
+import io.github.safeuq.ideate.client.session.ErrorStripeSpot
 import io.github.safeuq.ideate.client.session.TextEffect
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -221,5 +224,23 @@ internal fun DrawScope.drawTextEffect(
         style = Stroke(thickness),
       )
     }
+  }
+}
+
+/**
+ * The marks at the editor's right edge (`EditorMarkupModelImpl.drawSpot`): thin ones in a column
+ * [ErrorStripe.MIN_MARK_HEIGHT] wide, then a gap, then the wide ones.
+ */
+fun DrawScope.drawErrorStripe(spots: List<ErrorStripeSpot>) {
+  val thinWidth = ErrorStripe.MIN_MARK_HEIGHT.dp.toPx()
+  val wideWidth = ErrorStripe.SCROLLBAR_WIDTH.dp.toPx()
+  val wideLeft = size.width - wideWidth
+  val thinLeft = wideLeft - ErrorStripe.THIN_GAP.dp.toPx() - thinWidth
+  for (spot in spots) {
+    drawRect(
+      Color(spot.color),
+      Offset(if (spot.thin) thinLeft else wideLeft, spot.top),
+      Size(if (spot.thin) thinWidth else wideWidth, spot.bottom - spot.top),
+    )
   }
 }

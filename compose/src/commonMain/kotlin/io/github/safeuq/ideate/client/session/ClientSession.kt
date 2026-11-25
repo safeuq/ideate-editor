@@ -2067,10 +2067,7 @@ class ClientSession(
       }
     val highlights =
       if (scheme == null) emptyList()
-      else
-        raw
-          .map { Highlight(it.id, it.start, it.end, it.layer, scheme.style(it.keyChains), it.info) }
-          .sortedWith(compareBy({ it.layer }, { it.start }))
+      else raw.map { it.toHighlight(scheme) }.sortedWith(compareBy({ it.layer }, { it.start }))
     // Comment tokens from the backend's syntax highlighting: comment lines neither open nor close
     // blocks, like blank lines (IndentGuideCalculator).
     val comments =
@@ -2155,7 +2152,7 @@ class ClientSession(
           ?.values
           .orEmpty()
           .filter { it.start in 0..it.end && it.end <= text.length }
-          .map { Highlight(it.id, it.start, it.end, it.layer, scheme.style(it.keyChains), it.info) }
+          .map { it.toHighlight(scheme) }
           .sortedWith(compareBy({ it.layer }, { it.start }))
     mutableState.update { it.copy(consoles = it.consoles + (id to ConsoleText(text, highlights))) }
   }
@@ -2215,9 +2212,29 @@ class ClientSession(
     val keyChains: List<List<String>>,
     val gutterIconPaths: List<String>,
     val info: HighlightInfo?,
+    val thinErrorStripeMark: Boolean,
     /** The rd model's class, e.g. `SyntaxHighlighterModel`; only for CLIENT_HIGHLIGHT_DUMP. */
     val modelName: String,
-  )
+  ) {
+    fun toHighlight(scheme: EditorScheme): Highlight {
+      val style = scheme.style(keyChains)
+      return Highlight(
+        id,
+        start,
+        end,
+        layer,
+        style,
+        info,
+        // HighlightInfo.getErrorStripeMarkColor: the key's stripe color, else the severity's. The
+        // backend sets that color on its own highlighter, but does not send it.
+        style.errorStripeColor
+          ?: SEVERITY_ATTRIBUTES[info?.severityId]?.let {
+            scheme.style(listOf(listOf(it))).errorStripeColor
+          },
+        thinErrorStripeMark,
+      )
+    }
+  }
 
   private fun publishSeverities(sent: List<HighlightSeverityModel>) {
     if (sent.isEmpty()) return
@@ -2270,6 +2287,20 @@ class ClientSession(
     /** The default comment keys every language's comment colors fall back to. */
     val COMMENT_KEYS = setOf("DEFAULT_LINE_COMMENT", "DEFAULT_BLOCK_COMMENT", "DEFAULT_DOC_COMMENT")
 
+    /**
+     * Severity id to the `CodeInsightColors` key whose stripe color marks it on the scrollbar
+     * (ERRORS_ATTRIBUTES, WARNINGS_ATTRIBUTES, WEAK_WARNING_ATTRIBUTES and INFO_ATTRIBUTES,
+     * GENERIC_SERVER_ERROR_OR_WARNING), by external name.
+     */
+    val SEVERITY_ATTRIBUTES =
+      mapOf(
+        "ERROR" to "ERRORS_ATTRIBUTES",
+        "WARNING" to "WARNING_ATTRIBUTES",
+        "WEAK WARNING" to "INFO_ATTRIBUTES",
+        "INFO" to "INFO_ATTRIBUTES",
+        "SERVER PROBLEM" to "GENERIC_SERVER_ERROR_OR_WARNING",
+      )
+
     /** Text attributes key of the backend's sticky line scopes (`StickyLinesModelImpl`). */
     const val STICKY_LINE_MARKER = "STICKY_LINE_MARKER"
 
@@ -2299,6 +2330,7 @@ class ClientSession(
             suppressOnErrorStripe = info.suppressOnErrorStripe,
           )
         },
+        model.isThinErrorStripeMark,
         model.javaClass.simpleName,
       )
     }

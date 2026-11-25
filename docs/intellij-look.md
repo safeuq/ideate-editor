@@ -1078,3 +1078,37 @@ connections window and the editor window.
 Checked: the app started from Gradle with the change, and its window was resized to 1100 by 800 and
 back to 700 by 500 through System Events with no exception in the log. The strip's colour during a
 live drag was not looked at, because a screen capture cannot catch it.
+
+## Addendum (2026-11-25, 23:55 IST): marks on the editor's scrollbar (error stripe)
+
+The editor now paints IntelliJ's marks at its right edge for every highlighter that has a stripe
+color. From `EditorMarkupModelImpl.kt` and `ErrorStripeMarkersModel.java` (intellij-community
+master) and `HighlightInfo.getErrorStripeMarkColor`:
+
+| What | IntelliJ | Ideate |
+|---|---|---|
+| Which highlighters | `getErrorStripeMarkColor(scheme) != null` (`isErrorStripeHighlighter`), not only problems | `Highlight.errorStripeColor != null` |
+| Wide mark | x = `minMarkHeight` + `thinGap` (2), width `Editor.scrollBarWidth` (14) | 14 dp wide at the right edge (`ErrorStripe.SCROLLBAR_WIDTH`) |
+| Thin mark (`isThinErrorStripeMark`) | x = 0, width `minMarkHeight` | 2 dp wide, left of a 2 dp gap |
+| Least height | `DaemonCodeAnalyzerSettings.errorStripeMarkMinHeight` = 2 | `ErrorStripe.MIN_MARK_HEIGHT` = 2 dp |
+| Position | first line's top to last line's top; scaled to the track only when the text is taller than the track (`offsetsToYPositions`) | `ErrorStripe.spots` |
+
+Where the color comes from: the backend sets it on its own highlighter but does not send it
+(`HighlighterModel` has `isThinErrorStripeMark` and the text attributes key, no stripe color). So
+Ideate applies `HighlightInfo.getErrorStripeMarkColor` itself: the stripe color of the
+highlighter's text attributes, else the severity's attributes:
+
+| Severity id | Scheme key (external name) |
+|---|---|
+| `ERROR` | `ERRORS_ATTRIBUTES` |
+| `WARNING` | `WARNING_ATTRIBUTES` |
+| `WEAK WARNING`, `INFO` | `INFO_ATTRIBUTES` |
+| `SERVER PROBLEM` | `GENERIC_SERVER_ERROR_OR_WARNING` |
+
+Seen live (scratch backend, Islands Dark): a yellow mark at line 5 for `Variable 'unused' is never
+used`, a red one at line 6 for `Cannot resolve symbol 'Strin'`, none for the INFORMATION hint on
+line 7. Before the severity rule, only the identifier under the caret had a mark.
+
+Not done: a click on a mark (IntelliJ goes to the nearest highlighter), the hover preview, and
+`HighlightInfo.suppressOnErrorStripe`, which is read but not applied. Spots are painted in layer
+order instead of merged first; the result differs only for see-through colors.

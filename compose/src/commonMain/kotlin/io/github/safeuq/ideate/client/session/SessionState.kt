@@ -110,6 +110,13 @@ data class Highlight(
   val style: TextStyle,
   /** The problem this range marks (error, warning, …); null for syntax colors and the like. */
   val info: HighlightInfo? = null,
+  /**
+   * `RangeHighlighter.getErrorStripeMarkColor`, here always the text attributes' stripe color (the
+   * backend sends no color of the highlighter's own); null: no mark on the scrollbar.
+   */
+  val errorStripeColor: Long? = null,
+  /** `isThinErrorStripeMark`: a narrow mark at the bar's left edge instead of a wide one. */
+  val thinErrorStripeMark: Boolean = false,
 )
 
 /**

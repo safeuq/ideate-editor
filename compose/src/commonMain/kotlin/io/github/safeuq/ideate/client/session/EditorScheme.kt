@@ -34,6 +34,8 @@ data class TextStyle(
   val fontType: Int = 0,
   val effect: TextEffect? = null,
   val effectColor: Long? = null,
+  /** The color of the mark on the scrollbar (IntelliJ's error stripe); null: no mark. */
+  val errorStripeColor: Long? = null,
 ) {
   val isBold
     get() = fontType and 1 != 0
@@ -147,6 +149,7 @@ class EditorScheme(
         // An effect without a color is not drawn in IntelliJ.
         effect = effectColor?.let { TextEffect.valueOf(effectType.name) },
         effectColor = effectColor?.toArgb(),
+        errorStripeColor = errorStripeColor?.toArgb(),
       )
 
     fun AbstractColor.toArgb(): Long? =
