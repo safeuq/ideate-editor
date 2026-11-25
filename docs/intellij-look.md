@@ -1129,3 +1129,34 @@ larger popup: every problem at the offset, most severe first, a row with the fir
 "More actions…", and the documentation of the symbol below. Ideate shows one problem's text (the
 most severe) in the small tooltip box, with no actions. The look of IntelliJ's popup was not
 compared side by side. Touch has no hover, so nothing shows on a phone.
+
+## Addendum (2026-11-26, 00:05 IST): a click on a scrollbar mark
+
+As `EditorMarkupModelImpl.doClick`: a click in the marks' strip moves the caret to the start of the
+nearest mark's highlighter and centres that line.
+
+| IntelliJ | Ideate |
+|---|---|
+| `getThickness()` = `SCROLLBAR_WIDTH + thinGap + getMinMarkHeight()` | `ErrorStripe.THICKNESS` = 14 + 2 + 2 = 18 dp from the editor's right edge |
+| `addNearestHighlighters`: marks with `y` between `top - 2 × minMarkHeight` and `bottom + 2 × minMarkHeight` | `ErrorStripe.nearest(spots, y, minMarkHeight)`, same bounds (4 dp each way) |
+| `getNearestRangeHighlighter`: of those, the one whose top is closest to `y` | the same; of marks equally close, the one painted last (on top) |
+| `caretModel.moveToOffset(marker.startOffset)`, `scrollToCaret(ScrollType.CENTER)` | `moveTo(mark.offset)`, then `listState.scrollToItem(line - lines in view / 2)` |
+| no mark near: nothing (the scrollbar handles the click) | no mark near: the tap moves the caret as anywhere else in the text (Ideate has no scrollbar there) |
+
+`ErrorStripeSpot` now carries `offset`, its highlighter's start. The code is in the tap handler of
+`ui/EditorView.kt` (`onTap`), with the spots from the local `errorStripeSpots`, which the drawing
+uses too.
+
+The tie rule differs from IntelliJ on purpose: IntelliJ takes whichever of two equally close
+highlighters its hash set yields first. Seen live before the rule: a click on the red mark of
+`Strin broken = null;` put the caret on `broken` (100:9), the unused-field warning under the red
+mark, not on the error.
+
+Checked live (120-line `Tall.java`, an unresolved type on line 100, a warning on every field):
+
+| Click at | Result |
+|---|---|
+| a yellow mark near the top (window point 1158, 180 dp) | caret 21:7 on `field21`, line 21 in the middle of the view |
+| the red mark (1158, 644 dp) | caret 100:3 on `Strin`, lines 84 to 117 in view |
+
+Not done: the preview that shows when the pointer rests on a mark, and the mark's tooltip.

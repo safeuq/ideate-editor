@@ -482,6 +482,16 @@ fun EditorView(
       }
     }
 
+  fun errorStripeSpots(trackHeight: Float, minMarkHeight: Float) =
+    ErrorStripe.spots(
+      currentFile.highlights,
+      currentLines::lineOf,
+      currentLines.count,
+      metrics.lineHeight,
+      trackHeight,
+      minMarkHeight,
+    )
+
   fun moveTo(offset: Int, extend: Boolean, keepColumn: Boolean = false) {
     val now = currentFile
     val target = offset.coerceIn(0, now.text.length)
@@ -898,16 +908,7 @@ fun EditorView(
                 strokeWidth = 1.dp.toPx(),
               )
             }
-            drawErrorStripe(
-              ErrorStripe.spots(
-                currentFile.highlights,
-                lines::lineOf,
-                lines.count,
-                metrics.lineHeight,
-                size.height,
-                ErrorStripe.MIN_MARK_HEIGHT.dp.toPx(),
-              ),
-            )
+            drawErrorStripe(errorStripeSpots(size.height, ErrorStripe.MIN_MARK_HEIGHT.dp.toPx()))
           }
           .focusRequester(focusRequester)
           .onFocusChanged { focused = it.hasFocus }
@@ -979,6 +980,27 @@ fun EditorView(
               onTap = { position ->
                 if (stoppedScroll) return@detectTapGestures
                 focusRequester.requestFocus()
+                // A click on a scrollbar mark (EditorMarkupModelImpl.doClick): the caret goes to
+                // the nearest mark's highlighter and that line is centred.
+                val minMarkHeight = ErrorStripe.MIN_MARK_HEIGHT.dp.toPx()
+                val mark =
+                  if (isConsole || position.x < size.width - ErrorStripe.THICKNESS.dp.toPx()) null
+                  else
+                    ErrorStripe.nearest(
+                      errorStripeSpots(size.height.toFloat(), minMarkHeight),
+                      position.y,
+                      minMarkHeight,
+                    )
+                if (mark != null) {
+                  moveTo(mark.offset, extend = false)
+                  val linesInView = (size.height / metrics.lineHeight).toInt()
+                  stickyScroll.launch {
+                    listState.scrollToItem(
+                      maxOf(0, currentLines.lineOf(mark.offset) - linesInView / 2),
+                    )
+                  }
+                  return@detectTapGestures
+                }
                 moveTo(offsetAt(position), extend = false)
               },
             )
