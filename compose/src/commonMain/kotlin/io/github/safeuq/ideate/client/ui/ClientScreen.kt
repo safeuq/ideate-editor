@@ -269,7 +269,8 @@ fun ClientScreen(
         .filter {
           it != ToolWindow.PROJECT.id &&
             it != ToolWindow.STRUCTURE.id &&
-            it != ToolWindow.TERMINAL.id
+            it != ToolWindow.TERMINAL.id &&
+            it != ToolWindow.PROBLEMS.id
         }
         .toSet()
     LaunchedEffect(backendShown) { session.setBackendToolWindowsShown(backendShown) }
@@ -362,6 +363,9 @@ fun ClientScreen(
         headerContent =
           if (window == ToolWindow.TERMINAL) {
             { TerminalHeaderTabs(state, session, terminalTabs) { barClick(window) } }
+          } else if (window == ToolWindow.PROBLEMS) {
+            // ProblemsViewBundle's problems.view.highlighting; "Project Errors" comes later.
+            { HeaderTab("File", isSelected = true, onSelect = {}, onClose = null) }
           } else
             state.backendViews[window.id]
               ?.takeIf { it.panel != null }
@@ -780,6 +784,8 @@ private fun ToolWindowContent(
         onStructureCollapsedChange,
       )
     window == ToolWindow.TERMINAL -> TerminalToolWindow(state, session, terminalFocus, terminalTabs)
+    window == ToolWindow.PROBLEMS ->
+      ProblemsToolWindow(state, session, onNavigated, Modifier.fillMaxSize(), scroll)
     else -> BackendToolWindowContent(window, state, session, scroll, portrait)
   }
 

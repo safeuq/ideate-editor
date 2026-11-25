@@ -112,6 +112,12 @@ class ToolWindow(val id: String, val title: String, val icon: String?, val place
     /** The shell on the backend machine; the client draws it (spec 1), no backend window. */
     val TERMINAL =
       ToolWindow("Terminal", "Terminal", "icons/expui/toolwindow/terminal.svg", Place.BOTTOM_LEFT)
+    /**
+     * The backend lists it (id `Problems View`); the client draws its content from the editor's
+     * highlighters, as JetBrains Client does.
+     */
+    val PROBLEMS =
+      ToolWindow("Problems View", "Problems", "expui/toolwindows/problems.svg", Place.BOTTOM_LEFT)
   }
 }
 

@@ -300,3 +300,36 @@ Tests: `compose/src/jvmTest/.../session/BackendTabsTest.kt` (the tab name mappin
 upright are slid by the generic `SlidePager` in `ui/SlidePager.kt`, which also slides the open
 projects on a phone. The behaviour described above is unchanged; its parameters and how each of
 the two uses fills them are in `docs/plans/project-tabs.md`, the addendum of 2026-11-24, 12:40 IST.
+
+## Addendum (2026-11-25, 23:35 IST): the Problems window's File tab
+
+The Problems tool window (backend id `Problems View`) now has content: the File tab, drawn by
+Ideate from the selected editor's highlighters, as JetBrains Client does (`HighlightingPanel`; the
+registry key `problems.view.split.enabled` is `true` by default on client and backend). Code:
+`ui/ProblemsToolWindow.kt`, rows from `ProblemsView.highlightingProblems`
+(`session/ProblemsView.kt`), drawn with `ProjectTreeView`.
+
+Checked live on a scratch backend (port 5997) with a Java file holding one unresolved type, one
+unused variable and one `System.out.println`:
+
+| Row | Example | IntelliJ source |
+|---|---|---|
+| File | `Main.java  <folder>  3 problems`, file icon from the editor tab | `FileNode.update` |
+| Problem | severity icon, `Cannot resolve symbol 'Strin'`, grey ` :6` | `ProblemNode.update` |
+
+- The backend sent `info` for all three: ERROR (400), WARNING (300) and a third below WARNING
+  (`'System.out.println()' call can be replaced with a logpoint`), each with its own icon from
+  `DefaultRegistryModel.severities`. They list in that order.
+- A single click selects only; a double click or Enter moves the caret to the problem's start
+  (seen: `Variable 'unused' is never used` → caret 5:18). IntelliJ does the same:
+  `ProblemsViewState.autoscrollToSource` is `false` by default.
+- The stripe button keeps one icon. IntelliJ has `ToolWindowProblemsEmpty` for "no problems", but
+  the new UI maps both to `expui/toolwindows/problems.svg` (`PlatformIconMappings.json`), so there
+  is nothing to switch.
+
+Differences from IntelliJ, still open:
+- the file row shows the folder as the backend names it; IntelliJ writes the home folder as `~`
+  (Ideate does not know the backend's home folder);
+- no "Project Errors" tab, toolbar, context menu or quick fixes yet, and no "Analyzing…" text
+  (`docs/plans/problems-view.md`, phases 3 and 4);
+- text of two problems at one position is ordered without case, not by IntelliJ's natural compare.
