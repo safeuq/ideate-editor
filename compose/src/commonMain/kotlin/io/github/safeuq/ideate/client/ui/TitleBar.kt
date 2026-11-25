@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
-import io.github.safeuq.ideate.client.ui.theme.label
+import io.github.safeuq.ideate.client.ui.theme.toolWindowTitle
 
 /**
  * The window's title bar, when the app draws into it as IntelliJ's new UI does: the main toolbar
@@ -56,10 +56,10 @@ fun TitleBarSpacer(title: String? = null) {
   val area = LocalTitleBarArea.current ?: return
   val strip = Modifier.fillMaxWidth().height(maxOf(area.height, Islands.toolbarHeight))
   if (title == null) return Spacer(strip)
-  // Like the macOS title of IntelliJ's welcome frame: centred, JBFont.label(), Label.foreground
-  // (Islands sets no TitlePane.foreground). Only drawn: no pointer handling, so it still drags.
+  // Centred, in the tool window header title's style (e.g. "Project"). Only drawn: no pointer
+  // handling, so the strip still drags the window.
   Box(strip, contentAlignment = Alignment.Center) {
-    BasicText(title, style = LocalClientFonts.current.label())
+    BasicText(title, style = LocalClientFonts.current.toolWindowTitle())
   }
 }
 

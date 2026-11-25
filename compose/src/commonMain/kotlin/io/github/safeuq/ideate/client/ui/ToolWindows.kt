@@ -41,13 +41,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupPositionProvider
 import io.github.safeuq.ideate.client.session.BackendToolWindow
 import io.github.safeuq.ideate.client.ui.component.AppPopup
@@ -59,6 +57,7 @@ import io.github.safeuq.ideate.client.ui.component.keep
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
+import io.github.safeuq.ideate.client.ui.theme.toolWindowTitle
 
 /** A side of the window, as IntelliJ's `ToolWindowAnchor` (top isn't used by the new UI). */
 enum class Side {
@@ -526,13 +525,7 @@ fun ToolWindowPanel(
         ) {
           BasicText(
             title,
-            style =
-              fonts
-                .label()
-                .copy(
-                  fontSize = Islands.headerFontSize.sp,
-                  fontWeight = FontWeight.SemiBold,
-                ),
+            style = fonts.toolWindowTitle(),
           )
           if (views != null)
             LocalIcons.current.painter("expui/general/chevronDown.svg")?.let {

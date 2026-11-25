@@ -23,6 +23,10 @@ val LocalClientFonts = staticCompositionLocalOf {
 fun ClientFonts.label(color: Color = Islands.text) =
   TextStyle(color = color, fontFamily = ui, fontSize = Islands.UI_FONT_SIZE.sp)
 
+/** A tool window header's title, e.g. "Project": label() at ToolWindow.Header's size, semibold. */
+fun ClientFonts.toolWindowTitle(color: Color = Islands.text) =
+  label(color).copy(fontSize = Islands.headerFontSize.sp, fontWeight = FontWeight.SemiBold)
+
 /** `JBFont.medium()` = `label().lessOn(1)`. */
 fun ClientFonts.medium(color: Color = Islands.text) =
   label(color).copy(fontSize = (Islands.UI_FONT_SIZE - 1).sp)

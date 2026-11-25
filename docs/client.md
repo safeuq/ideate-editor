@@ -238,3 +238,5 @@ When a connection starts (a link, a history entry, a Termux project or an SSH pr
 ## Addendum (2026-11-25): window title
 
 Where the app draws the title bar itself (macOS windowed mode, Android desktop windowing), the connections window's title strip shows "Ideate", centred, in `JBFont.label()` with `Label.foreground`, like the macOS title of IntelliJ's welcome frame (the Islands themes set no `TitlePane.foreground`). `TitleBarSpacer(title)` in `ui/TitleBar.kt` only draws the text, so the strip still drags the window. In macOS full screen nothing is added. The editor window keeps its main toolbar.
+
+Update (same day): the title now uses the tool window header title's style (`ClientFonts.toolWindowTitle()`: `JBFont.label()` at `ToolWindow.Header`'s font size, semibold, `Label.foreground`), the same style as "Project" in the Project tool window, so it stands out more.
