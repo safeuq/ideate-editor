@@ -997,7 +997,7 @@ class ConnectController(
             Termux.EXIT_SETTINGS_IN_USE ->
               fail(
                 output.stderr.trim().ifEmpty {
-                  "Another IntelliJ in Termux is using the same settings. Stop it first (intellij-backend stop)."
+                  "Another IntelliJ process is using the same settings, so a backend can't start. Close it, then try again."
                 },
               )
             else ->

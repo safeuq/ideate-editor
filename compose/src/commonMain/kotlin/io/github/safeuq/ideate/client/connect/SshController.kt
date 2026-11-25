@@ -747,8 +747,8 @@ class SshController(
    */
   private fun launchFailureMessage(failure: LaunchFailure, ideName: String) =
     if (failure.settingsInUse)
-      "$ideName is already open there with the same settings, so it can't start a backend. " +
-        "Quit it, then open the project again."
+      "Another $ideName process is using the same settings, so a backend can't start. " +
+        "Close it, then try again."
     else
       "The IDE Backend stopped before it was ready" +
         (failure.exitCode?.let { " (exit code $it)" } ?: "") +

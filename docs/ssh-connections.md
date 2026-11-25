@@ -725,3 +725,12 @@ The first connection kind is now labelled "This device" on both platforms, in pl
 (`ideate/phone.svg`) on Android, `expui/nodes/desktop.svg` on the desktop. New Termux history
 entries are named like `This device · smoke`; entries saved earlier keep their old names, such as
 `This phone · smoke`.
+
+## Addendum (2026-11-25): generic settings-in-use message
+
+The settings-in-use message no longer names the desktop IDE. The process holding the same settings folders can be any other process of that IDE (the desktop IDE, another backend), so the message only says that. The new texts:
+
+- SSH launch (`SshController.launchFailureMessage`): "Another $ideName process is using the same settings, so a backend can't start. Close it, then try again."
+- Termux, exit code 4 with empty stderr (`ConnectController`): "Another IntelliJ process is using the same settings, so a backend can't start. Close it, then try again."
+
+The check itself is unchanged: `HostData.launchFailure` still looks for `requires Remote Development backend` in the launch output.
