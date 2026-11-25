@@ -23,6 +23,7 @@ import io.github.safeuq.ideate.client.desktop.DesktopOpenSshFiles
 import io.github.safeuq.ideate.client.desktop.DesktopResources
 import io.github.safeuq.ideate.client.desktop.FileSecretStore
 import io.github.safeuq.ideate.client.desktop.IdeateLocals
+import io.github.safeuq.ideate.client.desktop.LocalShell
 import io.github.safeuq.ideate.client.desktop.MacFullScreenControlsManager
 import io.github.safeuq.ideate.client.desktop.Snapshots
 import io.github.safeuq.ideate.client.session.JetBrainsWorkspace
@@ -122,6 +123,10 @@ fun main(arguments: Array<String>) {
           deviceName =
             runCatching { java.net.InetAddress.getLocalHost().hostName.substringBefore('.') }
               .getOrDefault("desktop"),
+          // This device page: the same scripts, run by this computer's /bin/sh (none on Windows).
+          localHost =
+            if (File("/bin/sh").canExecute()) ({ RemoteHosts.forCommands(LocalShell::run) })
+            else null,
         ),
     )
   arguments.firstOrNull()?.let { link -> controller.connectLink(link, arguments.getOrNull(1)) }

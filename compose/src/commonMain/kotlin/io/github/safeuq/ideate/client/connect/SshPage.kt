@@ -78,71 +78,8 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
     state.hosts.forEachIndexed { index, host ->
       if (index > 0)
         Box(Modifier.padding(top = 12.dp).fillMaxWidth().height(1.dp).background(Gateway.divider))
-      val reachable = host.phase == SshHostView.Phase.READY
-      val (status, color) =
-        when (host.phase) {
-          SshHostView.Phase.CONNECTING -> "Connecting…" to Islands.textSecondary
-          SshHostView.Phase.READY -> null to Islands.textSecondary
-          SshHostView.Phase.UNREACHABLE -> "Host unreachable" to Gateway.error
-          SshHostView.Phase.AUTHENTICATE -> "Authenticate…" to Islands.link
-        }
-      HostGroup(
-        host.entry.name,
-        styles,
-        icons =
-          buildList {
-            if (host.phase == SshHostView.Phase.UNREACHABLE) {
-              add(
-                HeaderIcon("expui/general/refresh.svg", "Reconnect") {
-                  actions.reconnect(host.entry)
-                },
-              )
-            }
-            add(
-              HeaderIcon("expui/general/add.svg", "Open Project") {
-                actions.newProjectOn(host.entry)
-              },
-            )
-          },
-        menu =
-          listOf(
-            MenuItem("Reconnect") { actions.reconnect(host.entry) },
-            MenuItem("Open Project") { actions.newProjectOn(host.entry) },
-            MenuItem("Remove Host") { actions.removeHost(host.entry) },
-          ),
-        status = status,
-        statusColor = color,
-        onStatusClick =
-          when {
-            host.phase == SshHostView.Phase.AUTHENTICATE -> ({
-                actions.authenticateHost(host.entry)
-              })
-            host.phase == SshHostView.Phase.UNREACHABLE && host.error != null -> ({
-                shownError = host
-              })
-            else -> null
-          },
-      )
-      val projects =
-        host.projects.filter {
-          search.isBlank() || it.projectPath.contains(search.trim(), ignoreCase = true)
-        }
-      if (reachable && host.projects.isEmpty())
-        Notice("Projects will appear after the first connection…", styles)
-      projects.forEach { project ->
-        ProjectRowView(
-          ProjectRow(
-            title = project.projectPath,
-            running = project.running,
-            lastActive = project.dateLastOpened,
-            onOpen = { actions.openProject(host.entry, project) },
-            onStop = if (project.running) ({ actions.stopProject(host.entry, project) }) else null,
-            onRemove = { actions.removeRecent(host.entry, project) },
-            enabled = reachable,
-            middleEllipsis = true,
-          ),
-          styles,
-        )
+      HostSection(host, host.entry.name, removable = true, search, actions, styles) {
+        shownError = it
       }
     }
   }
@@ -152,6 +89,88 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
     ) {
       shownError = null
     }
+  }
+}
+
+/**
+ * One host's group, its state and menu, and its recent projects: a host on the SSH page, or this
+ * computer on the desktop's This device page ([removable] false: no Remove Host).
+ */
+@Composable
+internal fun HostSection(
+  host: SshHostView,
+  title: String,
+  removable: Boolean,
+  search: String,
+  actions: SshActions,
+  styles: ConnectStyles,
+  onShowError: (SshHostView) -> Unit,
+) {
+  val reachable = host.phase == SshHostView.Phase.READY
+  val (status, color) =
+    when (host.phase) {
+      SshHostView.Phase.CONNECTING -> "Connecting…" to Islands.textSecondary
+      SshHostView.Phase.READY -> null to Islands.textSecondary
+      SshHostView.Phase.UNREACHABLE -> "Host unreachable" to Gateway.error
+      SshHostView.Phase.AUTHENTICATE -> "Authenticate…" to Islands.link
+    }
+  HostGroup(
+    title,
+    styles,
+    icons =
+      buildList {
+        if (host.phase == SshHostView.Phase.UNREACHABLE) {
+          add(
+            HeaderIcon("expui/general/refresh.svg", "Reconnect") {
+              actions.reconnect(host.entry)
+            },
+          )
+        }
+        add(
+          HeaderIcon("expui/general/add.svg", "Open Project") {
+            actions.newProjectOn(host.entry)
+          },
+        )
+      },
+    menu =
+      listOfNotNull(
+        MenuItem("Reconnect") { actions.reconnect(host.entry) },
+        MenuItem("Open Project") { actions.newProjectOn(host.entry) },
+        if (removable) MenuItem("Remove Host") { actions.removeHost(host.entry) } else null,
+      ),
+    status = status,
+    statusColor = color,
+    onStatusClick =
+      when {
+        host.phase == SshHostView.Phase.AUTHENTICATE -> ({
+            actions.authenticateHost(host.entry)
+          })
+        host.phase == SshHostView.Phase.UNREACHABLE && host.error != null -> ({
+            onShowError(host)
+          })
+        else -> null
+      },
+  )
+  val projects =
+    host.projects.filter {
+      search.isBlank() || it.projectPath.contains(search.trim(), ignoreCase = true)
+    }
+  if (reachable && host.projects.isEmpty())
+    Notice("Projects will appear after the first connection…", styles)
+  projects.forEach { project ->
+    ProjectRowView(
+      ProjectRow(
+        title = project.projectPath,
+        running = project.running,
+        lastActive = project.dateLastOpened,
+        onOpen = { actions.openProject(host.entry, project) },
+        onStop = if (project.running) ({ actions.stopProject(host.entry, project) }) else null,
+        onRemove = { actions.removeRecent(host.entry, project) },
+        enabled = reachable,
+        middleEllipsis = true,
+      ),
+      styles,
+    )
   }
 }
 
@@ -358,7 +377,10 @@ private fun ChooseIdeDialog(
     onCancel = actions.cancelDialog,
     error = dialog.error,
   ) {
-    BasicText(dialog.host.name, style = fonts.label(Islands.textSecondary))
+    BasicText(
+      if (dialog.host.id == LOCAL_HOST_ID) THIS_DEVICE else dialog.host.name,
+      style = fonts.label(Islands.textSecondary),
+    )
     BasicText("IDE version:", style = fonts.label())
     dialog.ides.forEach { ide ->
       RadioButtonRow(

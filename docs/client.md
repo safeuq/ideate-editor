@@ -240,3 +240,10 @@ When a connection starts (a link, a history entry, a Termux project or an SSH pr
 Where the app draws the title bar itself (macOS windowed mode, Android desktop windowing), the connections window's title strip shows "Ideate", centred, in `JBFont.label()` with `Label.foreground`, like the macOS title of IntelliJ's welcome frame (the Islands themes set no `TitlePane.foreground`). `TitleBarSpacer(title)` in `ui/TitleBar.kt` only draws the text, so the strip still drags the window. In macOS full screen nothing is added. The editor window keeps its main toolbar.
 
 Update (same day): the title now uses the tool window header title's style (`ClientFonts.toolWindowTitle()`: `JBFont.label()` at `ToolWindow.Header`'s font size, semibold, `Label.foreground`), the same style as "Project" in the Project tool window, so it stands out more.
+
+## Addendum (2026-11-25): This device page on the desktop
+
+Connections: on the desktop (macOS and Linux) the **This device** page lists this computer's IDE projects, the same
+way the SSH page lists a host's: "Recent Projects" with New Project (Choose IDE and folder browser), search, then one
+**This device** group. Opening a project uses the backend's link without a port forward; **Running** rows have the
+stop square. Windows keeps the old page with "Use SSH or Link." ([`local-backends.md`](local-backends.md)).

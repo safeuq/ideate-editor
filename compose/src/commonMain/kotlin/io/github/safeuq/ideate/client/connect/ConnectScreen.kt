@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +59,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 /** The first page's label on both platforms. */
 const val THIS_DEVICE = "This device"
@@ -387,6 +389,9 @@ private fun PhonePage(
   styles: ConnectStyles,
   onNewProject: () -> Unit,
 ) {
+  val local = state.ssh.local
+  val ssh = actions.ssh
+  if (state.termux == null && local != null && ssh != null) return LocalPage(local, ssh, styles)
   var search by remember { mutableStateOf("") }
   // Shown once each time the page opens or the access changes, not on every recomposition.
   var termuxDismissed by remember(state.termux) { mutableStateOf(false) }
@@ -480,14 +485,43 @@ private fun PhonePage(
         when {
           search.isNotBlank() -> "No projects"
           termuxReady -> "No recent projects. Tap New Project to start a backend in Termux."
-          state.termux == null ->
-            "Listing this computer's projects isn't built yet. Use SSH or Link."
+          state.termux == null -> "Use SSH or Link."
           else -> "No projects"
         },
         styles,
       )
     }
     rows.forEach { ProjectRowView(it, styles) }
+  }
+}
+
+/**
+ * The desktop's This device page: this computer's IDE projects, as the SSH page shows a host's
+ * (docs/local-backends.md). Polled like the SSH page, every 10 s.
+ */
+@Composable
+private fun LocalPage(local: SshHostView, actions: SshActions, styles: ConnectStyles) {
+  var search by remember { mutableStateOf("") }
+  var shownError by remember { mutableStateOf<SshHostView?>(null) }
+  LaunchedEffect(Unit) {
+    while (true) {
+      actions.reconnect(localEntry)
+      delay(10_000)
+    }
+  }
+  Header("Recent Projects", styles) {
+    OutlinedButton("New Project", onClick = { actions.newProjectOn(localEntry) })
+  }
+  SearchRow(search, { search = it }, styles)
+  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    HostSection(local, THIS_DEVICE, removable = false, search, actions, styles) {
+      shownError = it
+    }
+  }
+  shownError?.let { host ->
+    MessageDialogOk(ConnectMessage(host.error.orEmpty(), MessageKind.ERROR, title = THIS_DEVICE)) {
+      shownError = null
+    }
   }
 }
 

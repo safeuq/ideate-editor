@@ -11,7 +11,8 @@ object RemoteHosts {
    */
   fun forSession(session: SshSession): RemoteHost = forCommands(session::execInLoginShell)
 
-  internal fun forCommands(run: (String) -> ExecResult): RemoteHost {
+  /** The same, for commands run some other way: this computer's `/bin/sh` (desktop LocalShell). */
+  fun forCommands(run: (String) -> ExecResult): RemoteHost {
     // One login shell for all of it: the OS, the RemoteDev folder and the worker (each login shell
     // costs about 0.3 to 2 s on a phone).
     val probe = ShellHost.records(run("sh -c ${shellQuote(PROBE)}"))

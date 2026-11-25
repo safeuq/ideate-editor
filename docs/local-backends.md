@@ -238,3 +238,40 @@ Real data on this Mac (scripts run read-only against the real home, 2026-11-25):
 | `recentProjects.xml` files | `CLion2024.3` (2 entries), `GoLand2025.1` (2), `IntelliJIdea2026.2` (50, skipped: older), `IntelliJIdea2026.3` (50), `PyCharm2024.3` (5) |
 | Folders gone | CLion 1, GoLand 2, IntelliJIdea2026.3 8, PyCharm 5 (all of GoLand's and PyCharm's) |
 | Rows after the merge | 69: 68 open in IntelliJ IDEA, 1 in CLion; none running |
+
+## Addendum (2026-11-25): This device page built
+
+What was built (items 1 to 4 and 8 of the build plan above):
+
+- **1. `LocalShell`** (`desktop/.../desktop/LocalShell.kt`): runs `/bin/sh -c <command>` with `ProcessBuilder`,
+  reads stderr on its own thread, returns `ExecResult`. `Main.kt` passes `localHost = { RemoteHosts.forCommands(LocalShell::run) }`
+  when `/bin/sh` can run, else null. `RemoteHosts.forCommands` was `internal` to the compose module and is now public,
+  so the desktop module can call it.
+- **2. `SshSetup.localHost`, `SshController`.** `LOCAL_HOST_ID` and `localEntry` are top-level in `SshController.kt`
+  (not members), so the page can pass `localEntry` to `newProjectOn` and `reconnect`. `remoteFor` caches the local
+  `RemoteHost` in `remotes`; `SshPageState.local` holds its view; `refresh()` and `refreshReachable()` include it;
+  `openProject` skips the forward and names the host `This device` in the progress popup, in error messages and in
+  `connect`. The Choose IDE dialog and the "No IDE backend is installed on …" message also say `This device`.
+- **3. `HostSection`** in `SshPage.kt`: the host group and its rows. `removable = false` drops Remove Host. Reconnect
+  stays in the menu for this computer: it refreshes the list.
+- **4. Desktop This device page** (`ConnectScreen.kt`, `LocalPage`): "Recent Projects" with New Project, the search
+  row, then `HostSection(local, This device, removable = false)`. It refreshes this computer every 10 s with
+  `reconnect(localEntry)` (no SSH host is touched). Without a local host (Windows) the old page stays with the
+  notice "Use SSH or Link."; Android is unchanged.
+
+Live check on this Mac (IntelliJ IDEA 2026.3 open), 2026-11-25:
+
+| Check | Result |
+|---|---|
+| Page lists projects | about 69 rows, newest first (e.g. `scratchpad/tb/proj` 9 minutes ago, then `bankgateway`, `xtool`, …; oldest `RESTest` 6/20/25) |
+| Open `RESTest` (IntelliJ IDEA) | "This device: Another IntelliJ IDEA process is using the same settings, so a backend can't start. Close it, then try again." No `remote-dev-server` process left. |
+| New Project → Choose IDE | IntelliJ IDEA 2026.3, CLion 2024.3, GoLand 2025.1.2, PyCharm 2024.3 |
+| PyCharm, `scratchpad/device-proj` | The open flow showed "remote-dev-server.sh status failed (exit 3): Problems found loading plugins: Open Policy Agent … requires build 242.* or older", but the backend kept starting and the row then showed **Running** with the red stop square. |
+| Open the running PyCharm row | Link used as is (`127.0.0.1`, no forward), TLS fingerprint matched, PIN shown, then `Couldn't connect: java.io.EOFException: Unexpected end of ZLIB input stream` (PyCharm 243 backend with this 263 client; not this page). |
+| Stop | the backend exited (no `remote-dev-server` process), the row went back to "Last active: 2 minutes ago" |
+
+Not done or open:
+
+- `status` failing with exit 3 because of a plugin warning ends the open flow with an error while the backend keeps
+  starting. Same code as the SSH page; not changed here.
+- Rows show no IDE name (the existing `ProjectRowView` has none).

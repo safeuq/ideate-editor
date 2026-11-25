@@ -64,7 +64,18 @@ class SshSetup(
   val remoteHostFor: (SshSession) -> RemoteHost,
   /** Ends Ideate's public key line, like ssh-keygen's user@host: `Pixel 3a`, `safeuq-mac`. */
   val deviceName: String,
+  /**
+   * This computer as a host, for the desktop's This device page: the same scripts run by the local
+   * `/bin/sh` (docs/local-backends.md). Null where there is none (Windows, Android).
+   */
+  val localHost: (() -> RemoteHost)? = null,
 )
+
+/** [localEntry]'s id: this computer, reached without SSH. */
+const val LOCAL_HOST_ID = "local"
+
+/** This computer as a host entry. Never saved to `ssh-hosts.json`. */
+val localEntry = SshHostEntry(LOCAL_HOST_ID, "localhost", 0, "", LoginMethod.GENERATED_KEY)
 
 /** A host's line in the SSH page, like Gateway's host panel. */
 data class SshHostView(
@@ -136,6 +147,8 @@ data class SshProgress(val title: String, val detail: String)
 
 data class SshPageState(
   val hosts: List<SshHostView> = emptyList(),
+  /** This computer, for the This device page; null without [SshSetup.localHost]. Not in [hosts]. */
+  val local: SshHostView? = null,
   val dialog: SshDialog? = null,
   val progress: SshProgress? = null,
   /** Host key questions, worded like IntelliJ's SshBundle. */
@@ -253,17 +266,23 @@ class SshController(
 
   init {
     state =
-      state.copy(hosts = hosts.entries().map { SshHostView(it, SshHostView.Phase.CONNECTING) })
+      state.copy(
+        hosts = hosts.entries().map { SshHostView(it, SshHostView.Phase.CONNECTING) },
+        local = setup.localHost?.let { SshHostView(localEntry, SshHostView.Phase.CONNECTING) },
+      )
   }
 
   /**
    * Gateway refreshes every 10 s while the page shows (30 s for unreachable hosts); see SshPage.
    */
-  fun refresh() = hosts.entries().forEach { refreshHost(it, forceReconnect = false) }
+  fun refresh() {
+    hosts.entries().forEach { refreshHost(it, forceReconnect = false) }
+    if (setup.localHost != null) refreshHost(localEntry, forceReconnect = false)
+  }
 
   /** Unreachable hosts are retried less often, like Gateway's 30 s. */
   fun refreshReachable() =
-    state.hosts
+    (state.hosts + listOfNotNull(state.local))
       .filter { it.phase != SshHostView.Phase.UNREACHABLE }
       .forEach { refreshHost(it.entry, false) }
 
@@ -320,6 +339,10 @@ class SshController(
    * The host's session and RemoteHost, connecting and logging in when needed. Background thread.
    */
   private fun remoteFor(entry: SshHostEntry, typed: String? = null): RemoteHost {
+    if (entry.id == LOCAL_HOST_ID) {
+      val localHost = checkNotNull(setup.localHost) { "No local host on this platform" }
+      return remotes.getOrPut(LOCAL_HOST_ID, localHost)
+    }
     val existing = sessions[entry.id]
     if (existing != null && existing.isConnected)
       remotes[entry.id]?.let {
@@ -332,6 +355,11 @@ class SshController(
   }
 
   private fun setHost(entry: SshHostEntry, change: (SshHostView) -> SshHostView) {
+    if (entry.id == LOCAL_HOST_ID) {
+      state =
+        state.copy(local = change(state.local ?: SshHostView(entry, SshHostView.Phase.CONNECTING)))
+      return
+    }
     val current =
       state.hosts.firstOrNull { it.entry.id == entry.id }
         ?: SshHostView(entry, SshHostView.Phase.CONNECTING)
@@ -615,7 +643,7 @@ class SshController(
             root = root,
             error =
               if (ides.isEmpty())
-                "No IDE backend is installed on ${entry.name}. Register one with remote-dev-server.sh registerBackendLocationForGateway."
+                "No IDE backend is installed on ${if (entry.id == LOCAL_HOST_ID) THIS_DEVICE else entry.name}. Register one with remote-dev-server.sh registerBackendLocationForGateway."
               else null,
           ),
       )
@@ -678,20 +706,21 @@ class SshController(
   private fun openProject(entry: SshHostEntry, idePath: String, projectPath: String) {
     val run = ++openRun
     val name = projectPath.trimEnd('/').substringAfterLast('/')
+    val isLocal = entry.id == LOCAL_HOST_ID
+    val hostName = if (isLocal) THIS_DEVICE else entry.name
     val ideName =
-      state.hosts
+      (state.hosts + listOfNotNull(state.local))
         .firstOrNull { it.entry.id == entry.id }
         ?.ides
         ?.firstOrNull { it.idePath == idePath }
         ?.name ?: "The IDE"
     state =
       state.copy(
-        progress = SshProgress("Connecting to the IDE Backend", "$name on ${entry.name}"),
+        progress = SshProgress("Connecting to the IDE Backend", "$name on $hostName"),
         message = null,
       )
     fun progress(title: String) = main.launch {
-      if (run == openRun)
-        state = state.copy(progress = SshProgress(title, "$name on ${entry.name}"))
+      if (run == openRun) state = state.copy(progress = SshProgress(title, "$name on $hostName"))
     }
     work.execute {
       val result = runCatching {
@@ -739,6 +768,8 @@ class SshController(
             status.projects.firstOrNull { it.projectPath == projectPath }?.controllerConnected ==
               true
         if (otherClient && !ask(TAKE_OVER, "Take over")) return@runCatching null
+        // This computer's backend already listens on 127.0.0.1: its link is used as is.
+        if (isLocal) return@runCatching link
         progress("Performing the SSH port forwarding")
         val joinLink = JoinLink.parse(link)
         val forward = sessions.getValue(entry.id).forward(joinLink.port)
@@ -751,11 +782,11 @@ class SshController(
         state = state.copy(progress = null)
         result.fold(
           // null: the user kept the other client's session.
-          onSuccess = { local -> local?.let { connect(it, projectPath, entry.name) } },
+          onSuccess = { local -> local?.let { connect(it, projectPath, hostName) } },
           onFailure = { failure ->
             state =
               state.copy(
-                message = ConnectMessage("${entry.name}: ${failure.message}", MessageKind.ERROR),
+                message = ConnectMessage("$hostName: ${failure.message}", MessageKind.ERROR),
               )
           },
         )
