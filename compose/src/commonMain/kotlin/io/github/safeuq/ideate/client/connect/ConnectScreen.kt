@@ -59,10 +59,11 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
+/** The first page's label on both platforms. */
+const val THIS_DEVICE = "This device"
+
 /** What the connect screen shows; [ConnectController] owns it. */
 data class ConnectScreenState(
-  /** `This phone` or `This computer`: the first page's label. */
-  val device: String,
   val page: ConnectPage,
   val link: String,
   val file: String,
@@ -180,12 +181,12 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
       Column(Modifier.fillMaxSize()) {
         Page(Modifier.weight(1f).fillMaxWidth())
         Box(Modifier.fillMaxWidth().height(1.dp).background(Gateway.divider))
-        BottomTabs(state.device, state.page, actions.pageChanged, styles)
+        BottomTabs(state.termux != null, state.page, actions.pageChanged, styles)
       }
     } else {
       Row(Modifier.fillMaxSize()) {
         Sidebar(
-          state.device,
+          state.termux != null,
           state.page,
           actions.pageChanged,
           styles,
@@ -272,7 +273,7 @@ private fun BackendQuestionDialog(question: Question, actions: ConnectActions) {
  */
 @Composable
 private fun BottomTabs(
-  device: String,
+  phone: Boolean,
   page: ConnectPage,
   onSelect: (ConnectPage) -> Unit,
   styles: ConnectStyles,
@@ -281,7 +282,7 @@ private fun BottomTabs(
     Modifier.fillMaxWidth().height(Gateway.tabBarHeight).padding(horizontal = 4.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    pages(device).forEach { (target, iconPath, label) ->
+    pages(phone).forEach { (target, iconPath, label) ->
       val icon = LocalIcons.current.painter(iconPath)
       Row(
         Modifier.weight(1f)
@@ -304,14 +305,15 @@ private fun BottomTabs(
 
 /**
  * The connection kinds: page, icon, label. SSH takes Gateway's `ssh.svg`; this device gets a phone
- * (IntelliJ has none, so it's inlined in IconJar) or the platform's desktop icon.
+ * (IntelliJ has none, so it's inlined in IconJar) on Android ([phone]: Termux is there), else the
+ * platform's desktop icon.
  */
-private fun pages(device: String) =
+private fun pages(phone: Boolean) =
   listOf(
     Triple(
       ConnectPage.PHONE,
-      if (device == "This phone") "ideate/phone.svg" else "expui/nodes/desktop.svg",
-      device,
+      if (phone) "ideate/phone.svg" else "expui/nodes/desktop.svg",
+      THIS_DEVICE,
     ),
     Triple(ConnectPage.SSH, "expui/nodes/ssh.svg", "SSH"),
     Triple(ConnectPage.LINK, "markdown/link.svg", "Link"),
@@ -319,7 +321,7 @@ private fun pages(device: String) =
 
 @Composable
 private fun Sidebar(
-  device: String,
+  phone: Boolean,
   page: ConnectPage,
   onSelect: (ConnectPage) -> Unit,
   styles: ConnectStyles,
@@ -353,8 +355,8 @@ private fun Sidebar(
     ) {
       BasicText("Connections", style = styles.secondary)
     }
-    val (phone, ssh, link) = pages(device)
-    Item(phone.first, phone.second, phone.third)
+    val (device, ssh, link) = pages(phone)
+    Item(device.first, device.second, device.third)
     Item(ssh.first, ssh.second, ssh.third)
     Box(Modifier.padding(vertical = 7.dp).fillMaxWidth().height(1.dp).background(Gateway.divider))
     Item(link.first, link.second, link.third)
@@ -390,7 +392,7 @@ private fun PhonePage(
   var termuxDismissed by remember(state.termux) { mutableStateOf(false) }
   val termuxReady = state.termux == TermuxAccess.READY
   Header(
-    if (state.termux != null) "Recent Termux Projects" else "Backends on ${state.device}",
+    if (state.termux != null) "Recent Termux Projects" else "Backends on $THIS_DEVICE",
     styles,
   ) {
     if (termuxReady) OutlinedButton("New Project", onClick = onNewProject)
@@ -465,7 +467,7 @@ private fun PhonePage(
     }
       .filter { search.isBlank() || it.title.contains(search.trim(), ignoreCase = true) }
     HostGroup(
-      state.device,
+      THIS_DEVICE,
       styles,
       icons =
         buildList {

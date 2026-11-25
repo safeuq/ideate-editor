@@ -305,3 +305,11 @@ Checked live at 420 × 800 dp with alpha: mid-swipe from the editor to Project, 
 header's hide button stands 19 dp from the page's right edge, the same as at rest; with
 Structure opened under Project, both islands are inset by the gap and rounded at rest. Not
 checked: a held drag (the window tool's `drag` lifts at once) and a phone.
+
+## Addendum (2026-11-25): This device
+
+The first connection kind is now labelled "This device" on both platforms, in place of "This phone"
+(Android) and "This computer" (desktop). Its icon still follows the platform: the phone outline
+(`ideate/phone.svg`) on Android, `expui/nodes/desktop.svg` on the desktop. New Termux history
+entries are named like `This device · smoke`; entries saved earlier keep their old names, such as
+`This phone · smoke`.

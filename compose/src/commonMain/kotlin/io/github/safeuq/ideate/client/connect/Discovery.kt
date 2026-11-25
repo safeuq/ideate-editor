@@ -6,7 +6,7 @@ package io.github.safeuq.ideate.client.connect
  * history.
  */
 data class DiscoveredBackend(
-  /** For example `This phone · smoke`. */
+  /** For example `This device · smoke`. */
   val name: String,
   val port: Int,
   /** Project path from `status --json`, e.g. `/data/data/com.termux/files/home/intellij/smoke`. */

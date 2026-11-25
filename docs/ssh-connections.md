@@ -717,3 +717,11 @@ stayed), opening the SSH page logged `Termux read ~/.ssh/agent-bridge: 95 ms`, `
 intellij-backend ssh-agent start took 1538 ms`, `Termux read ~/.ssh/agent-bridge: 95 ms`, `Termux
 agent bridge: connected in 99 ms`, `SSH log-in with Agent succeeded`; afterwards the agent held the
 one key.
+
+## Addendum (2026-11-25): This device
+
+The first connection kind is now labelled "This device" on both platforms, in place of "This phone"
+(Android) and "This computer" (desktop). Its icon still follows the platform: the phone outline
+(`ideate/phone.svg`) on Android, `expui/nodes/desktop.svg` on the desktop. New Termux history
+entries are named like `This device · smoke`; entries saved earlier keep their old names, such as
+`This phone · smoke`.

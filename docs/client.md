@@ -222,3 +222,11 @@ The "This computer / This phone" Connections row no longer scans ports 5990 to 5
 The desktop page stays empty until step 4 of docs/local-backends.md is built. The phone page shows
 the projects Termux reports (from `intellij-backend status --json`) and Termux history only. A
 backend started by hand is reached with Link.
+
+## Addendum (2026-11-25): This device
+
+The first connection kind is now labelled "This device" on both platforms, in place of "This phone"
+(Android) and "This computer" (desktop). Its icon still follows the platform: the phone outline
+(`ideate/phone.svg`) on Android, `expui/nodes/desktop.svg` on the desktop. New Termux history
+entries are named like `This device · smoke`; entries saved earlier keep their old names, such as
+`This phone · smoke`.

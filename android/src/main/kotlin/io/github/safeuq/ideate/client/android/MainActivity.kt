@@ -84,7 +84,6 @@ class MainActivity : ComponentActivity() {
             JetBrainsWorkspace(emptyList(), filesDir.resolve("jetbrains")),
           ),
         termux = termux,
-        device = "This phone",
         savedSession = preferenceText("connection", "savedSession"),
         ssh =
           SshSetup(

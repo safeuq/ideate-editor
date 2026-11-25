@@ -67,7 +67,6 @@ import kotlinx.serialization.json.jsonPrimitive
  * this device, history (docs/connections.md in safeuq/intellij-backend-android), then the session.
  * State is Compose state, changed on the main thread only.
  *
- * @param device the first page's label, `This phone` or `This computer`
  * @param termux null where there is no Termux (the desktop)
  * @param ssh what the SSH page needs from the platform; null hides the page
  */
@@ -79,7 +78,6 @@ class ConnectController(
   /** Each project's open editors, reopened on the next connection. */
   private val openEditors: OpenEditors,
   private val termux: Termux?,
-  private val device: String,
   /**
    * The screen as it was when the app went to the background, for a start after Android ended the
    * process (docs/android-app.md, "Addendum (2026-11-23)"); null keeps none (the desktop).
@@ -263,7 +261,6 @@ class ConnectController(
 
   fun screenState() =
     ConnectScreenState(
-      device,
       page,
       link,
       file,
@@ -440,7 +437,7 @@ class ConnectController(
   internal val isAccepted: Boolean
     get() = accepted
 
-  private fun requireTermux(): Termux = checkNotNull(termux) { "No Termux on $device" }
+  private fun requireTermux(): Termux = checkNotNull(termux) { "No Termux on $THIS_DEVICE" }
 
   // ---- Connecting ----
 
@@ -646,7 +643,7 @@ class ConnectController(
     val previous = saved.firstOrNull { it.key == keyOf(current) }
     val name =
       when (current.kind) {
-        ConnectionKind.TERMUX -> "$device · ${current.project?.substringAfterLast('/')}"
+        ConnectionKind.TERMUX -> "$THIS_DEVICE · ${current.project?.substringAfterLast('/')}"
         ConnectionKind.LINK,
         ConnectionKind.SSH -> previous?.name ?: "${current.link.host}:${current.link.port}"
       }
@@ -1101,7 +1098,7 @@ class ConnectController(
               val backends =
                 openProjects(status).map { project ->
                   DiscoveredBackend(
-                    "$device · ${project.substringAfterLast('/')}",
+                    "$THIS_DEVICE · ${project.substringAfterLast('/')}",
                     port,
                     project,
                     joinLink,

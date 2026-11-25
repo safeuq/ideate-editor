@@ -111,7 +111,6 @@ fun main(arguments: Array<String>) {
           jetBrainsWorkspace(dataFolder),
         ),
       termux = null,
-      device = "This computer",
       ssh =
         SshSetup(
           hosts = FileText(dataFolder.resolve("ssh-hosts.json")),

@@ -30,7 +30,10 @@ enum class ConnectionKind {
  */
 data class SavedConnection(
   val kind: ConnectionKind,
-  /** For example `192.168.0.105:5990`, or `This phone · smoke` for Termux. */
+  /**
+   * For example `192.168.0.105:5990`, or `This device · smoke` for Termux (older entries keep `This
+   * phone · smoke`).
+   */
   val name: String,
   val host: String,
   val port: Int,
