@@ -89,14 +89,20 @@ fun HelpTooltip(
 // layer-2-bg = gray-40, ToolTip.foreground = text-default, ToolTip.shortcutForeground = text-muted.
 // No shadow yet (IntelliJ draws one).
 @Composable
-private fun TooltipPanel(title: String, shortcut: String?) {
+private fun TooltipPanel(title: String, shortcut: String?) =
+  TooltipPanel(
+    buildAnnotatedString {
+      append(title)
+      // HelpTooltip.getShortcutAsHtml: two spaces, then the shortcut in the muted colour.
+      if (shortcut != null)
+        withStyle(SpanStyle(color = Islands.tooltipShortcut)) { append("  $shortcut") }
+    },
+  )
+
+/** The tooltip's box around [text], for tooltips that are not tied to one component. */
+@Composable
+fun TooltipPanel(text: AnnotatedString) {
   val shape = RoundedCornerShape(4.dp)
-  val text: AnnotatedString = buildAnnotatedString {
-    append(title)
-    // HelpTooltip.getShortcutAsHtml: two spaces, then the shortcut in the muted colour.
-    if (shortcut != null)
-      withStyle(SpanStyle(color = Islands.tooltipShortcut)) { append("  $shortcut") }
-  }
   Box(
     Modifier.clip(shape)
       .background(Islands.tooltipBackground)

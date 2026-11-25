@@ -1112,3 +1112,20 @@ line 7. Before the severity rule, only the identifier under the caret had a mark
 Not done: a click on a mark (IntelliJ goes to the nearest highlighter), the hover preview, and
 `HighlightInfo.suppressOnErrorStripe`, which is read but not applied. Spots are painted in layer
 order instead of merged first; the result differs only for see-through colors.
+
+## Addendum (2026-11-26, 00:05 IST): a problem's text when the pointer rests on it
+
+In the editor, a mouse pointer resting 500 ms (`EditorSettingsExternalizable.tooltipsDelay`) on a
+range that has a problem shows the problem's text in a tooltip box under that line, at the pointer's
+x. The text is `HighlightInfo.toolTip` (HTML, through `htmlText`), else `description`. Code:
+`ProblemsView.problemAt` (`session/ProblemsView.kt`), `hovered` / `hoverShown` in
+`ui/EditorView.kt`, the box is `TooltipPanel` (`ui/component/HelpTooltip.kt`).
+
+Seen live: the pointer on `Strin` shows `Cannot resolve symbol 'Strin'`, 10 dp under the line's
+bottom edge at the pointer's x (window point 510, 185 for a pointer at 510, 175).
+
+Differences from IntelliJ, still open. IntelliJ's hover (`EditorMouseHoverPopupManager`) is a
+larger popup: every problem at the offset, most severe first, a row with the first quick fix and
+"More actions…", and the documentation of the symbol below. Ideate shows one problem's text (the
+most severe) in the small tooltip box, with no actions. The look of IntelliJ's popup was not
+compared side by side. Touch has no hover, so nothing shows on a phone.

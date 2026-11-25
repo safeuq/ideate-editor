@@ -85,10 +85,13 @@ import io.github.safeuq.ideate.client.session.Highlight
 import io.github.safeuq.ideate.client.session.IndentGuide
 import io.github.safeuq.ideate.client.session.Lookup
 import io.github.safeuq.ideate.client.session.LookupKey
+import io.github.safeuq.ideate.client.session.ProblemsView
 import io.github.safeuq.ideate.client.session.TextEffect
 import io.github.safeuq.ideate.client.session.UsagesPopup
 import io.github.safeuq.ideate.client.ui.component.AppPopup
 import io.github.safeuq.ideate.client.ui.component.PopupPlacement
+import io.github.safeuq.ideate.client.ui.component.TooltipPanel
+import io.github.safeuq.ideate.client.ui.component.htmlText
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import kotlin.math.ceil
@@ -98,6 +101,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+
+/**
+ * `EditorSettingsExternalizable.tooltipsDelay`: how long the pointer rests before a problem's text
+ * shows.
+ */
+private const val TOOLTIP_DELAY_MS = 500L
 
 /** Where each line starts; line i is text[starts[i] until end(i)], without its line break. */
 private class Lines(val text: String) {
@@ -260,6 +269,16 @@ fun EditorView(
   var link by remember(file.path, file.text) { mutableStateOf<IntRange?>(null) }
   // The mouse over the gutter: IntelliJ shows the arrow there and the I-beam over the text.
   var overGutter by remember { mutableStateOf(false) }
+  // The problem under the resting mouse pointer and where the pointer is; shown after
+  // TOOLTIP_DELAY_MS.
+  var hovered by remember(file.path) { mutableStateOf<Pair<Highlight, Offset>?>(null) }
+  var hoverShown by remember(file.path) { mutableStateOf<Pair<Highlight, Offset>?>(null) }
+  LaunchedEffect(hovered?.first?.id) {
+    hoverShown = null
+    val resting = hovered ?: return@LaunchedEffect
+    delay(TOOLTIP_DELAY_MS)
+    hoverShown = resting
+  }
   val linkStyle =
     remember(scheme) {
       scheme.style(listOf(listOf("CTRL_CLICKABLE"))).let {
@@ -696,6 +715,16 @@ fun EditorView(
     return true
   }
 
+  /** Whether [position] is on a line's characters, not in the empty space after or below them. */
+  fun overText(position: Offset): Boolean {
+    val item =
+      listState.layoutInfo.visibleItemsInfo.firstOrNull {
+        position.y >= it.offset && position.y < it.offset + it.size
+      } ?: return false
+    val column = (position.x - metrics.gutterWidth + scroll.x) / metrics.charWidth
+    return column >= 0 && column < currentLines.end(item.index) - currentLines.starts[item.index]
+  }
+
   fun offsetAt(position: Offset): Int {
     val visible = listState.layoutInfo.visibleItemsInfo
     val item = visible.firstOrNull { position.y >= it.offset && position.y < it.offset + it.size }
@@ -911,6 +940,18 @@ fun EditorView(
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 val change = event.changes.first()
                 overGutter = change.position.x < metrics.gutterWidth
+                hovered =
+                  if (
+                    change.type != PointerType.Mouse ||
+                      event.type != PointerEventType.Move ||
+                      overGutter ||
+                      !overText(change.position)
+                  )
+                    null
+                  else
+                    ProblemsView.problemAt(currentFile.highlights, offsetAt(change.position))?.let {
+                      it to change.position
+                    }
                 val modifiers = event.keyboardModifiers
                 val held = if (IS_MAC) modifiers.isMetaPressed else modifiers.isCtrlPressed
                 if (
@@ -1117,6 +1158,21 @@ fun EditorView(
           LookupPopup(current, actions.chooseLookupItem)
         }
       }
+    // A problem's text under the line the pointer rests on.
+    hoverShown?.let { (highlight, position) ->
+      val item =
+        listState.layoutInfo.visibleItemsInfo.firstOrNull {
+          position.y >= it.offset && position.y < it.offset + it.size
+        } ?: return@let
+      val info = highlight.info ?: return@let
+      val text = info.toolTip?.let(::htmlText) ?: AnnotatedString(info.description.orEmpty())
+      AppPopup(
+        PopupPlacement(IntOffset(position.x.roundToInt(), item.offset + item.size), item.size),
+        focusable = false,
+      ) {
+        TooltipPanel(text)
+      }
+    }
     // The usages popup opens under the caret line, at the caret, like IntelliJ's.
     usages?.let { current ->
       val caretItem =

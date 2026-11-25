@@ -55,6 +55,20 @@ object ProblemsView {
       .sortedWith(ProblemsViewNodeComparator)
 
   /**
+   * The problem under [offset] whose text shows when the pointer rests there: the one with the
+   * highest severity among the highlighters that cover it and have a tooltip or description.
+   */
+  // ponytail: one problem; IntelliJ's hover lists every problem at the offset, most severe first.
+  fun problemAt(highlights: List<Highlight>, offset: Int): Highlight? =
+    highlights
+      .filter { highlight ->
+        offset >= highlight.start &&
+          offset < highlight.end &&
+          highlight.info.let { it != null && (it.toolTip ?: it.description) != null }
+      }
+      .maxByOrNull { requireNotNull(it.info).severity }
+
+  /**
    * `HighlightingProblem.getText`: the description, cut at its first line break with "…" unless it
    * is HTML.
    */
