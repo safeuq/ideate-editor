@@ -121,4 +121,34 @@ class HostDataTest {
       HostData.mergedRecent(backend, ide),
     )
   }
+
+  @Test
+  fun aCorruptFileIsSkippedAndTheOthersStillCount() {
+    assertEquals(
+      listOf("/work/go"),
+      HostData.ideRecentProjects(
+          mapOf(
+            "IntelliJIdea2026.3" to "<application><component",
+            "GoLand2025.1" to recentProjectsXml("/work/go", "4", productCode = "GO"),
+          ),
+          "/Users/dev",
+          listOf(idea, idea.copy(idePath = "/apps/GoLand.app/Contents", productCode = "GO")),
+          emptySet(),
+        )
+        .map { it.projectPath },
+    )
+  }
+
+  @Test
+  fun aGoneKeyWithAnEscapedAmpersandMatches() {
+    assertEquals(
+      emptyList(),
+      HostData.ideRecentProjects(
+        mapOf("IntelliJIdea2026.3" to recentProjectsXml("/work/R&amp;D", "1")),
+        "/Users/dev",
+        listOf(idea),
+        setOf("/work/R&amp;D"),
+      ),
+    )
+  }
 }

@@ -130,9 +130,17 @@ internal object HostData {
         .map { (_, folders) ->
           folders.maxWith(compareBy(VERSION_ORDER) { (_, match) -> match.groupValues[2] }).first
         }
+    // The shell's keys are the raw attribute text; the parser's are decoded.
+    val missingKeys = missing.map(::decodeXmlEntities).toSet()
     return newestFolders.flatMap { folder ->
-      recentProjectEntries(files.getValue(folder)).mapNotNull { entry ->
-        if (entry.key in missing) return@mapNotNull null
+      // Deliberately soft: the file belongs to the user's IDE, and failing here would hide the
+      // host's backend history and every other IDE's projects too. Only this file is skipped.
+      val entries = runCatching {
+        recentProjectEntries(files.getValue(folder))
+      }
+        .getOrElse { emptyList() }
+      entries.mapNotNull { entry ->
+        if (entry.key in missingKeys) return@mapNotNull null
         val ide =
           ides
             .filter { it.productCode == entry.productCode }
@@ -146,6 +154,15 @@ internal object HostData {
       }
     }
   }
+
+  /** The five XML entities; `&amp;` last, so `&amp;lt;` stays `&lt;`. */
+  private fun decodeXmlEntities(text: String) =
+    text
+      .replace("&lt;", "<")
+      .replace("&gt;", ">")
+      .replace("&quot;", "\"")
+      .replace("&apos;", "'")
+      .replace("&amp;", "&")
 
   /** `IntelliJIdea2026.3`: product `IntelliJIdea`, version `2026.3`. */
   private val SETTINGS_FOLDER = Regex("(.*?)(\\d+(?:\\.\\d+)*)")
