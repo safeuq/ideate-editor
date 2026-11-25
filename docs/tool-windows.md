@@ -356,3 +356,39 @@ open it". The plan, with the decompiled classes, is `docs/plans/welcome-editor-b
   the welcome panel, the editor area and the Terminal were all drawn again. Not reproduced.
 - Not done: the row under the buttons (Plugins, Theme ▾, Keymap ▾,
   `createAdditionalComponents`).
+
+## Addendum (2026-11-26, 00:30 IST): the Problems window's Project Errors tab
+
+The Problems window has its second tab, "Project Errors" (`ProblemsTab` in
+`ui/ProblemsToolWindow.kt`; the header shows both tabs as chips). Its rows come from Fleet RPC, as in
+JetBrains Client (`FrontendProblemsViewProjectErrorsRoot`): `ProjectErrors` in
+`session/ProblemsView.kt` subscribes once per project and keeps `SessionState.projectErrors`.
+
+The call, read from the decompiled `intellij.platform.problemView.shared.jar` and
+`intellij.platform.problemView.backend.jar` (build 263.7307.200):
+
+| Part | Value |
+|---|---|
+| Service | `com.intellij.platform.problemsView.shared.ProblemsViewApi` |
+| Method | `getProjectErrorsFlow`, argument `projectId` = `{"id": "<kernel project id>"}` |
+| Result | a stream; each element is a list of `ProblemEventDto` |
+| Event `type` | `com.intellij.analysis.problemsView.toolWindow.splitApi.ProblemEventDto.Appeared` and `.Updated` with `problemDto`; `.Disappeared` with `problemId` |
+| `problemDto` `type` | `….splitApi.FileProblemDto` (`id`, `text`, `description`, `icon`, `filePath`, `fileId`, `line`, `column`) or `….splitApi.GenericProblemDto` (`id`, `text`, `description`, `icon`) |
+
+On the backend, `BackendProblemsViewApi.getProjectErrorsFlow` returns the events of
+`ProjectErrorsCollector` (`intellij.platform.problemView.collector.jar`), in batches, with the
+problems so far replayed first (`FlowWithHistory`); an unknown project id gets an empty stream.
+
+What was checked live, and what was not:
+
+- Checked: the call returns a stream id (`getProjectErrorsFlow -> "usmrljlard1fk2qqhuft"`), the tab
+  shows, and with no rows it says "No errors found by the IDE" (`problems.view.project.empty`).
+- Not checked: rows from a real backend. The scratch backend sent no event at all, even with a
+  syntax error typed into the open Java file (`int x = ;`), so the collector had nothing to send.
+  What makes the backend's collector hold a problem (a build, or its file-level problem tracking)
+  is still to find. Until then the row code rests on `ProjectErrorsTest`, which feeds it events in
+  the shape above.
+
+Rows as built: problems without a file first; then a row per file (name, grey folder, grey
+"N problems") with its problems by line and column, each with the backend's icon, the text and a
+grey ` :<line + 1>`. A double click opens the file; it does not yet move the caret to the line.

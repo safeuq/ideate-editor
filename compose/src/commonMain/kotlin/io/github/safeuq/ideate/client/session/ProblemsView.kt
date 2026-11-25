@@ -1,5 +1,16 @@
 package io.github.safeuq.ideate.client.session
 
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+
 /**
  * One row of the Problems tool window's File tab: IntelliJ's `HighlightingProblem`, built from a
  * highlighter that carries a [HighlightInfo]. [line] and [column] count from 0.
@@ -15,6 +26,84 @@ data class HighlightingProblem(
   val severityId: String,
   val hasQuickFixes: Boolean,
 )
+
+/**
+ * One row of the Project Errors tab: the backend's `FileProblemDto` ([filePath] set, [line] and
+ * [column] from 0) or `GenericProblemDto` ([filePath] null).
+ */
+@Serializable
+data class ProjectProblem(
+  val id: String,
+  val text: String,
+  val description: String?,
+  val iconPath: String?,
+  val filePath: String?,
+  val line: Int,
+  val column: Int,
+)
+
+/**
+ * The Project Errors tab's rows, from `ProblemsViewApi.getProjectErrorsFlow(projectId)`: a stream
+ * of lists of `ProblemEventDto`. Example event: `{"type":"….ProblemEventDto.Appeared",
+ * "problemDto":{"type":"….FileProblemDto","id":"…","text":"Cannot resolve symbol 'Strin'",
+ * "description":null,"icon":{…},"filePath":"/work/demo/src/Main.java","fileId":{…},"line":5,
+ * "column":4}}`; `Disappeared` carries `problemId`. Called on the protocol thread.
+ */
+internal class ProjectErrors(
+  private val rpc: FleetRpc,
+  private val kernelProjectId: String,
+  private val publish: (List<ProjectProblem>) -> Unit,
+  private val log: (String) -> Unit,
+) {
+  private val problems = LinkedHashMap<String, ProjectProblem>()
+
+  fun start() {
+    rpc.subscribe(
+      SERVICE,
+      "getProjectErrorsFlow",
+      buildJsonObject { put("projectId", buildJsonObject { put("id", kernelProjectId) }) },
+    ) { element ->
+      runCatching { applyProblemEvents(problems, element.jsonArray) }
+        .onSuccess {
+          log("Project errors: ${problems.size}")
+          publish(problems.values.toList())
+        }
+        .onFailure { failure -> log("Problem events not read (${failure.message}): $element") }
+    }
+  }
+
+  private companion object {
+    const val SERVICE = "com.intellij.platform.problemsView.shared.ProblemsViewApi"
+  }
+}
+
+/** Applies a list of `ProblemEventDto` (Appeared, Updated, Disappeared) to [problems], by id. */
+internal fun applyProblemEvents(problems: MutableMap<String, ProjectProblem>, events: JsonArray) {
+  for (event in events) {
+    val fields = event.jsonObject
+    val kind = requireNotNull(fields["type"]?.jsonPrimitive?.contentOrNull) { "no type" }
+    if (kind.endsWith(".Disappeared")) {
+      problems.remove(
+        requireNotNull(fields["problemId"]?.jsonPrimitive?.contentOrNull) { "no problemId" },
+      )
+      continue
+    }
+    val problem = requireNotNull(fields["problemDto"] as? JsonObject) { "no problemDto in $kind" }
+    val id = requireNotNull(problem["id"]?.jsonPrimitive?.contentOrNull) { "no id" }
+    problems[id] =
+      ProjectProblem(
+        id = id,
+        text = requireNotNull(problem["text"]?.jsonPrimitive?.contentOrNull) { "no text" },
+        description =
+          (problem["description"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull,
+        iconPath = iconPath(problem["icon"]),
+        filePath =
+          (problem["filePath"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull,
+        line = (problem["line"] as? kotlinx.serialization.json.JsonPrimitive)?.intOrNull ?: 0,
+        column = (problem["column"] as? kotlinx.serialization.json.JsonPrimitive)?.intOrNull ?: 0,
+      )
+  }
+}
 
 object ProblemsView {
   /**

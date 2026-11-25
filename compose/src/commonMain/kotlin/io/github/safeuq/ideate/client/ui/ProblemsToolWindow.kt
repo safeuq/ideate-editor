@@ -15,6 +15,7 @@ import io.github.safeuq.ideate.client.session.ClientSession
 import io.github.safeuq.ideate.client.session.HighlightSeverity
 import io.github.safeuq.ideate.client.session.HighlightingProblem
 import io.github.safeuq.ideate.client.session.ProblemsView
+import io.github.safeuq.ideate.client.session.ProjectProblem
 import io.github.safeuq.ideate.client.session.ProjectTree
 import io.github.safeuq.ideate.client.session.SessionState
 import io.github.safeuq.ideate.client.session.TextFragment
@@ -22,6 +23,12 @@ import io.github.safeuq.ideate.client.session.TreeNode
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
+
+/** The Problems window's tabs, with ProblemsViewBundle's titles. */
+enum class ProblemsTab(val title: String) {
+  FILE("File"),
+  PROJECT_ERRORS("Project Errors"),
+}
 
 /**
  * The Problems tool window's File tab, IntelliJ's `HighlightingPanel`: the selected file as the
@@ -34,10 +41,15 @@ import io.github.safeuq.ideate.client.ui.theme.label
 fun ProblemsToolWindow(
   state: SessionState,
   session: ClientSession,
+  tab: ProblemsTab,
   onNavigated: () -> Unit,
   modifier: Modifier,
   scroll: SidewaysScroll = remember { SidewaysScroll() },
 ) {
+  if (tab == ProblemsTab.PROJECT_ERRORS) {
+    ProjectErrorsPanel(state, session, onNavigated, modifier, scroll)
+    return
+  }
   val file = state.editors.firstOrNull { it.path == state.selectedEditor }
   val problems =
     remember(file?.text, file?.highlights) {
@@ -83,6 +95,128 @@ fun ProblemsToolWindow(
     modifier = modifier,
     scroll = scroll,
   )
+}
+
+/**
+ * The Project Errors tab (`FrontendProblemsViewProjectErrorsRoot`): the backend's project problems,
+ * grouped under a row per file; problems without a file come first. A double tap opens the file.
+ */
+// ponytail: opens the file without moving the caret to the problem's line and column; add when
+// ClientSession can open a file at a position.
+@Composable
+private fun ProjectErrorsPanel(
+  state: SessionState,
+  session: ClientSession,
+  onNavigated: () -> Unit,
+  modifier: Modifier,
+  scroll: SidewaysScroll,
+) {
+  val problems = state.projectErrors
+  if (problems.isEmpty()) {
+    Box(modifier.padding(12.dp)) {
+      // ProblemsViewBundle: problems.view.project.empty.
+      BasicText(
+        "No errors found by the IDE",
+        style = LocalClientFonts.current.label(Islands.textSecondary),
+      )
+    }
+    return
+  }
+  var selected by remember { mutableStateOf<String?>(null) }
+  var collapsed by remember { mutableStateOf(emptySet<String>()) }
+  val gray = Islands.textSecondary.toArgb().toLong() and 0xFFFFFFFFL
+  val rows =
+    remember(problems, state.tabIcons, gray) { projectErrorRows(problems, state.tabIcons, gray) }
+  val tree =
+    remember(rows, selected, collapsed) {
+      ProjectTree(
+        rows.associate { it.node.id to it.node },
+        rows.filter { it.problem == null && it.filePath !in collapsed }.map { it.node.id }.toSet(),
+        rows.firstOrNull { it.problem != null && it.problem.id == selected }?.node?.id,
+      )
+    }
+  val byId = remember(rows) { rows.associateBy { it.node.id } }
+  ProjectTreeView(
+    tree = tree,
+    onToggle = { node ->
+      byId[node.id]?.filePath?.let { path ->
+        collapsed = if (path in collapsed) collapsed - path else collapsed + path
+      }
+    },
+    onSelect = { node -> byId[node.id]?.problem?.let { selected = it.id } },
+    onOpen = { node ->
+      val row = byId[node.id] ?: return@ProjectTreeView
+      row.problem?.let { selected = it.id }
+      row.filePath?.let {
+        session.open(it)
+        onNavigated()
+      }
+    },
+    modifier = modifier,
+    scroll = scroll,
+  )
+}
+
+/** A tree row with what it stands for: a file ([problem] null) or one problem. */
+internal class ProjectErrorRow(
+  val node: TreeNode,
+  val filePath: String?,
+  val problem: ProjectProblem?,
+)
+
+/** Problems without a file first, then each file with its problems by line and column. */
+internal fun projectErrorRows(
+  problems: List<ProjectProblem>,
+  fileIcons: Map<String, String>,
+  gray: Long,
+): List<ProjectErrorRow> {
+  val rows = mutableListOf<ProjectErrorRow>()
+  fun problemNode(problem: ProjectProblem, parent: Int?) =
+    TreeNode(
+      id = rows.size,
+      parentId = parent,
+      fragments =
+        listOfNotNull(
+          TextFragment(problem.text, 0, null),
+          problem.filePath?.let { TextFragment(" :${problem.line + 1}", 0, gray) },
+        ),
+      iconPaths = listOfNotNull(problem.iconPath),
+      hasChildren = false,
+      isDirectory = false,
+      path = null,
+      sortKey = rows.size,
+    )
+  problems
+    .filter { it.filePath == null }
+    .forEach { rows += ProjectErrorRow(problemNode(it, null), null, it) }
+  for ((path, inFile) in problems.filter { it.filePath != null }.groupBy { it.filePath!! }) {
+    val count = if (inFile.size == 1) "1 problem" else "${inFile.size} problems"
+    val fileId = rows.size
+    rows +=
+      ProjectErrorRow(
+        TreeNode(
+          id = fileId,
+          parentId = null,
+          fragments =
+            listOf(
+              TextFragment(path.substringAfterLast('/'), 0, null),
+              TextFragment("  " + path.substringBeforeLast('/', ""), 0, gray),
+              TextFragment("  $count", 0, gray),
+            ),
+          iconPaths = listOfNotNull(fileIcons[path]),
+          hasChildren = true,
+          isDirectory = true,
+          path = null,
+          sortKey = fileId,
+        ),
+        path,
+        null,
+      )
+    inFile.sortedWith(compareBy({ it.line }, { it.column })).forEach {
+      rows += ProjectErrorRow(problemNode(it, fileId), path, it)
+    }
+  }
+  return rows
 }
 
 private const val FILE_NODE = 0

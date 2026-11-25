@@ -315,6 +315,8 @@ data class SessionState(
   val crumbMenu: CrumbMenu? = null,
   /** The backend's running tasks, newest last. */
   val tasks: List<BackgroundTask> = emptyList(),
+  /** The Problems window's Project Errors rows, in the order they appeared. */
+  val projectErrors: List<ProjectProblem> = emptyList(),
   /** The Terminal tool window's tabs, in the order they opened. */
   val terminals: List<TerminalTabState> = emptyList(),
   /** A terminal tab can open: the project is bound (its terminal model exists). */

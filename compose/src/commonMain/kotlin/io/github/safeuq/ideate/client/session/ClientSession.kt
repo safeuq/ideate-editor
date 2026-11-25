@@ -1268,6 +1268,13 @@ class ClientSession(
             log = ::log,
           )
         solutionLifetime.onTermination { completion = null }
+        ProjectErrors(
+            rpc,
+            kernelProjectId,
+            { problems -> mutableState.update { it.copy(projectErrors = problems) } },
+            ::log,
+          )
+          .start()
         // Search Everywhere: JetBrains' Fleet RPC client and Rhizome database next to FleetRpc.
         val kernel =
           SearchKernel.start(

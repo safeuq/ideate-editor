@@ -303,6 +303,8 @@ fun ClientScreen(
 
     // Structure's folded rows, here for its header's Expand All and Collapse All.
     var structureCollapsed by remember { mutableStateOf(emptySet<String>()) }
+    // The Problems window's selected tab, here for its header.
+    var problemsTab by remember { mutableStateOf(ProblemsTab.FILE) }
 
     // The header buttons IntelliJ shows; the backend sends none for these two windows
     // (BeIdeaToolWindow.headerToolbar is empty), JetBrains Client draws them itself.
@@ -364,8 +366,13 @@ fun ClientScreen(
           if (window == ToolWindow.TERMINAL) {
             { TerminalHeaderTabs(state, session, terminalTabs) { barClick(window) } }
           } else if (window == ToolWindow.PROBLEMS) {
-            // ProblemsViewBundle's problems.view.highlighting; "Project Errors" comes later.
-            { HeaderTab("File", isSelected = true, onSelect = {}, onClose = null) }
+            {
+              Row {
+                for (tab in ProblemsTab.entries) {
+                  HeaderTab(tab.title, tab == problemsTab, { problemsTab = tab }, onClose = null)
+                }
+              }
+            }
           } else
             state.backendViews[window.id]
               ?.takeIf { it.panel != null }
@@ -395,6 +402,7 @@ fun ClientScreen(
             onStructureCollapsedChange = { structureCollapsed = it },
             terminalFocus = terminalFocus,
             terminalTabs = terminalTabs,
+            problemsTab = problemsTab,
             portrait = layout == ScreenLayout.PORTRAIT && phoneWidth,
           )
         }
@@ -724,6 +732,7 @@ private fun ToolWindowContent(
   onStructureCollapsedChange: (Set<String>) -> Unit,
   terminalFocus: TerminalFocus,
   terminalTabs: TerminalTabsState,
+  problemsTab: ProblemsTab,
   portrait: Boolean,
 ) =
   when {
@@ -785,7 +794,7 @@ private fun ToolWindowContent(
       )
     window == ToolWindow.TERMINAL -> TerminalToolWindow(state, session, terminalFocus, terminalTabs)
     window == ToolWindow.PROBLEMS ->
-      ProblemsToolWindow(state, session, onNavigated, Modifier.fillMaxSize(), scroll)
+      ProblemsToolWindow(state, session, problemsTab, onNavigated, Modifier.fillMaxSize(), scroll)
     else -> BackendToolWindowContent(window, state, session, scroll, portrait)
   }
 
