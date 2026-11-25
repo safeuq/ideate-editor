@@ -493,8 +493,40 @@ internal fun iconPath(icon: JsonElement?): String? {
     }
   }
   if (text.length >= 4) strings += text.toString()
-  return strings.firstOrNull { it.endsWith(".svg") }
+  val path = strings.firstOrNull { it.endsWith(".svg") } ?: return null
+  return colorizeColor(bytes)?.let { "$COLORIZE_PREFIX$it/$path" } ?: path
 }
+
+/** `ColorizedIconModel`'s RdId, -702882555496617616, as its 8 bytes on the wire. */
+private val COLORIZED_ICON_MODEL_ID =
+  byteArrayOf(0x70, 0x29, 0xCE.toByte(), 0x30, 0x0A, 0xDC.toByte(), 0x3E, 0xF6.toByte())
+
+/**
+ * The tint of a `ColorizedIconModel` blob as `RRGGBB`, or null for any other icon. The blob is rd's
+ * polymorphic form: id (8 bytes), length (4), then `color` and `base`, each again id, length, body.
+ * The colour's body is four ints, e.g. 214, 77, 91, 255 for the red of
+ * `HighlightDisplayLevel.ERROR` (a white `inspectionsError.svg` tinted by `ColorizeProxyIcon`).
+ *
+ * ponytail: reads only an outermost `ColorizedIconModel` with a 16 byte colour; decode the blob
+ * with rd's serializers into `IconModel` when other wrappers matter.
+ */
+internal fun colorizeColor(bytes: ByteArray): String? {
+  if (bytes.size < 40 || !bytes.copyOf(8).contentEquals(COLORIZED_ICON_MODEL_ID)) return null
+  fun int(offset: Int) =
+    (0..3).fold(0) { value, index ->
+      value or ((bytes[offset + index].toInt() and 0xFF) shl 8 * index)
+    }
+  if (int(20) != 16) return null
+  val channels = listOf(int(24), int(28), int(32))
+  if (channels.any { it !in 0..255 }) return null
+  return channels.joinToString("") { "%02X".format(it) }
+}
+
+/**
+ * Prefix of a tinted icon's path, e.g.
+ * `colorize/D64D5B/expui/general/inspections/inspectionsError.svg`.
+ */
+const val COLORIZE_PREFIX = "colorize/"
 
 /**
  * IntelliJ-style camel-hump matching, close enough to show the right rows while the backend's order

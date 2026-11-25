@@ -392,3 +392,49 @@ What was checked live, and what was not:
 Rows as built: problems without a file first; then a row per file (name, grey folder, grey
 "N problems") with its problems by line and column, each with the backend's icon, the text and a
 grey ` :<line + 1>`. A double click opens the file; it does not yet move the caret to the line.
+
+## Addendum (2026-11-25, 23:55 IST): Project Errors rows seen live; what fills them; the tinted icon
+
+The addendum above carries the wrong date: it was written on 2026-11-25, about 23:10 IST.
+
+**What fills the backend's list.** A build. `BuildViewProblemsListenerRegistrar`
+(`intellij.platform.problemView.backend`) hooks `BuildViewProblemsService` to every build's
+progress, and that service calls `ProblemsCollector.problemAppeared` for each `FileMessageEvent` of
+kind `ERROR`. When the next build of the same working folder starts, it removes the earlier build's
+problems. Typing an error into a file adds nothing, which is why the earlier check saw no rows.
+
+**Checked live** (scratch backend, a Java module whose `Main.java` uses the unknown type `Strin`,
+More Actions → Run 'Main.java', so the backend built and the build failed):
+
+| Where | What showed |
+|---|---|
+| App log | `Project errors: 1` about 10 seconds after the click |
+| Build tool window | `Main.java src/demo 1 error` → `cannot find symbol class Strin :6` |
+| Problems → Project Errors | `Main.java <folder> 1 problem` → `cannot find symbol class Strin :6` |
+| After an app restart | the same row again, replayed by the backend's history |
+
+**The icon is a tinted one.** `Problem.getIcon()` defaults to `HighlightDisplayLevel.ERROR.icon`: a
+white shape (`expui/general/inspections/inspectionsError.svg`, `fill="white"`) that IntelliJ paints
+through `ColorizeProxyIcon` in the error stripe's colour. On the wire the `IconId` blob is rd's
+polymorphic `IconModel`, here a `ColorizedIconModel`:
+
+| Bytes | Meaning | Recorded value |
+|---|---|---|
+| 0–7 | `ColorizedIconModel`'s RdId, -702882555496617616 | `70 29 ce 30 0a dc 3e f6` |
+| 8–11 | body length | 187 |
+| 12–19 | the colour's RdId | `bc 03 85 54 27 0b 02 00` |
+| 20–23 | the colour's body length | 16 |
+| 24–39 | red, green, blue, alpha as four ints | 214, 77, 91, 255 (`#D64D5B`) |
+| 40– | `base`: an `ImageIconModel` (id, length, path, plugin id, size) | the white SVG's path |
+
+Ideate read only the path, so the row's icon was white. Now `iconPath` (`session/Completion.kt`)
+returns `colorize/D64D5B/expui/general/inspections/inspectionsError.svg` for such a blob
+(`colorizeColor`), and `IconJar.svg` answers a `colorize/RRGGBB/<path>` path with `<path>`'s SVG
+with every painted `fill` and `stroke` set to that colour. This also holds for the other users of
+`iconPath` (completion, Search Everywhere, the backend's list popups).
+
+Limits: only an outermost `ColorizedIconModel` with a 16 byte colour is read; alpha is ignored. The
+icons that arrive as rd `IconModel` objects (`ClientSession.iconPaths`) still drop a
+`ColorizedIconModel`'s tint.
+
+Still open in this tab: a double click opens the file but does not move the caret to the line.

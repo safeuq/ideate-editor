@@ -29,6 +29,18 @@ class CompletionTest {
   }
 
   @Test
+  fun colorizedIconBlobKeepsItsTint() {
+    // `problemDto.icon.serializedValue` of a build error in Project Errors: IntelliJ's
+    // `HighlightDisplayLevel.ERROR` icon, a white shape tinted 214, 77, 91.
+    val blob =
+      "cCnOMArcPva7AAAAvAOFVCcLAgAQAAAA1gAAAE0AAABbAAAA/wAAAAguMPjbbDkRkwAAAOYBAAAAAAAALgAAAGUAeABwAHUAaQAvAGcAZQBuAGUAcgBhAGwALwBpAG4AcwBwAGUAYwB0AGkAbwBuAHMALwBpAG4AcwBwAGUAYwB0AGkAbwBuAHMARQByAHIAbwByAC4AcwB2AGcAAQwAAABjAG8AbQAuAGkAbgB0AGUAbABsAGkAagAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    assertEquals(
+      "colorize/D64D5B/expui/general/inspections/inspectionsError.svg",
+      iconPath(buildJsonObject { put("serializedValue", blob) }),
+    )
+  }
+
+  @Test
   fun backspaceFollowsIntellijsLookup() {
     // Popup opened after "p", then "svm" typed into it.
     assertEquals(

@@ -22,6 +22,11 @@ class IconJar(file: File) {
    * such icon.
    */
   fun svg(path: String, theme: UiTheme = LafManager.currentTheme): String? {
+    // A tinted icon, as `ColorizeProxyIcon` paints it: every painted colour becomes the tint.
+    COLORIZED.matchEntire(path)?.let { match ->
+      val (color, base) = match.destructured
+      return svg(base, theme)?.replace(PAINT, "$1=\"#$color\"")
+    }
     val palette = iconPalette(theme)
     val files = imageFiles(path, theme.isDark)
     val body =
@@ -98,6 +103,9 @@ class IconJar(file: File) {
       private fun String.withAttribute(name: String, color: String?): String =
         if (color == null) this else replace(Regex("""(\s$name=")[^"]*""""), "\$1$color\"")
     }
+
+    private val COLORIZED = Regex("""colorize/([0-9A-Fa-f]{6})/(.+)""")
+    private val PAINT = Regex("""\b(fill|stroke)="(?!none")[^"]+"""")
 
     private val TAG_WITH_ID = Regex("""<[^>]*\sid="([^"]+)"[^>]*>""")
 
