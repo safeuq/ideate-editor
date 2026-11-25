@@ -285,6 +285,7 @@ class ConnectController(
   }
 
   fun close() {
+    pending?.stop()
     stopSessions()
     sshController?.close()
     main.cancel()
@@ -480,28 +481,55 @@ class ConnectController(
     startSession(current, certificate)
   }
 
-  /** Makes [current] the attempt and starts its session, which replaces the shown one. */
+  /**
+   * Makes [current] the attempt and starts its session. The connect screen shows "Connecting to …"
+   * until the backend accepts; only then does the session become [session] and the editor window
+   * open. A failure before that shows its message on the connect screen.
+   */
   private fun startSession(current: Attempt, certificate: ClientCertificate?) {
     attempt = current
     accepted = false
     message = null
     question = null
     handOverFrom = null
-    session =
+    pending?.stop()
+    opening =
+      OpeningProgress(
+        opening?.project ?: current.project ?: "${current.link.host}:${current.link.port}",
+        "Connecting…",
+        cancellable = true,
+      )
+    var failure: Job? = null
+    lateinit var candidate: ClientSession
+    candidate =
       ClientSession(
-          current.link,
-          current.openFile,
-          certificate,
-          openEditors.slot(current.editorsKey),
-          current.project,
-          inForeground = { inForeground },
-          onProjectSwitch = projectSwitch(current),
-        ) { acceptedCertificate ->
-          val encoded = acceptedCertificate.encode()
-          main.launch { onAccepted(current, encoded) }
+        current.link,
+        current.openFile,
+        certificate,
+        openEditors.slot(current.editorsKey),
+        current.project,
+        inForeground = { inForeground },
+        onProjectSwitch = projectSwitch(current),
+      ) { acceptedCertificate ->
+        val encoded = acceptedCertificate.encode()
+        main.launch {
+          if (pending !== candidate || attempt !== current) return@launch
+          failure?.cancel()
+          pending = null
+          session = candidate
+          opener = candidate
+          onAccepted(current, encoded)
         }
-        .also { it.start() }
-    opener = session
+      }
+    pending = candidate
+    failure = main.launch {
+      val lost = candidate.state.first { it.connectionLost != null }.connectionLost.orEmpty()
+      if (pending !== candidate) return@launch
+      pending = null
+      candidate.stop()
+      connectionLost(lost)
+    }
+    candidate.start()
   }
 
   private fun projectSwitch(current: Attempt): (String) -> Unit = { hostPath ->
@@ -1032,6 +1060,13 @@ class ConnectController(
    */
   private fun cancelStart() {
     opening = null
+    // A first connection still waiting for the backend: stop it, no message.
+    if (!accepted && pending != null) {
+      pending?.stop()
+      pending = null
+      attempt = null
+      return
+    }
     if (startingOnRunningBackend) {
       starting = null
       return

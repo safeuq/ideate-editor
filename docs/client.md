@@ -230,3 +230,7 @@ The first connection kind is now labelled "This device" on both platforms, in pl
 (`ideate/phone.svg`) on Android, `expui/nodes/desktop.svg` on the desktop. New Termux history
 entries are named like `This device · smoke`; entries saved earlier keep their old names, such as
 `This phone · smoke`.
+
+## Addendum (2026-11-25): Connecting popup
+
+When a connection starts (a link, a history entry, a Termux project or an SSH project), the connect window stays open and shows the "Connecting to <project>" popup, with Cancel, until the backend accepts the session. Only then does the session become the controller's `session`, so the editor window opens at that point (on Android, EditorActivity opens at that point). If the connection fails first, the error replaces the popup on the connect window ("Couldn't connect: …"), and the window never switches. Cancel stops the waiting session and returns to the plain connect screen without a message. In code, `ConnectController.startSession` keeps the new session in `pending` and watches it for `connectionLost`, like `reconnect` does.
