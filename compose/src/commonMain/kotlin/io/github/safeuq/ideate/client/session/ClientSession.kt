@@ -16,6 +16,7 @@ import com.jetbrains.codeWithMe.model.navigationBarModel
 import com.jetbrains.codeWithMe.model.projectViewModel
 import com.jetbrains.codeWithMe.model.vfsModel
 import com.jetbrains.ide.model.highlighterRegistration.ColorsSchemeModel
+import com.jetbrains.ide.model.highlighterRegistration.HighlightSeverityModel
 import com.jetbrains.rd.framework.IProtocol
 import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.UnsafeBuffer
@@ -30,6 +31,7 @@ import com.jetbrains.rd.ide.model.ComponentRect
 import com.jetbrains.rd.ide.model.CompositionIconModel
 import com.jetbrains.rd.ide.model.CropIconModel
 import com.jetbrains.rd.ide.model.CustomImageIconModel
+import com.jetbrains.rd.ide.model.DefaultHighlighterModel
 import com.jetbrains.rd.ide.model.DeferredIconModel
 import com.jetbrains.rd.ide.model.EmptyIconModel
 import com.jetbrains.rd.ide.model.FailedRequestComposite
@@ -1026,6 +1028,9 @@ class ClientSession(
       schemes[scheme.name] = scheme
       applyEditorScheme(LafManager.currentTheme)
     }
+    // A session that joins later has missed the severities too.
+    publishSeverities(connection.severities)
+    registry.severities.advise(lifetime, ::publishSeverities)
     // A theme brings its editor scheme along (the theme JSON's `editorScheme`), as IntelliJ's
     // LafManager does when the theme changes. On the rd thread, with the schemes.
     lifetime.onTermination(LafManager.addListener { theme -> onRd { applyEditorScheme(theme) } })
@@ -2033,7 +2038,7 @@ class ClientSession(
       if (scheme == null) emptyList()
       else
         raw
-          .map { Highlight(it.id, it.start, it.end, it.layer, scheme.style(it.keyChains)) }
+          .map { Highlight(it.id, it.start, it.end, it.layer, scheme.style(it.keyChains), it.info) }
           .sortedWith(compareBy({ it.layer }, { it.start }))
     // Comment tokens from the backend's syntax highlighting: comment lines neither open nor close
     // blocks, like blank lines (IndentGuideCalculator).
@@ -2119,7 +2124,7 @@ class ClientSession(
           ?.values
           .orEmpty()
           .filter { it.start in 0..it.end && it.end <= text.length }
-          .map { Highlight(it.id, it.start, it.end, it.layer, scheme.style(it.keyChains)) }
+          .map { Highlight(it.id, it.start, it.end, it.layer, scheme.style(it.keyChains), it.info) }
           .sortedWith(compareBy({ it.layer }, { it.start }))
     mutableState.update { it.copy(consoles = it.consoles + (id to ConsoleText(text, highlights))) }
   }
@@ -2178,9 +2183,27 @@ class ClientSession(
     val layer: Int,
     val keyChains: List<List<String>>,
     val gutterIconPaths: List<String>,
+    val info: HighlightInfo?,
     /** The rd model's class, e.g. `SyntaxHighlighterModel`; only for CLIENT_HIGHLIGHT_DUMP. */
     val modelName: String,
   )
+
+  private fun publishSeverities(sent: List<HighlightSeverityModel>) {
+    if (sent.isEmpty()) return
+    val severities =
+      sent
+        .map {
+          HighlightSeverity(
+            it.id,
+            it.value,
+            it.icon?.let(::iconPaths).orEmpty(),
+            it.displayName,
+            it.countMessageTemplate,
+          )
+        }
+        .sortedByDescending { it.value }
+    mutableState.update { it.copy(severities = severities) }
+  }
 
   /** The scheme [theme] brings along, once the backend has sent it. */
   private fun applyEditorScheme(theme: UiTheme) {
@@ -2233,6 +2256,18 @@ class ClientSession(
         model.layer,
         keys.map(EditorScheme::keyChain),
         gutterIcon,
+        (model as? DefaultHighlighterModel)?.info?.let { info ->
+          HighlightInfo(
+            severityId = info.type.severityId,
+            severity = info.type.severityVal ?: 0,
+            description = info.description,
+            toolTip = info.tooltip,
+            toolId = info.toolId,
+            inspectionId = info.inspectionId,
+            hasQuickFixes = info.hasQuickFixes,
+            suppressOnErrorStripe = info.suppressOnErrorStripe,
+          )
+        },
         model.javaClass.simpleName,
       )
     }

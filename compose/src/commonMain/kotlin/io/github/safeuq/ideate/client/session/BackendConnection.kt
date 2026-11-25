@@ -3,6 +3,7 @@ package io.github.safeuq.ideate.client.session
 import com.intellij.platform.split.protocol.DefaultSplitMarshallersProvider
 import com.jetbrains.ide.model.highlighterRegistration.ColorsSchemeModel
 import com.jetbrains.ide.model.highlighterRegistration.DefaultRegistryModel
+import com.jetbrains.ide.model.highlighterRegistration.HighlightSeverityModel
 import com.jetbrains.ide.model.highlighterRegistration.highlighterRegistrationHostModel
 import com.jetbrains.rd.framework.IMarshaller
 import com.jetbrains.rd.framework.IProtocol
@@ -75,6 +76,11 @@ class BackendConnection(
 
   /** Every installed editor scheme the backend has sent, by name. */
   val schemes = mutableMapOf<String, ColorsSchemeModel>()
+
+  /** The severities the backend sent last (it sends the whole list once). */
+  var severities: List<HighlightSeverityModel> = emptyList()
+    private set
+
   private var registry: DefaultRegistryModel? = null
 
   /**
@@ -87,6 +93,7 @@ class BackendConnection(
         registry = created
         protocol.highlighterRegistrationHostModel.registry.set(created)
         created.colorsScheme.advise(lifetime) { scheme -> schemes[scheme.name] = scheme }
+        created.severities.advise(lifetime) { severities = it }
       }
 
   private var fleet: FleetRpc? = null

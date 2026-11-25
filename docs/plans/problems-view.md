@@ -195,3 +195,15 @@ context menu (`ProblemsView.Frontend.TreePopup`), the "Code Analysis" tab, and g
 - No abbreviated identifiers, `final`-style immutability (`val`), fail fast on missing input.
 - Keep IntelliJ's names: `HighlightInfo`, `HighlightSeverity`, `HighlightingProblem`,
   `ProblemsViewNodeComparator`, `HighlightingPanel`, `ErrorStripe`, `TrafficLightRenderer`.
+
+## Addendum (2026-11-25, 16:10 IST): phase 1 built, two corrections
+
+Phase 1 is built (`Highlight.info`, `SessionState.severities`, `session/ProblemsView.kt`,
+`ProblemsViewTest`). Two things above were wrong:
+
+- `INFORMATION` is 10, not as the table implies the lowest listed value: `TEXT ATTRIBUTES` is 11 and
+  the File tab's level is 12, so `INFORMATION` highlighters are not listed.
+- `severities` is on `DefaultRegistryModel`, not on `HighlighterRegistrationHostModel`.
+
+`highlightingProblems` takes `(text, highlights, level)` instead of an `EditorFile`, so the test
+needs no editor state. Details in `docs/split-protocol.md`, addendum of the same time.

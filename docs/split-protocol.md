@@ -1031,3 +1031,35 @@ arrives 4 s later). Ideate sends it with reason 0 (`ConnectionDeclineReason.None
 session is stopped on purpose (`SplitWire.terminate`); a connection made 300 ms after it was
 accepted in 20 ms. Log lines and timings: `docs/plans/project-widget-popup.md`, the addendum of
 15:40 IST.
+
+## Addendum (2026-11-25, 16:10 IST): the problem a highlighter carries, and the severities
+
+Ideate now keeps the problem that comes with a highlighter (`Highlight.info`) and the backend's list
+of severities (`SessionState.severities`). Read from the client's jars, build 263.7307.200:
+
+| What | Where on the wire | Example |
+|---|---|---|
+| The problem of a range | `DefaultHighlighterModel.info: HighlightInfoModel?` (`com.jetbrains.rd.ide.model`) | `type.severityId = "ERROR"`, `type.severityVal = 400`, `description = "Cannot resolve symbol 'Strin'"`, `tooltip` (HTML), `toolId`, `inspectionId`, `hasQuickFixes`, `suppressOnErrorStripe` |
+| The severities | `DefaultRegistryModel.severities: ISignal<List<HighlightSeverityModel>>`, on the same registry that sends the color schemes (not on `HighlighterRegistrationHostModel` itself, which has only `backendReady` and `registry`) | `HighlightSeverityModel(id = "WARNING", value = 300, icon, displayName, displayCapitalizedName, countMessageTemplate)`; `icon` can be null |
+
+`severities` is a signal sent once, like the schemes, so `BackendConnection` keeps the last list for
+a session that joins later.
+
+IntelliJ's severity values (`HighlightSeverity` static initializer in the client's jar):
+
+| Severity id | Value |
+|---|---|
+| `INFORMATION` | 10 |
+| `TEXT ATTRIBUTES` | 11 |
+| `SERVER PROBLEM` | 100 |
+| `INFO`, `WEAK WARNING` | 200 |
+| `WARNING` | 300 |
+| `ERROR` | 400 |
+
+The Problems window's File tab lists a highlighter when it has a description and its severity is at
+least `HighlightSeverity.TEXT_ATTRIBUTES.myVal + 1` = 12 (`ProblemsViewHighlightingFileRoot` line 74
+passes that to `ProblemsViewHighlightingWatcher`). In Ideate: `ProblemsView.FILE_LEVEL` and
+`ProblemsView.highlightingProblems` in `session/ProblemsView.kt`, checked by `ProblemsViewTest`.
+
+Not yet seen live: the `info` of a real error and a real warning from a backend
+(`CLIENT_HIGHLIGHT_DUMP`); that check comes with the File tab.

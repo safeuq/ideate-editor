@@ -108,6 +108,34 @@ data class Highlight(
   val end: Int,
   val layer: Int,
   val style: TextStyle,
+  /** The problem this range marks (error, warning, …); null for syntax colors and the like. */
+  val info: HighlightInfo? = null,
+)
+
+/**
+ * IntelliJ's `HighlightInfo` as the backend sends it with a highlighter (`HighlightInfoModel`).
+ * [severity] is `HighlightSeverity.myVal`: ERROR 400, WARNING 300, WEAK WARNING 200.
+ */
+@Serializable
+data class HighlightInfo(
+  val severityId: String,
+  val severity: Int,
+  val description: String?,
+  val toolTip: String?,
+  val toolId: String?,
+  val inspectionId: String?,
+  val hasQuickFixes: Boolean,
+  val suppressOnErrorStripe: Boolean,
+)
+
+/** IntelliJ's `HighlightSeverity` with its icon, as the backend lists them once per connection. */
+@Serializable
+data class HighlightSeverity(
+  val id: String,
+  val value: Int,
+  val iconPaths: List<String>,
+  val displayName: String,
+  val countMessageTemplate: String?,
 )
 
 /**
@@ -235,6 +263,8 @@ data class SessionState(
    */
   val backendClipboard: ClipboardText? = null,
   val scheme: EditorScheme? = null,
+  /** Every severity the backend knows, highest [HighlightSeverity.value] first. */
+  val severities: List<HighlightSeverity> = emptyList(),
   /** The completion popup, if one is open. */
   val lookup: Lookup? = null,
   /** IntelliJ's Show Usages popup, if one is open (⌘B or ⌘-click on a declaration). */
