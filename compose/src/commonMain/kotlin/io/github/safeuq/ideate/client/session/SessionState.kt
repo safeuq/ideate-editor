@@ -244,6 +244,8 @@ data class SessionState(
   val openProjects: List<OpenProject> = emptyList(),
   /** The [OpenProject.hostPath] of the project this session shows; null until one is bound. */
   val shownProject: String? = null,
+  /** True while the shown project is the welcome project (IntelliJ IDEA Home). */
+  val welcomeProject: Boolean = false,
   val tree: ProjectTree = ProjectTree(),
   val editors: List<EditorFile> = emptyList(),
   /** Each open file's tab icon from the backend, e.g. `/…/Main.java` to `nodes/class.svg`. */

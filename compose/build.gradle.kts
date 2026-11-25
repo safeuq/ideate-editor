@@ -51,4 +51,8 @@ kotlin {
   }
 }
 
-tasks.named<Test>("jvmTest") { useJUnitPlatform() }
+tasks.named<Test>("jvmTest") {
+  useJUnitPlatform()
+  // WelcomeFeatureGridTest reads the client's icons jar.
+  systemProperty("jetbrainsClientLib", jetbrainsClientLib)
+}

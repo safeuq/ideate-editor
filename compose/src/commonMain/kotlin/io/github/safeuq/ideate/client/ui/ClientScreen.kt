@@ -914,12 +914,19 @@ private fun EditorIsland(
         )
     } else {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        BasicText(
-          if (state.tree.nodes.isEmpty()) "Connecting…"
-          else "Double-tap a file in the Project tool window to open it",
-          style = fonts.label(Islands.textSecondary),
-          modifier = Modifier.padding(16.dp),
-        )
+        if (state.welcomeProject)
+          FeatureGrid(IDEA_FEATURE_BUTTONS) { model ->
+            if (model.featureKey == TERMINAL_FEATURE_KEY)
+              session.showToolWindow(ToolWindow.TERMINAL.id)
+            else session.welcomeFeatureClick(model.featureKey)
+          }
+        else
+          BasicText(
+            if (state.tree.nodes.isEmpty()) "Connecting…"
+            else "Double-tap a file in the Project tool window to open it",
+            style = fonts.label(Islands.textSecondary),
+            modifier = Modifier.padding(16.dp),
+          )
       }
     }
   }

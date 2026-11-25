@@ -127,6 +127,8 @@ import kotlin.concurrent.thread
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Connects to a backend and keeps the Project tree and the open editors in a [StateFlow], creating
@@ -318,10 +320,35 @@ class ClientSession(
     }
 
   private var fleet: FleetRpc? = null
+
+  /** The shown project's kernel id, e.g. "m3nniruk9k7j4qsibjui", which Fleet RPC names it by. */
+  private var kernelProjectId: String? = null
   private var completion: Completion? = null
 
   /** Opens a terminal tab (a shell on the backend); it shows up in [SessionState.terminals]. */
   fun openTerminal() = onRd { checkNotNull(terminalSessions) { "No project yet" }.open() }
+
+  /**
+   * `WelcomeScreenFeatureApi.onClick`: runs a welcome feature, e.g. "Open.File", on the backend, as
+   * JetBrains Client's `featureButtonOnClick` does.
+   */
+  fun welcomeFeatureClick(featureKey: String) = onRd {
+    val projectId = checkNotNull(kernelProjectId) { "No kernel project id" }
+    checkNotNull(fleet) { "No Fleet RPC" }
+      .call(
+        WELCOME_FEATURE_API,
+        "onClick",
+        buildJsonObject {
+          put("projectId", buildJsonObject { put("id", projectId) })
+          put("featureKey", featureKey)
+        },
+      )
+  }
+
+  /** Shows tool window [windowId], the same request the backend's "activate tool window" makes. */
+  fun showToolWindow(windowId: String) = mutableState.update {
+    it.copy(showRequest = ShowRequest(windowId, (it.showRequest?.serial ?: 0) + 1))
+  }
 
   fun closeTerminal(id: String) = onRd { checkNotNull(terminalSessions).close(id) }
 
@@ -1193,6 +1220,8 @@ class ClientSession(
       solution = newSolution
       shownSolutionLifetime = solutionLifetime
       mutableState.update { it.copy(shownProject = hostPath) }
+      mutableState.update { it.copy(welcomeProject = isWelcomeProject(newSolution)) }
+      kernelProjectId = description?.kernelProjectId
       // Its Project tree names it (the root row): IdeaHome, then smoke after This Window.
       mutableState.update { it.copy(projectName = null) }
       solutionLifetime.onTermination {
@@ -1201,6 +1230,8 @@ class ClientSession(
           projectId = null
           solution = null
           shownSolutionLifetime = null
+          kernelProjectId = null
+          mutableState.update { it.copy(welcomeProject = false) }
           // The tree's rows went with the project. A project opened again gets new rows, whose
           // ids can repeat the old ones: with the old sets kept, `expand` was never sent for them.
           pane = null
@@ -2427,6 +2458,10 @@ internal fun afterEach(entries: List<MenuEntry>, after: () -> Unit): List<MenuEn
       else -> entry
     }
   }
+
+/** The Fleet RPC service behind the welcome project's editor buttons (`featureButtonOnClick`). */
+private const val WELCOME_FEATURE_API =
+  "com.intellij.platform.ide.nonModalWelcomeScreen.rightTab.WelcomeScreenFeatureApi"
 
 /** IntelliJ's welcome project (IdeaHome), which the backend opens when no project was given. */
 internal fun isWelcomeProject(solution: Solution?): Boolean =

@@ -333,3 +333,26 @@ Differences from IntelliJ, still open:
 - no "Project Errors" tab, toolbar, context menu or quick fixes yet, and no "Analyzing…" text
   (`docs/plans/problems-view.md`, phases 3 and 4);
 - text of two problems at one position is ordered without case, not by IntelliJ's natural compare.
+
+## Addendum (2026-11-25, 23:40 IST): the welcome project's editor buttons
+
+When the welcome project (IntelliJ IDEA Home) is shown and no file is open, the editor area now
+shows JetBrains Client's three buttons instead of "Double-tap a file in the Project tool window to
+open it". The plan, with the decompiled classes, is `docs/plans/welcome-editor-buttons.md`.
+
+| Button | Feature key | Who runs it | Checked live (scratch backend, 263.7307.200) |
+|---|---|---|---|
+| New Markdown File | `New.Markdown.File` | backend, `WelcomeScreenFeatureApi.onClick` over Fleet RPC | opens `Untitled.md` in an editor tab |
+| Open File | `Open.File` | backend, same call | the backend's "Open File or Project" dialog (424 × 454) |
+| Open Terminal | `terminal.toolwindow` | Ideate, as JetBrains Client's `IdeaTerminalFeatureFrontend` | shows the Terminal tool window with a new shell |
+
+- Code: `ui/WelcomeFeatureGrid.kt` (`FeatureButtonModel`, `IDEA_FEATURE_BUTTONS`, `FeatureGrid`,
+  `DisclosureButton`), `ClientSession.welcomeFeatureClick` and `showToolWindow`,
+  `SessionState.welcomeProject`.
+- Sizes match JetBrains Client's screenshot: buttons 48 tall, 16 apart, corner radius 8, icon 14
+  from the left, 12 between icon and text, fill `#12FFFFFF` over the editor (`#28292B` on
+  `#191A1D`).
+- Pending row 33's "panel not drawn after a dialog closed": after Cancel in the Open File dialog,
+  the welcome panel, the editor area and the Terminal were all drawn again. Not reproduced.
+- Not done: the row under the buttons (Plugins, Theme ▾, Keymap ▾,
+  `createAdditionalComponents`).
