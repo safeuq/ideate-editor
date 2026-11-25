@@ -114,6 +114,32 @@ object ProblemsView {
   const val FILE_LEVEL = 12
 
   /**
+   * The counter's entries (`TrafficLightRenderer.getStatus`): one per severity that has
+   * highlighters above `TEXT_ATTRIBUTES` (`incErrorCount`), most severe first, with the count and
+   * the severity's count message, e.g. "2 errors" from `{0, choice, 1#{0} error|2#{0} errors}`.
+   */
+  // ponytail: no StatusItemMerger (IntelliJ can merge e.g. grammar and typo items into one);
+  // add it when two items show where IntelliJ shows one. The tooltip is the display name, not the
+  // filled-in count message: filling ICU choice templates needs a formatter the client lacks.
+  fun statusItems(
+    highlights: List<Highlight>,
+    severities: List<HighlightSeverity>,
+  ): List<StatusItem> {
+    val counts =
+      highlights
+        .mapNotNull { it.info }
+        .filter { it.severity >= FILE_LEVEL }
+        .groupingBy { it.severityId to it.severity }
+        .eachCount()
+    return counts.entries
+      .sortedByDescending { it.key.second }
+      .map { (severity, count) ->
+        val known = severities.firstOrNull { it.id == severity.first }
+        StatusItem(severity.first, known?.iconPaths.orEmpty(), count, known?.displayName)
+      }
+  }
+
+  /**
    * The offset of [line] and [column] (both from 0) in [text], e.g. line 5, column 4 of a build
    * error. A line past the end gives the text's end, a column past the line's end that line's end.
    */

@@ -22,6 +22,7 @@ import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.UnsafeBuffer
 import com.jetbrains.rd.ide.model.ActionTimestampSetModel
 import com.jetbrains.rd.ide.model.AvatarIconModel
+import com.jetbrains.rd.ide.model.BackendDaemonStateEnum
 import com.jetbrains.rd.ide.model.BadgeIconModel
 import com.jetbrains.rd.ide.model.BrowseMode
 import com.jetbrains.rd.ide.model.ClipboardContent
@@ -294,6 +295,8 @@ class ClientSession(
   private val caretsRestored = mutableMapOf<String, Int>()
   private var saveScheduled = false
   private val editSessions = mutableMapOf<RdDocumentId, EditSession>()
+  /** The backend's analysis state per document (`RdMarkupModel.daemon.state`). */
+  private val daemonStates = mutableMapOf<RdDocumentId, BackendDaemonStateEnum>()
   /** Console documents (Run, Build Output): text from patches only, no edit session. */
   private val consoles = ConsoleDocuments { reason -> log("Console out of step: $reason") }
   /**
@@ -1212,6 +1215,7 @@ class ClientSession(
           mutableState.update { it.copy(consoles = it.consoles - id) }
         }
         documentHighlights.remove(documentId)
+        daemonStates.remove(documentId)
         val path = pathOf(documentId)
         mutableState.update { state ->
           state.copy(editors = state.editors.filterNot { it.path == path })
@@ -2037,6 +2041,14 @@ class ClientSession(
     source: String,
   ) {
     val highlights = documentHighlights.getOrPut(documentId) { mutableMapOf() }
+    // The analysis state is read from the document's markup, as FrontendDaemonHost.documentBound.
+    if (source == "document") {
+      markup.daemon.state.advise(markupLifetime) { state ->
+        daemonStates[documentId] = state
+        log("Analysis of ${pathOf(documentId)}: $state")
+        publishMarkupLater(documentId)
+      }
+    }
     markup.highlightersAdded.advise(markupLifetime) { list ->
       list.elements.forEach { highlights["$source:${it.highlighter.id}"] = it.toRaw() }
       publishMarkupLater(documentId)
@@ -2137,6 +2149,18 @@ class ClientSession(
         selectionStart = session?.selectionStart ?: 0,
         selectionEnd = session?.selectionEnd ?: 0,
         editable = session != null,
+        analysis =
+          when (daemonStates[documentId]) {
+            BackendDaemonStateEnum.IN_PROGRESS_LOCAL,
+            BackendDaemonStateEnum.IN_PROGRESS_GLOBAL -> AnalysisState.RUNNING
+            BackendDaemonStateEnum.UP_TO_DATE,
+            BackendDaemonStateEnum.INVALIDATED,
+            BackendDaemonStateEnum.HIDDEN -> AnalysisState.FINISHED
+            BackendDaemonStateEnum.UNSUPPORTED,
+            BackendDaemonStateEnum.DISABLED -> AnalysisState.OFF
+            BackendDaemonStateEnum.SUSPENDED,
+            null -> AnalysisState.PAUSED
+          },
         caretToShow = caretToShow,
         caretFromTop =
           scrollsRestored[pathOf(documentId)]?.takeIf { it.first == caretToShow }?.second,

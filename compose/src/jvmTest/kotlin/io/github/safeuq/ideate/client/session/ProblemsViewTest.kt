@@ -59,4 +59,27 @@ class ProblemsViewTest {
     )
     assertEquals("one line", ProblemsView.problemText("one line"))
   }
+
+  @Test
+  fun statusItemsCountPerSeverityMostSevereFirst() {
+    val severities = listOf(HighlightSeverity("S400", 400, listOf("error.svg"), "Error", null))
+    val items =
+      ProblemsView.statusItems(
+        listOf(
+          highlight(1, 0, 300, "unused"),
+          highlight(2, 1, 400, "unresolved"),
+          highlight(3, 2, 400, "unresolved too"),
+          // TEXT ATTRIBUTES (11) and below are not counted.
+          highlight(4, 3, 11, "attributes"),
+        ),
+        severities,
+      )
+    assertEquals(
+      listOf(
+        StatusItem("S400", listOf("error.svg"), 2, "Error"),
+        StatusItem("S300", emptyList(), 1, null),
+      ),
+      items,
+    )
+  }
 }

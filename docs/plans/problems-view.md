@@ -287,3 +287,13 @@ press backgrounds. It sits at the top right of the editor, over the text, left o
 
 Left for later: the popup with the highlighting level and passes that a hover shows, power save
 mode, the redesigned look if step 1 shows the classic one (or the other way round).
+
+## Addendum (2026-11-26, 00:35 IST): counter plan, step 2 done and one correction
+
+- Step 2 (data) is built and the state was seen arriving live; details in `docs/split-protocol.md`,
+  addendum of the same time. One change from the plan: `StatusItem.tooltip` is the severity's display
+  name, not the filled-in count message, because the message is an ICU choice template
+  (`{0, choice, 1#{0} error|2#{0} errors}`) and the client has no formatter for it yet.
+- Correction to step 5: a click on the counter does not only open the Problems tool window, it
+  toggles it (`TrafficLightAction.actionPerformed` → `analyzerStatus.controller.toggleProblemsView()`).
+- Steps 1 and 3 to 6 are open.

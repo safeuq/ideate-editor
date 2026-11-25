@@ -135,6 +135,29 @@ data class HighlightInfo(
   val suppressOnErrorStripe: Boolean,
 )
 
+/**
+ * The backend's `BackendDaemonStateEnum` for a document, as `FrontendTrafficLightRenderer` reads it
+ * into IntelliJ's `DaemonCodeAnalyzerStatus`.
+ */
+enum class AnalysisState {
+  /** `IN_PROGRESS_LOCAL`, `IN_PROGRESS_GLOBAL`: `errorAnalyzingFinished` is false. */
+  RUNNING,
+  /** `UP_TO_DATE`, `INVALIDATED`, `HIDDEN`. */
+  FINISHED,
+  /** `SUSPENDED`, or no state from the backend yet. */
+  PAUSED,
+  /** `UNSUPPORTED`, `DISABLED`: no analysis for this file. */
+  OFF,
+}
+
+/** One entry of the counter at the editor's corner: IntelliJ's `StatusItem` for a severity. */
+data class StatusItem(
+  val severityId: String,
+  val iconPaths: List<String>,
+  val count: Int,
+  val tooltip: String?,
+)
+
 /** IntelliJ's `HighlightSeverity` with its icon, as the backend lists them once per connection. */
 @Serializable
 data class HighlightSeverity(
@@ -199,6 +222,8 @@ data class EditorFile(
    * saved (`relative-caret-position`). Null for navigation, which centres the line.
    */
   val caretFromTop: Int? = null,
+  /** Where the backend's code analysis of this file stands, for the counter at the corner. */
+  val analysis: AnalysisState = AnalysisState.PAUSED,
   /** Undo may do something (true while the backend's undo stack is unknown). */
   val canUndo: Boolean = false,
   /** Redo has something: right after an undo, until the next edit. */

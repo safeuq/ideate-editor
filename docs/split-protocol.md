@@ -1067,3 +1067,27 @@ Not yet seen live: the `info` of a real error and a real warning from a backend
 ## Addendum (2026-11-25, 23:40 IST): corrections
 
 The addendum above headed "16:10 IST" was written at about 23:00 IST on 2026-11-25. The live check it asks for is done: the backend sent `info` for an error, a warning and a hint (`docs/tool-windows.md`, addendum of 2026-11-25, 23:35 IST).
+
+## Addendum (2026-11-26, 00:35 IST): the analysis state of a document (`RdDaemonModel`)
+
+For the problem counter at the editor's corner (plan: `docs/plans/problems-view.md`, addendum
+2026-11-26 00:20).
+
+| What | Where on the wire |
+|---|---|
+| The model | `RdMarkupModel.daemon: RdDaemonModel`, on the document's markup model (the one `attachMarkup` gets with source `"document"`), as JetBrains Client's `FrontendDaemonHost.documentBound` reads it |
+| State | `daemon.state: IOptProperty<BackendDaemonStateEnum>`: `HIDDEN`, `UNSUPPORTED`, `DISABLED`, `SUSPENDED`, `INVALIDATED`, `IN_PROGRESS_LOCAL`, `IN_PROGRESS_GLOBAL`, `UP_TO_DATE` |
+| Also there, not read yet | `highlightingProgressState` (`OFF`, `LOCAL_STAGES`, `GLOBAL_STAGES`), `message`, `heavyProcessType`, `settings`, and the signals `stateChanged`, `restart`, `invalidateAll` |
+| Counts | none on the wire: the client counts the document's highlighters per severity (`TrafficLightRenderer.incErrorCount`) |
+
+Seen live on opening `Main.java` (app log):
+
+```
+00:03:41.513 Analysis of …/src/demo/Main.java: IN_PROGRESS_LOCAL
+00:03:42.331 Analysis of …/src/demo/Main.java: UP_TO_DATE
+```
+
+In Ideate: `ClientSession.daemonStates` keeps the state per document, `EditorFile.analysis`
+(`AnalysisState`: `RUNNING`, `FINISHED`, `PAUSED`, `OFF`) carries it to the view, and
+`ProblemsView.statusItems(highlights, severities)` gives the counter's entries (severity, icon,
+count), most severe first. Nothing draws them yet.
