@@ -211,3 +211,79 @@ needs no editor state. Details in `docs/split-protocol.md`, addendum of the same
 ## Addendum (2026-11-25, 23:40 IST): corrections
 
 The plan's header says it was written 2026-11-26; it was written 2026-11-25. The addendum above headed "16:10 IST" was written at about 23:00 IST on 2026-11-25. Phase 2 (the File tab) is built and checked live: `docs/tool-windows.md`, addendum of 2026-11-25, 23:35 IST. One change from the plan: `ToolWindow.PROBLEMS` is not added to the `own` list in `toolWindowButtons`, because the backend always lists `Problems View`; and the stripe icon does not switch, because the new UI maps the "empty" icon to the same file.
+
+## Addendum (2026-11-26, 00:20 IST): plan for the counter at the editor's corner
+
+Status of the phases above: the File tab, scrollbar marks with their click, the hover text and the
+Project Errors tab (rows, red icon, open at the line) are built and checked live. This addendum is
+the detailed plan for the counter. Nothing of it is built yet.
+
+### What IntelliJ shows, and from what
+
+Sources read: `TrafficLightRenderer.kt` (`getStatus`, `errorCounts`, `incErrorCount`),
+`AnalyzerStatus.kt`, `EditorMarkupModelImpl.kt` (`TrafficLightAction`, its status component,
+`LEFT_RIGHT_INDENT = 5`, `INTER_GROUP_OFFSET = 6`), `InspectionsGroup.kt`, and JetBrains Client's
+`FrontendTrafficLightRenderer` (decompiled, `intellij.rd.client.jar`).
+
+| Fact | Where | Value |
+|---|---|---|
+| Counts | `TrafficLightRenderer.incErrorCount` | one per highlighter whose `HighlightInfo.severity` is above `TEXT_ATTRIBUTES` (value 11), per severity. Counted on the client from the document's highlighters; the backend sends no counts |
+| Items | `getStatus` | one item per severity with a count above 0, most severe first: the severity's icon and the count as text, tooltip `countMessageTemplate` filled in |
+| No items, analysis finished | `getStatus` | one icon, `AllIcons.General.InspectionsOK` (`expui/general/inspections/inspectionsOK.svg`), title "No problems found" (`no.errors.or.warnings.found`) |
+| No items, analysis running | `getStatus` | `AllIcons.General.InspectionsEye` with the text "Analyzing…" (`iw.status.analyzing`) |
+| Analysis off | `getStatus` | `InspectionsTrafficOff` with "Off" (`iw.status.off`) |
+| Analysis paused | `getStatus` | `InspectionsPause` with "Paused" (`iw.status.paused`) |
+| Finished or not | `FrontendTrafficLightRenderer` | from the backend: `RdMarkupModel.daemon: RdDaemonModel`, property `state: BackendDaemonStateEnum` |
+| Arrows | `EditorMarkupModelImpl` | `NavigationGroup(GotoPreviousError, GotoNextError)` to the right of the items, shown when there are items (`showNavigation`) |
+| Two looks | `RedesignedInspectionsManager.isAvailable()` | the experiment `ide.redesigned.inspector` picks `InspectionsGroup`; otherwise `TrafficLightAction`. Which one a 2026.3 client shows is **not known yet** |
+
+`BackendDaemonStateEnum` to IntelliJ's status, as `FrontendTrafficLightRenderer` maps it:
+
+| `state` | Shown as |
+|---|---|
+| no value yet, or `HIDDEN` while the project is not loaded | paused, reason "Loading…" |
+| `UNSUPPORTED`, `DISABLED` | off |
+| `SUSPENDED` | paused, reason `RdDaemonModel.message` |
+| `IN_PROGRESS_LOCAL`, `IN_PROGRESS_GLOBAL` | running (`errorAnalyzingFinished = false`) |
+| `INVALIDATED`, `UP_TO_DATE`, `HIDDEN` once loaded | finished |
+
+Classic look (`TrafficLightAction`'s component): 5 px at each end, 6 px between items, 1 px between
+an icon and its count, the count in the label font two points smaller, colour
+`ActionButton.iconTextForeground` (default: the context help grey), the button look's hover and
+press backgrounds. It sits at the top right of the editor, over the text, left of the scrollbar.
+
+### Steps
+
+1. **See the real thing first.** Start an own backend and a traced JetBrains Client on the scratch
+   project (`check-jetbrains-client-live` way: read the UI through System Events accessibility) and
+   record: which look shows, the items' order, the count font size and colour, the arrows, the gap to
+   the editor's top and right edges, and what a hover and a click show. Write the findings into
+   `docs/intellij-look.md` before any drawing code.
+2. **Data** (`session/ClientSession.kt`, `session/SessionState.kt`, `session/ProblemsView.kt`):
+   - in `attachMarkup(markupLifetime, documentId, markup, source)`: advise `markup.daemon.state`
+     and keep it per document in a new map `daemonStates: MutableMap<RdDocumentId, BackendDaemonStateEnum>`,
+     then `publishMarkupLater(documentId)`;
+   - new enum `AnalysisState { RUNNING, FINISHED, PAUSED, OFF }` in `SessionState.kt` and a new field
+     `EditorFile.analysis: AnalysisState` (default `PAUSED`), filled from the table above;
+   - new function `ProblemsView.statusItems(highlights, severities): List<StatusItem>` with
+     `data class StatusItem(val severityId: String, val iconPaths: List<String>, val count: Int, val tooltip: String?)`:
+     count highlights with `info.severity > 11` per `severityId`, order by the severity's value,
+     highest first. No merging of items (`StatusItemMerger`) in the first cut.
+   - test `ProblemsViewTest`: two errors, one warning and one hint give `[error 2, warning 1, hint 1]`
+     in that order; a `TEXT ATTRIBUTES` highlight is not counted.
+3. **Widget** (new `ui/InspectionsWidget.kt`, used from `ui/EditorView.kt` in the editor's `Box`,
+   `Alignment.TopEnd`, left of the 18 dp marks strip): a `Row` of icon and count per item with the
+   sizes above; the tick alone when there are no items and the state is `FINISHED`; the eye with
+   "Analyzing…" while `RUNNING` with no items; half opacity while `RUNNING` with items
+   (`translucent`), as IntelliJ paints it. Not shown in the console. Rows keep IntelliJ's sizes on
+   touch too.
+4. **Arrows**: `GotoPreviousError` and `GotoNextError` through `actions.runAction`, icons
+   `AllIcons.Actions.FindAndShowPrevMatchesSmall` and `…NextMatchesSmall`, only when there are items.
+5. **Click** on the items: IntelliJ opens the Problems tool window's File tab
+   (`TrafficLightAction` → `ShowProblemsViewAction`); here `ToolWindow.PROBLEMS` with
+   `ProblemsTab.FILE`.
+6. Live check against step 1's notes, Before/After entry, `docs/pending.md` row 44, addendum in
+   `docs/intellij-look.md`.
+
+Left for later: the popup with the highlighting level and passes that a hover shows, power save
+mode, the redesigned look if step 1 shows the classic one (or the other way round).
