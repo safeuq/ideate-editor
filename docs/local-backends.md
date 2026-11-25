@@ -136,3 +136,64 @@ The connect screen is the UI session's area: tell it before step 4 and agree who
 Step 4's "Ports not matched to a listed project stay as `This computer · port 5992` rows" no longer
 applies: the port rows were removed from the connect screen because the user found them not useful.
 A backend started by hand is reached with Link.
+
+## Addendum (2026-11-25): decisions and the build plan
+
+### Decisions
+
+| Question | Decision | Why |
+|---|---|---|
+| Own settings folders for the backend (`-Didea.config.path=~/.intellij-remote/config` and so on)? | **No.** Use the IDE's own folders, as Gateway and the SSH page do. | Gateway's SSH start sets no folders (`intellij.gateway.ssh.jar` names only `remote-dev-server.sh`); separate folders need copied settings (`jdk.table.xml`) and a second trust. |
+| IntelliJ IDEA 2026.3 is open with the same folders | **Refuse with a message**, the SSH page's: "Another IntelliJ IDEA process is using the same settings, so a backend can't start. Close it, then try again." | The launcher hands `run` to the process holding the folders; only a desktop IDE answers `requires Remote Development backend` (a backend takes the project, exit 0). `HostData.launchFailure` already looks for that text. The message does not guess which process it is. |
+| Port rows (`This device · port 5992`) | **Gone** (edda9fa). | The user found them not useful. |
+| Step 5 (history and reconnect) | **Dropped.** | Like the SSH page: every open asks `status` for the current link, so a refused saved link never comes up. Nothing is saved to history for this page. |
+
+### Build plan
+
+The page is the SSH page's host section for one more host, **this computer**, reached without SSH.
+
+1. **`LocalShell`** (new, `desktop/src/main/kotlin/io/github/safeuq/ideate/client/desktop/LocalShell.kt`):
+   `object LocalShell { fun run(commandLine: String): ExecResult }` runs `/bin/sh -c <commandLine>` with
+   `ProcessBuilder`, reads stdout and stderr fully (stderr on its own thread), waits, returns
+   `ExecResult(exitCode, stdout, stderr)`. Desktop `Main.kt` passes
+   `localHost = { RemoteHosts.forCommands(LocalShell::run) }` in `SshSetup` when `File("/bin/sh").canExecute()`, else
+   `null` (Windows). Android passes nothing (default `null`).
+2. **`SshSetup.localHost: (() -> RemoteHost)? = null`**. In `SshController`:
+   - `const val LOCAL_HOST_ID = "local"` and `val localEntry = SshHostEntry(LOCAL_HOST_ID, "localhost", 0, "", LoginMethod.GENERATED_KEY)`
+     (never saved to `ssh-hosts.json`).
+   - `remoteFor(entry)`: for `LOCAL_HOST_ID`, return the cached `setup.localHost()` result; no `SshSession`.
+   - `SshPageState.local: SshHostView?` (null when `setup.localHost == null`), kept apart from `hosts`, so the SSH
+     page never lists it. `refresh()` and `poll` refresh it too. `setHost` writes `local` for `LOCAL_HOST_ID`.
+   - `openProject`: for `LOCAL_HOST_ID` the backend's link is used as is (no `forward`); `connect(link, projectPath,
+     THIS_DEVICE)`.
+3. **Shared host section.** Move the body of `SshPage`'s `state.hosts.forEachIndexed` (the `HostGroup` and its
+   `ProjectRowView`s) into `@Composable internal fun HostSection(host: SshHostView, title: String, removable: Boolean,
+   search: String, actions: SshActions, styles: ConnectStyles, onShowError: (SshHostView) -> Unit)`. `removable = false`
+   drops the "Remove Host" menu item. `SshPage` calls it per host with `title = host.entry.name, removable = true`.
+4. **This device page on the desktop.** `PhonePage` when `state.termux == null` and `actions.ssh?.state?.local != null`
+   (pass what it needs): header "Recent Projects" with **New Project** (`actions.ssh.newProjectOn(localEntry)`, the SSH
+   page's Choose IDE dialog and folder browser), then `HostSection(local, title = THIS_DEVICE, removable = false, …)`. No
+   Termux rows. Errors and progress use `SshOverlays`, already shown above every page.
+5. **Finding IDEs on macOS** (`ShellHost.INSTALLED_IDES`, so SSH to a Mac gets it too): after `dist/*` and
+   `userProvidedDist/*`, when `uname` is `Darwin`: every `installationDirectory` in
+   `~/Library/Application Support/JetBrains/Toolbox/channels/*.json` (the `sed` above), then `/Applications/*.app` and
+   `~/Applications/*.app`. Each candidate `<x>.app` counts only with `Contents/bin/remote-dev-server.sh`; it prints the
+   same `@@IDE@@<tab>idePath<tab>` record with `idePath = <x>.app/Contents` and `Contents/Resources/product-info.json`.
+   Keep the first copy of each resolved path (`pwd -P`). Test in `ShellHostTest` with a made-up home: a channel file, an
+   `~/Applications` app, an app without `remote-dev-server.sh` (dropped), and the same app twice (listed once).
+6. **Listing projects from `recentProjects.xml`** (`ShellHost`, both OSes): a `RECENT_IDE_PROJECTS` script prints,
+   per product, the newest settings folder's `options/recentProjects.xml` after a `@@XML@@<tab>folder` line
+   (macOS `~/Library/Application Support/JetBrains/<Product><Version>`, Linux `${XDG_CONFIG_HOME:-~/.config}/JetBrains/…`;
+   newest = highest version, e.g. `IntelliJIdea2026.3` over `IntelliJIdea2026.2`). `HostData.ideRecentProjects(xml,
+   home, ides)` parses with `javax.xml` (`entry key` → path with `$USER_HOME$` → home; `activationTimestamp`, else
+   `projectOpenTimestamp`; `productionCode`), picks the installed IDE with that product code (newest build) as
+   `idePath`, and drops entries whose IDE isn't installed. `projectsAndIdes()` merges them with the backend history by
+   path: a running backend wins, else the later time. Folders that no longer exist are dropped (`[ -d ]` in the script).
+   Tests in `HostDataTest`: the entry quoted above, `$USER_HOME$`, newest-folder rule, merge, a missing folder.
+7. **Stop** (step 3): `RemoteHost.stop(idePath: String, projectPath: String)`: `ShellHost` runs
+   `remote-dev-server.sh stop <project>`; `WorkerHost` delegates to its shell. `SshActions.stopProject(entry,
+   project)`; `HostSection` gives **Running** rows `onStop`, then refreshes the host.
+8. **Docs**: an addendum here with the results of the live check; a `client.md` addendum for the page.
+
+Live check on this Mac with IntelliJ IDEA open: the page lists IntelliJ's recent projects; opening one shows the
+settings-in-use message; a PyCharm or GoLand project (IDE not open) starts, connects, and stops with the red square.
