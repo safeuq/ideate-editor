@@ -1,5 +1,7 @@
 package io.github.safeuq.ideate.client.ssh
 
+import java.io.StringReader
+import javax.xml.parsers.DocumentBuilderFactory
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -10,6 +12,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import org.w3c.dom.Element
+import org.xml.sax.InputSource
 
 /** A host command failed: the worker's `error` reply, or a shell command's exit code and stderr. */
 class RemoteHostException(message: String) : RuntimeException(message)
@@ -100,6 +104,104 @@ internal object HostData {
       .map { (_, same) ->
         same.maxBy { it.dateLastOpened }.copy(running = same.any { it.running })
       }
+      .sortedByDescending { it.dateLastOpened }
+
+  /**
+   * The desktop IDEs' recent projects from `recentProjects.xml` files, keyed by settings folder
+   * name, e.g. `IntelliJIdea2026.3`. Only the newest folder per product counts
+   * (`IntelliJIdea2026.3` over `IntelliJIdea2026.2`). An entry like `<entry
+   * key="$USER_HOME$/work/xtool"><value><RecentProjectMetaInfo><option name="activationTimestamp"
+   * value="1745454457133"/><option name="productionCode" value="IU"/>` becomes
+   * `/home/dev/work/xtool` ([home] for `$USER_HOME$`), dated by `activationTimestamp`, else
+   * `projectOpenTimestamp`, opened with the newest installed IDE of that product code. Dropped:
+   * entries whose IDE isn't installed, without a date, or whose key is in [missing] (the folder is
+   * gone).
+   */
+  fun ideRecentProjects(
+    files: Map<String, String>,
+    home: String,
+    ides: List<InstalledIde>,
+    missing: Set<String>,
+  ): List<RecentProject> {
+    val newestFolders =
+      files.keys
+        .mapNotNull { folder -> SETTINGS_FOLDER.matchEntire(folder)?.let { folder to it } }
+        .groupBy { (_, match) -> match.groupValues[1] }
+        .map { (_, folders) ->
+          folders.maxWith(compareBy(VERSION_ORDER) { (_, match) -> match.groupValues[2] }).first
+        }
+    return newestFolders.flatMap { folder ->
+      recentProjectEntries(files.getValue(folder)).mapNotNull { entry ->
+        if (entry.key in missing) return@mapNotNull null
+        val ide =
+          ides
+            .filter { it.productCode == entry.productCode }
+            .maxWithOrNull(compareBy(VERSION_ORDER) { it.buildNumber }) ?: return@mapNotNull null
+        RecentProject(
+          entry.key.replace(USER_HOME, home),
+          ide.idePath,
+          entry.date ?: return@mapNotNull null,
+          running = false,
+        )
+      }
+    }
+  }
+
+  /** `IntelliJIdea2026.3`: product `IntelliJIdea`, version `2026.3`. */
+  private val SETTINGS_FOLDER = Regex("(.*?)(\\d+(?:\\.\\d+)*)")
+  private const val USER_HOME = "\$USER_HOME\$"
+
+  /** Dotted numbers compared part by part: `263.7307.200` after `263.71.1`. */
+  private val VERSION_ORDER =
+    Comparator<String> { first, second ->
+      val firstParts = first.split('.').map { it.toIntOrNull() ?: 0 }
+      val secondParts = second.split('.').map { it.toIntOrNull() ?: 0 }
+      (0 until maxOf(firstParts.size, secondParts.size))
+        .map { index ->
+          firstParts.getOrElse(index) { 0 }.compareTo(secondParts.getOrElse(index) { 0 })
+        }
+        .firstOrNull { it != 0 } ?: 0
+    }
+
+  private data class IdeEntry(val key: String, val productCode: String?, val date: Long?)
+
+  private fun recentProjectEntries(xml: String): List<IdeEntry> {
+    val factory = DocumentBuilderFactory.newInstance()
+    // No DOCTYPE, so no external entities. Android's parser doesn't know this feature and never
+    // loads external entities, so it is skipped there.
+    runCatching { factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+    val document = factory.newDocumentBuilder().parse(InputSource(StringReader(xml)))
+    val entries = document.getElementsByTagName("entry")
+    return (0 until entries.length).mapNotNull { index ->
+      val entry = entries.item(index) as Element
+      val info =
+        entry.getElementsByTagName("RecentProjectMetaInfo").item(0) as? Element
+          ?: return@mapNotNull null
+      val optionNodes = info.getElementsByTagName("option")
+      val options =
+        (0 until optionNodes.length)
+          .map { optionNodes.item(it) as Element }
+          .associate { it.getAttribute("name") to it.getAttribute("value") }
+      IdeEntry(
+        key = entry.getAttribute("key"),
+        productCode =
+          options["productionCode"]?.takeIf { it.isNotEmpty() }
+            ?: options["build"]?.substringBefore('-', ""),
+        date =
+          options["activationTimestamp"]?.toLongOrNull()
+            ?: options["projectOpenTimestamp"]?.toLongOrNull(),
+      )
+    }
+  }
+
+  /**
+   * One row per project path, from the backends' history ([backend]) and the IDEs' ([ide]): a
+   * running backend wins, else the latest date. Newest first.
+   */
+  fun mergedRecent(backend: List<RecentProject>, ide: List<RecentProject>): List<RecentProject> =
+    (backend + ide)
+      .groupBy { it.projectPath }
+      .map { (_, same) -> same.firstOrNull { it.running } ?: same.maxBy { it.dateLastOpened } }
       .sortedByDescending { it.dateLastOpened }
 
   /**

@@ -197,3 +197,44 @@ The page is the SSH page's host section for one more host, **this computer**, re
 
 Live check on this Mac with IntelliJ IDEA open: the page lists IntelliJ's recent projects; opening one shows the
 settings-in-use message; a PyCharm or GoLand project (IDE not open) starts, connects, and stops with the red square.
+
+## Addendum (2026-11-25): items 5–7 done
+
+What was built (items 5, 6 and 7 of the build plan above):
+
+- **5. Finding IDEs on macOS.** `ShellHost.INSTALLED_IDES` now looks in `dist/*` and `userProvidedDist/*` first, then,
+  only when `uname` prints `Darwin`, in every Toolbox channel file's `installationDirectory`, `/Applications/*.app`
+  and `~/Applications/*.app`. An app counts only with `Contents/bin/remote-dev-server.sh`; its `idePath` is
+  `<x>.app/Contents`. Each path is resolved with `pwd -P` and listed once. A missing RemoteDev folder no longer ends
+  the script early, so a Mac without Gateway still lists its apps. `WorkerHost.installedIdes()` adds these apps to
+  the worker's list. Tests: `ShellHostTest.findsMacAppsOnlyOnMac` (channel file, `~/Applications` link to the same
+  app listed once, an app without `remote-dev-server.sh` dropped; runs only on a Mac).
+- **6. Projects from `recentProjects.xml`.** A new script, `ShellHost.RECENT_IDE_PROJECTS`, prints each
+  `<settings folder>/options/recentProjects.xml` after a `@@XML@@<tab>folder<tab>$HOME` line, then a
+  `@@GONE@@<tab>key` line for each entry whose folder no longer exists (`sed` only pulls out the keys; the XML is
+  parsed in Kotlin). `HostData.ideRecentProjects` parses it with `javax.xml`, keeps only the newest folder per
+  product (`IntelliJIdea2026.3` over `IntelliJIdea2026.2`), replaces `$USER_HOME$` with `$HOME`, dates an entry by
+  `activationTimestamp`, else `projectOpenTimestamp`, and opens it with the newest installed IDE of its
+  `productionCode`. Entries whose IDE isn't installed are dropped. `HostData.mergedRecent` merges with the backend
+  history by path: a running backend wins, else the latest date. `projectsAndIdes()` is still one shell command (the
+  three scripts, each in its own subshell); `recentProjects()` returns the same merged list. `WorkerHost` keeps its one
+  worker call and adds one shell command (`ShellHost.idesAndIdeHistory`) for the Mac apps and the IDE history.
+  `RecentProject` did not need a new field. Tests: `HostDataTest` (the entry quoted above, `$USER_HOME$`,
+  `projectOpenTimestamp` fallback, newest-folder rule, a missing folder, the merge) and
+  `ShellHostTest.listsTheIdesRecentProjects` (the real script, a gone folder dropped).
+- **7. Stop.** `RemoteHost.stop(idePath, projectPath)`: `ShellHost` runs `remote-dev-server.sh stop <project>`,
+  `WorkerHost` hands it to its shell. `SshActions.stopProject(entry, project)` runs it off the UI thread, shows
+  "Couldn't stop …" on failure, then refreshes the host. The SSH page's **Running** rows show the stop square.
+  Test: `ShellHostTest.stopRunsTheLaunchersStop`.
+
+Not done here: removing a row that came only from `recentProjects.xml` still removes only backend history, so the row
+comes back on the next refresh.
+
+Real data on this Mac (scripts run read-only against the real home, 2026-11-25):
+
+| | Found |
+|---|---|
+| IDEs | IntelliJ IDEA `IU-263.7307.200` (also in `userProvidedDist`, listed once with its link), CLion `CL-243.21565.238`, GoLand `GO-251.26094.127`, PyCharm Professional `PY-243.21565.199`; Gateway and Android Studio dropped (no `remote-dev-server.sh`) |
+| `recentProjects.xml` files | `CLion2024.3` (2 entries), `GoLand2025.1` (2), `IntelliJIdea2026.2` (50, skipped: older), `IntelliJIdea2026.3` (50), `PyCharm2024.3` (5) |
+| Folders gone | CLion 1, GoLand 2, IntelliJIdea2026.3 8, PyCharm 5 (all of GoLand's and PyCharm's) |
+| Rows after the merge | 69: 68 open in IntelliJ IDEA, 1 in CLion; none running |

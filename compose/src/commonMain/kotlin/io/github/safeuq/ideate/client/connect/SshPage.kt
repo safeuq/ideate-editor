@@ -136,7 +136,7 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
             running = project.running,
             lastActive = project.dateLastOpened,
             onOpen = { actions.openProject(host.entry, project) },
-            onStop = null,
+            onStop = if (project.running) ({ actions.stopProject(host.entry, project) }) else null,
             onRemove = { actions.removeRecent(host.entry, project) },
             enabled = reachable,
             middleEllipsis = true,

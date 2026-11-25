@@ -21,13 +21,13 @@ interface RemoteHost {
 
   /**
    * The worker's `installed-ides`: entries of `dist/` and `userProvidedDist/` with their
-   * product-info.json.
+   * product-info.json; on macOS also Toolbox's and the Applications folders' IDE apps.
    */
   fun installedIdes(): List<InstalledIde>
 
   /**
-   * The worker's `recent-projects-data` plus `active-projects`: every project the host's backends
-   * served.
+   * The worker's `recent-projects-data` plus `active-projects` (every project the host's backends
+   * served), merged with the desktop IDEs' `recentProjects.xml` ([HostData.mergedRecent]).
    */
   fun recentProjects(): List<RecentProject>
 
@@ -58,6 +58,12 @@ interface RemoteHost {
 
   /** Sub-folders of [path] for the folder browser, like `Termux.listFolders`. */
   fun listFolders(path: String): List<RemoteFolder>
+
+  /**
+   * Stops the backend for [projectPath] started from [idePath]: `remote-dev-server.sh stop`, which
+   * saves and exits.
+   */
+  fun stop(idePath: String, projectPath: String)
 
   /** The worker's `remove-recent-project`: forgets [projectPath] on the host, for every client. */
   fun removeRecent(projectPath: String, productCode: String)

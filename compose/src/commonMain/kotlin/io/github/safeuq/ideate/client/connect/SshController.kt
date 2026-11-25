@@ -164,6 +164,8 @@ class SshActions(
   val cancelDialog: () -> Unit,
   val openProject: (SshHostEntry, RecentProject) -> Unit,
   val removeRecent: (SshHostEntry, RecentProject) -> Unit,
+  /** Stops a **Running** project's backend, then refreshes the host. */
+  val stopProject: (SshHostEntry, RecentProject) -> Unit,
   val removeHost: (SshHostEntry) -> Unit,
   val listFolders: (SshHostEntry) -> (String, (Result<List<Termux.Folder>>) -> Unit) -> Unit,
   val answerQuestion: () -> Unit,
@@ -233,6 +235,7 @@ class SshController(
       cancelDialog = { state = state.copy(dialog = null) },
       openProject = { entry, project -> openProject(entry, project.idePath, project.projectPath) },
       removeRecent = ::removeRecent,
+      stopProject = ::stopProject,
       removeHost = ::removeHost,
       listFolders = { entry -> { path, onResult -> listFolders(entry, path, onResult) } },
       answerQuestion = { answer(true) },
@@ -364,6 +367,25 @@ class SshController(
               message =
                 ConnectMessage(
                   "Couldn't remove ${project.projectPath}: ${it.message}",
+                  MessageKind.ERROR,
+                ),
+            )
+        }
+        refreshHost(entry, forceReconnect = false)
+      }
+    }
+  }
+
+  private fun stopProject(entry: SshHostEntry, project: RecentProject) {
+    work.execute {
+      val result = runCatching { remoteFor(entry).stop(project.idePath, project.projectPath) }
+      main.launch {
+        result.exceptionOrNull()?.let { failure ->
+          state =
+            state.copy(
+              message =
+                ConnectMessage(
+                  "Couldn't stop ${project.projectPath}: ${failure.message}",
                   MessageKind.ERROR,
                 ),
             )

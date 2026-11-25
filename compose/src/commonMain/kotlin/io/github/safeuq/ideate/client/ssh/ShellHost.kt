@@ -14,6 +14,10 @@ class ShellHost(
   knownOs: HostOs? = null,
   knownRemoteDevDir: String? = null,
   knownHome: String? = null,
+  /**
+   * The system-wide Applications folder [INSTALLED_IDES] looks in on macOS; tests pass their own.
+   */
+  private val systemApplications: String = "/Applications",
 ) : RemoteHost {
   private val homeDir by lazy {
     knownHome ?: checked(run("printf '%s\\n' \"\$HOME\""), "HOME").stdout.trim().lines().last()
@@ -36,14 +40,49 @@ class ShellHost(
   override fun home(): String = homeDir
 
   override fun installedIdes(): List<InstalledIde> =
-    ides(records(runScript(INSTALLED_IDES, remoteDevDir())))
+    ides(records(runScript(INSTALLED_IDES, remoteDevDir(), systemApplications)))
 
-  override fun recentProjects(): List<RecentProject> =
-    recent(statusFiles(records(runScript(RECENT_STATUSES, remoteDevDir()))))
+  override fun recentProjects(): List<RecentProject> = projectsAndIdes().recent
 
   override fun projectsAndIdes(): HostProjects {
-    val records = records(runScript("$INSTALLED_IDES\n$RECENT_STATUSES", remoteDevDir()))
-    return HostProjects(recent(statusFiles(records)), ides(records))
+    // Subshells: a script that ends early with `exit` doesn't end the ones after it.
+    val records =
+      records(
+        runScript(
+          "($INSTALLED_IDES)\n($RECENT_STATUSES)\n($RECENT_IDE_PROJECTS)",
+          remoteDevDir(),
+          systemApplications,
+        ),
+      )
+    val ides = ides(records)
+    return HostProjects(
+      HostData.mergedRecent(recent(statusFiles(records)), ideHistory(records, ides)),
+      ides,
+    )
+  }
+
+  /**
+   * The installed IDEs and the projects the desktop IDEs opened (`recentProjects.xml`), in one
+   * command: for [WorkerHost], whose worker reads neither the Mac apps nor that file.
+   */
+  internal fun idesAndIdeHistory(): HostProjects {
+    val records =
+      records(
+        runScript("($INSTALLED_IDES)\n($RECENT_IDE_PROJECTS)", remoteDevDir(), systemApplications),
+      )
+    val ides = ides(records)
+    return HostProjects(ideHistory(records, ides), ides)
+  }
+
+  private fun ideHistory(records: List<Record>, ides: List<InstalledIde>): List<RecentProject> {
+    val files = records.filter { it.marker == XML_RECORD }
+    if (files.isEmpty()) return emptyList()
+    return HostData.ideRecentProjects(
+      files.associate { it.fields[0] to it.body },
+      home = files.first().fields[1],
+      ides = ides,
+      missing = records.filter { it.marker == GONE_RECORD }.map { it.fields[0] }.toSet(),
+    )
   }
 
   private fun ides(records: List<Record>) =
@@ -89,6 +128,13 @@ class ShellHost(
       "remote-dev-server.sh run",
     )
     return logs
+  }
+
+  override fun stop(idePath: String, projectPath: String) {
+    checked(
+      run("${shellQuote("$idePath/bin/remote-dev-server.sh")} stop ${shellQuote(projectPath)}"),
+      "remote-dev-server.sh stop",
+    )
   }
 
   /** The shell commands that create [logs] and write [HostData.LAUNCH_START] to both logs. */
@@ -157,27 +203,75 @@ class ShellHost(
   companion object {
     private const val IDE_RECORD = "@@IDE@@"
     private const val STATUS_RECORD = "@@STATUS@@"
+    private const val XML_RECORD = "@@XML@@"
+    private const val GONE_RECORD = "@@GONE@@"
 
     /**
-     * `$1`: the RemoteDev folder. Per IDE under `dist/` and `userProvidedDist/` (symlinks resolved)
-     * that has `bin/remote-dev-server.sh`: a line `@@IDE@@<tab>idePath<tab>linkPath`, then its
-     * product-info.json (`<ide>/product-info.json`, or `<app>/Contents/Resources/` on macOS, where
-     * the link points at `Contents`).
+     * `$1`: the RemoteDev folder, `$2`: the system Applications folder. Per IDE that has
+     * `bin/remote-dev-server.sh` (symlinks resolved, the first copy of each path kept): a line
+     * `@@IDE@@<tab>idePath<tab>linkPath`, then its product-info.json (`<ide>/product-info.json`, or
+     * `<app>/Contents/Resources/` on macOS, where idePath is `<app>/Contents`). Looks in `dist/`
+     * and `userProvidedDist/`, then on macOS in Toolbox's install folders (`installationDirectory`
+     * of each channel file), then the apps in `$2` and `~/Applications`.
      */
     internal const val INSTALLED_IDES =
-      """cd "${'$'}1" 2>/dev/null || exit 0
-for entry in dist/* userProvidedDist/*; do
-  [ -e "${'$'}entry" ] || continue
-  ide=${'$'}(cd "${'$'}entry" 2>/dev/null && pwd -P) || continue
+      """seen='
+'
+emit() {
+  ide=${'$'}(cd "${'$'}1" 2>/dev/null && pwd -P) || return 0
+  case "${'$'}seen" in *"
+${'$'}ide
+"*) return 0 ;; esac
   info="${'$'}ide/product-info.json"
   [ -f "${'$'}info" ] || info="${'$'}ide/Resources/product-info.json"
-  [ -f "${'$'}info" ] && [ -f "${'$'}ide/bin/remote-dev-server.sh" ] || continue
-  link=
-  [ -L "${'$'}entry" ] && link="${'$'}1/${'$'}entry"
-  printf '@@IDE@@\t%s\t%s\n' "${'$'}ide" "${'$'}link"
+  [ -f "${'$'}info" ] && [ -f "${'$'}ide/bin/remote-dev-server.sh" ] || return 0
+  seen="${'$'}seen${'$'}ide
+"
+  printf '@@IDE@@\t%s\t%s\n' "${'$'}ide" "${'$'}2"
   cat "${'$'}info"
   printf '\n'
-done"""
+}
+for entry in "${'$'}1"/dist/* "${'$'}1"/userProvidedDist/*; do
+  [ -e "${'$'}entry" ] || continue
+  link=
+  [ -L "${'$'}entry" ] && link="${'$'}entry"
+  emit "${'$'}entry" "${'$'}link"
+done
+[ "${'$'}(uname)" = Darwin ] || exit 0
+toolbox=${'$'}(sed -n 's/.*"installationDirectory" *: *"\([^"]*\)".*/\1/p' \
+  "${'$'}HOME/Library/Application Support/JetBrains/Toolbox/channels"/*.json 2>/dev/null)
+IFS='
+'
+for app in ${'$'}toolbox "${'$'}2"/*.app "${'$'}HOME"/Applications/*.app; do
+  [ -d "${'$'}app/Contents" ] && emit "${'$'}app/Contents" ""
+done
+exit 0"""
+
+    /**
+     * Per settings folder with `options/recentProjects.xml` (macOS `~/Library/Application
+     * Support/JetBrains/<Product><Version>`, else
+     * `${'$'}{XDG_CONFIG_HOME:-~/.config}/JetBrains/…`): a line `@@XML@@<tab>folder
+     * name<tab>$HOME`, the file, then `@@GONE@@<tab>key` for each entry key whose folder no longer
+     * exists. The XML is parsed in Kotlin; `sed` only pulls out the keys.
+     */
+    internal const val RECENT_IDE_PROJECTS =
+      """if [ "${'$'}(uname)" = Darwin ]; then config="${'$'}HOME/Library/Application Support/JetBrains"
+else config="${'$'}{XDG_CONFIG_HOME:-${'$'}HOME/.config}/JetBrains"; fi
+for xml in "${'$'}config"/*/options/recentProjects.xml; do
+  [ -f "${'$'}xml" ] || continue
+  folder=${'$'}{xml%/options/recentProjects.xml}
+  printf '@@XML@@\t%s\t%s\n' "${'$'}{folder##*/}" "${'$'}HOME"
+  cat "${'$'}xml"
+  printf '\n'
+  sed -n 's/.*<entry key="\([^"]*\)".*/\1/p' "${'$'}xml" | while IFS= read -r key; do
+    case "${'$'}key" in
+      '${'$'}USER_HOME${'$'}'*) path="${'$'}HOME${'$'}{key#'${'$'}USER_HOME${'$'}'}" ;;
+      *) path=${'$'}key ;;
+    esac
+    [ -d "${'$'}path" ] || printf '@@GONE@@\t%s\n' "${'$'}key"
+  done
+done
+exit 0"""
 
     /**
      * `$1`: the RemoteDev folder. Per status file in `recent/` and `active/`: a line

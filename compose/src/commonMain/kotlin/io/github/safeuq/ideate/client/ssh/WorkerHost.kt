@@ -25,7 +25,11 @@ class WorkerHost(
 
   override fun home() = shell.home()
 
-  override fun installedIdes(): List<InstalledIde> = call("installed-ides").data.mapNotNull(::ide)
+  /** The worker's IDEs, then the ones only [ShellHost] finds (the Mac apps). */
+  override fun installedIdes(): List<InstalledIde> =
+    (call("installed-ides").data.mapNotNull(::ide) + shell.installedIdes()).distinctBy {
+      it.idePath
+    }
 
   override fun recentProjects(): List<RecentProject> {
     val recent = Json.parseToJsonElement(call("recent-projects-data").single).jsonObject
@@ -34,22 +38,32 @@ class WorkerHost(
       recent["alivePids"]?.jsonArray.orEmpty().mapNotNull { it.jsonPrimitive.longOrNull }.toSet() +
         active.map { HostData.status(it).appPid }
     val raw = recent["rawStatuses"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }
-    return HostData.recentProjects(raw + active, alive)
+    return HostData.mergedRecent(
+      HostData.recentProjects(raw + active, alive),
+      shell.idesAndIdeHistory().recent,
+    )
   }
 
   /**
    * One `recent-projects-data`: its `rawStatuses`, `alivePids` and `installedIdes`. Unlike
    * [recentProjects] it leaves out `active-projects`; a running backend writes its `recent/` file
-   * when it opens the project, so its project is there, and `alivePids` marks it running.
+   * when it opens the project, so its project is there, and `alivePids` marks it running. Then
+   * [ShellHost.idesAndIdeHistory] for what the worker doesn't read.
    */
   override fun projectsAndIdes(): HostProjects {
     val data = Json.parseToJsonElement(call("recent-projects-data").single).jsonObject
     val alive =
       data["alivePids"]?.jsonArray.orEmpty().mapNotNull { it.jsonPrimitive.longOrNull }.toSet()
     val raw = data["rawStatuses"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }
-    val ides =
+    val workerIdes =
       data["installedIdes"]?.jsonArray.orEmpty().mapNotNull { ide(it.jsonObject.toString()) }
-    return HostProjects(HostData.recentProjects(raw, alive), ides)
+    // The worker reads neither the Mac apps nor recentProjects.xml: one shell command adds both.
+    val fromShell = shell.idesAndIdeHistory()
+    val ides = (workerIdes + fromShell.ides).distinctBy { it.idePath }
+    return HostProjects(
+      HostData.mergedRecent(HostData.recentProjects(raw, alive), fromShell.recent),
+      ides,
+    )
   }
 
   override fun status(idePath: String, projectPath: String): HostStatus? {
@@ -81,6 +95,8 @@ class WorkerHost(
   override fun launchFailure(logsDir: String) = shell.launchFailure(logsDir)
 
   override fun listFolders(path: String) = shell.listFolders(path)
+
+  override fun stop(idePath: String, projectPath: String) = shell.stop(idePath, projectPath)
 
   override fun removeRecent(projectPath: String, productCode: String) {
     call("remove-recent-project", "project-path" to projectPath, "product-code" to productCode)

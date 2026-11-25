@@ -182,6 +182,10 @@ class RemoteHostTest {
     FakeHost(
       mapOf(
         "@@WORKER@@" to probe(withWorker),
+        // ShellHost's INSTALLED_IDES and RECENT_IDE_PROJECTS: nothing on a Linux phone.
+        "emit()" to ExecResult(0, "", ""),
+        "uname -sm" to ExecResult(0, "Linux aarch64\n", ""),
+        "XDG_CACHE_HOME" to ExecResult(0, "$remoteDev\n", ""),
         "installed-ides" to multi(ideEntry.toString()),
         "recent-projects-data" to
           single(
@@ -227,11 +231,15 @@ class RemoteHostTest {
   }
 
   @Test
-  fun projectsAndIdesIsOneWorkerCall() {
+  fun projectsAndIdesIsOneWorkerCallAndOneShellScript() {
     val fake = fakeWorker()
     val host = WorkerHost(worker, fake::run)
+    host.remoteDevDir()
+    fake.commands.clear()
     val both = host.projectsAndIdes()
-    assertEquals(listOf("'$worker' recent-projects-data"), fake.commands)
+    assertEquals(2, fake.commands.size, "${fake.commands}")
+    assertEquals("'$worker' recent-projects-data", fake.commands.first())
+    assertTrue("emit()" in fake.commands.last())
     assertEquals(host.recentProjects(), both.recent)
     assertEquals(host.installedIdes(), both.ides)
   }

@@ -30,7 +30,7 @@ class ShellHostTest {
     return ExecResult(process.waitFor(), stdout, stderr)
   }
 
-  private val host = ShellHost(::run)
+  private val host = ShellHost(::run, systemApplications = home.resolve("SystemApplications").path)
 
   /** An IDE install whose `remote-dev-server.sh` answers `status` and records `run`. */
   private fun installIde(): File {
@@ -195,6 +195,89 @@ class ShellHostTest {
     assertTrue(picked is WorkerHost, "$picked")
     assertEquals(host.os(), picked.os())
     assertEquals(host.remoteDevDir(), picked.remoteDevDir())
+  }
+
+  /**
+   * A macOS app at [app] (`<x>.app`) with product-info.json, and `remote-dev-server.sh` if
+   * [backend].
+   */
+  private fun macApp(app: File, backend: Boolean = true): File {
+    val contents = app.resolve("Contents").apply { resolve("Resources").mkdirs() }
+    contents
+      .resolve("Resources/product-info.json")
+      .writeText("""{"buildNumber":"263.1.1","productCode":"GO","version":"2026.3"}""")
+    if (backend)
+      contents.resolve("bin/remote-dev-server.sh").apply { parentFile.mkdirs() }.writeText("")
+    return contents.canonicalFile
+  }
+
+  @Test
+  fun findsMacAppsOnlyOnMac() {
+    if (host.os().os != HostOs.Os.MAC) return
+    // A Toolbox install in a custom folder, named by its channel file; also in ~/Applications
+    // through a link, so the same app twice: listed once.
+    val toolbox = macApp(home.resolve("Custom/GoLand.app"))
+    home
+      .resolve("Library/Application Support/JetBrains/Toolbox/channels")
+      .apply { mkdirs() }
+      .resolve("GO-1.json")
+      .writeText(
+        """{"channel": {"installationDirectory" : "${home.resolve("Custom/GoLand.app").path}"}}""",
+      )
+    home.resolve("Applications").mkdirs()
+    Files.createSymbolicLink(
+      home.resolve("Applications/GoLand.app").toPath(),
+      home.resolve("Custom/GoLand.app").toPath(),
+    )
+    val applications = macApp(home.resolve("Applications/Other IDE.app"))
+    // No remote-dev-server.sh (Gateway, Android Studio): dropped.
+    macApp(home.resolve("SystemApplications/Gateway.app"), backend = false)
+    assertEquals(
+      listOf(toolbox.path, applications.path),
+      host.installedIdes().map { it.idePath },
+    )
+  }
+
+  @Test
+  fun listsTheIdesRecentProjects() {
+    val ide = installIde()
+    val link =
+      File(host.remoteDevDir()).resolve("userProvidedDist/_intellij").apply { parentFile.mkdirs() }
+    Files.createSymbolicLink(link.toPath(), ide.toPath())
+    home.resolve("work/xtool").mkdirs()
+    val config =
+      if (host.os().os == HostOs.Os.MAC) home.resolve("Library/Application Support/JetBrains")
+      else home.resolve(".config/JetBrains")
+    config
+      .resolve("IntelliJIdea2026.3/options")
+      .apply { mkdirs() }
+      .resolve("recentProjects.xml")
+      .writeText(
+        """
+        <application><component name="RecentProjectsManager"><option name="additionalInfo"><map>
+          <entry key="${'$'}USER_HOME${'$'}/work/xtool">
+            <value><RecentProjectMetaInfo><option name="activationTimestamp" value="1000" /><option name="productionCode" value="IU" /></RecentProjectMetaInfo></value>
+          </entry>
+          <entry key="${'$'}USER_HOME${'$'}/work/gone">
+            <value><RecentProjectMetaInfo><option name="activationTimestamp" value="2000" /><option name="productionCode" value="IU" /></RecentProjectMetaInfo></value>
+          </entry>
+        </map></option></component></application>
+        """
+          .trimIndent(),
+      )
+    val expected = listOf(RecentProject(home.resolve("work/xtool").path, ide.path, 1000, false))
+    assertEquals(expected, host.projectsAndIdes().recent)
+    assertEquals(expected, host.recentProjects())
+  }
+
+  @Test
+  fun stopRunsTheLaunchersStop() {
+    val ide = installIde()
+    ide
+      .resolve("bin/remote-dev-server.sh")
+      .writeText("#!/bin/sh\necho \"$1 $2\" > \"\$HOME/stopped\"\n")
+    host.stop(ide.path, "/work/smoke")
+    assertEquals("stop /work/smoke\n", home.resolve("stopped").readText())
   }
 
   @Test
