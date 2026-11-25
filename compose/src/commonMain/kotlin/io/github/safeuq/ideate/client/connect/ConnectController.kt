@@ -886,8 +886,8 @@ class ConnectController(
     val termux = requireTermux()
     if (!termux.hasPermission) return termux.requestPermission()
     question = null
-    busy = "Asking Termux for the backend's link…"
-    step(project, "Asking Termux for the backend's link…")
+    busy = "Retrieving the link from the IDE Backend"
+    step(project, "Retrieving the link from the IDE Backend")
     termux.run(listOf("status", "--json")) { result ->
       busy = null
       result.fold(
@@ -1013,7 +1013,7 @@ class ConnectController(
     startingOnRunningBackend = onRunningBackend
     step(
       project,
-      "Running intellij-backend start for ${project.trimEnd('/').substringAfterLast('/')}; this takes up to 3 minutes",
+      "Initializing the IDE Backend. This can take up to 3 minutes",
       cancellable = true,
     )
     requireTermux().run(listOf("start", project)) { result ->
@@ -1304,7 +1304,12 @@ fun EditorApp(
     controller.reconnecting?.let { attemptNumber ->
       val project = controller.switching
       if (project != null)
-        StartProgress("Opening Project", project, fonts, onCancel = controller::leave)
+        StartProgress(
+          "Opening Project",
+          "Reconnecting to the IDE Backend",
+          fonts,
+          onCancel = controller::leave,
+        )
       else
         StartProgress(
           "No connection to IDE Backend",

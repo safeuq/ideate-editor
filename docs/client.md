@@ -251,3 +251,25 @@ stop square. Windows keeps the old page with "Use SSH or Link." ([`local-backend
 ## Addendum (2026-11-25): connecting popup text
 
 Update (2026-11-25): the popup reads "Establishing connection / Performing handshake with remote host".
+
+## Addendum (2026-11-25): progress popup wording
+
+Progress popups (all drawn by `StartProgress(title, detail, …)`) name no project, host, utility or script (user's request).
+
+| Where (old text) | Title | Detail |
+|---|---|---|
+| startSession handshake | Establishing connection | Performing handshake with remote host |
+| Termux "Asking Termux for the backend's link…" (step + busy) | Connecting to IDE Backend | Retrieving the link from the IDE Backend |
+| Termux "Connecting…" (2 places) | Connecting to IDE Backend | Connecting… |
+| Termux "Running intellij-backend start for X; this takes up to 3 minutes" | Connecting to IDE Backend | Initializing the IDE Backend. This can take up to 3 minutes |
+| ConnectScreen busy popup | Connecting to IDE Backend | Retrieving the link from the IDE Backend |
+| ConnectScreen stopping popup ("Running intellij-backend stop for X") | Stopping IDE Backend | Stopping the IDE Backend |
+| SSH openProject initial ("$name on $hostName") | Connecting to IDE Backend | Connecting to the host |
+| SSH "Checking for already running IDE Backend" | Connecting to IDE Backend | Checking for a running IDE Backend |
+| SSH "Starting the remote IDE Backend" | Connecting to IDE Backend | Starting the IDE Backend |
+| SSH "Waiting for the IDE Backend to start" | Connecting to IDE Backend | Waiting for the IDE Backend to start |
+| SSH "Performing the SSH port forwarding" | Connecting to IDE Backend | Setting up port forwarding |
+| Editor reconnect | No connection to IDE Backend | Trying to reconnect… (attempt N) (unchanged) |
+| Editor switching ("Opening Project" / project path) | Opening Project | Reconnecting to the IDE Backend |
+
+The Termux step popups keep `OpeningProgress.project` for Cancel and state; the screen no longer shows it.

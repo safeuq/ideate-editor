@@ -166,8 +166,8 @@ private fun SampleDialog() {
 @Composable
 private fun SampleProgress() {
   StartProgress(
-    "Starting the remote IDE Backend",
-    "Running intellij-backend start for xtool; this takes up to 3 minutes",
+    "Connecting to IDE Backend",
+    "Initializing the IDE Backend. This can take up to 3 minutes",
     LocalClientFonts.current,
     onCancel = {},
   )

@@ -142,7 +142,10 @@ sealed interface SshDialog {
     SshDialog
 }
 
-/** Gateway's deploy progress: e.g. "Starting the remote IDE Backend", detail the project. */
+/**
+ * Gateway's deploy progress: title "Connecting to IDE Backend", detail the step, e.g. "Starting the
+ * IDE Backend".
+ */
 data class SshProgress(val title: String, val detail: String)
 
 data class SshPageState(
@@ -716,16 +719,17 @@ class SshController(
         ?.name ?: "The IDE"
     state =
       state.copy(
-        progress = SshProgress("Connecting to the IDE Backend", "$name on $hostName"),
+        progress = SshProgress("Connecting to IDE Backend", "Connecting to the host"),
         message = null,
       )
-    fun progress(title: String) = main.launch {
-      if (run == openRun) state = state.copy(progress = SshProgress(title, "$name on $hostName"))
+    fun progress(detail: String) = main.launch {
+      if (run == openRun)
+        state = state.copy(progress = SshProgress("Connecting to IDE Backend", detail))
     }
     work.execute {
       val result = runCatching {
         val remote = remoteFor(entry)
-        progress("Checking for already running IDE Backend")
+        progress("Checking for a running IDE Backend")
         var status = remote.status(idePath, projectPath)
         // A running backend serves every project it has open over one join link; Gateway's launch
         // for another project hands it to that backend (the launcher exits 0 at once) and the
@@ -735,7 +739,7 @@ class SshController(
             candidate.projects.any { it.projectPath.trimEnd('/') == projectPath.trimEnd('/') }
         val wasRunning = status?.isReady == true
         if (!hasProject(status)) {
-          progress("Starting the remote IDE Backend")
+          progress("Starting the IDE Backend")
           val logs = remote.launch(idePath, projectPath)
           progress("Waiting for the IDE Backend to start")
           val deadline = System.currentTimeMillis() + START_TIMEOUT_MILLIS
@@ -770,7 +774,7 @@ class SshController(
         if (otherClient && !ask(TAKE_OVER, "Take over")) return@runCatching null
         // This computer's backend already listens on 127.0.0.1: its link is used as is.
         if (isLocal) return@runCatching link
-        progress("Performing the SSH port forwarding")
+        progress("Setting up port forwarding")
         val joinLink = JoinLink.parse(link)
         val forward = sessions.getValue(entry.id).forward(joinLink.port)
         synchronized(forwards) { forwards += forward }

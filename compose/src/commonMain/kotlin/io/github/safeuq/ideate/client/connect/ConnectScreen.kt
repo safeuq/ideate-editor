@@ -77,7 +77,7 @@ data class ConnectScreenState(
    */
   val termux: TermuxAccess?,
   /**
-   * Work in progress, e.g. "Asking Termux for the backend's link…", shown in the progress popup;
+   * Work in progress, e.g. "Retrieving the link from the IDE Backend", shown in the progress popup;
    * taps are ignored meanwhile.
    */
   val busy: String?,
@@ -94,9 +94,9 @@ data class ConnectScreenState(
 )
 
 /**
- * One step of opening a project on this phone, e.g. project `…/Xflow/commons`, detail "Running
- * intellij-backend start for commons; this takes up to 3 minutes". [cancellable]: only while
- * `start` runs, as before.
+ * One step of opening a project on this phone, e.g. project `…/Xflow/commons`, detail "Initializing
+ * the IDE Backend. This can take up to 3 minutes". [cancellable]: only while `start` runs, as
+ * before.
  */
 data class OpeningProgress(
   val project: String,
@@ -218,16 +218,16 @@ fun ConnectScreen(state: ConnectScreenState, actions: ConnectActions, fonts: Cli
   }
   state.opening?.let { progress ->
     StartProgress(
-      progress.title ?: "Connecting to ${progress.project.trimEnd('/').substringAfterLast('/')}",
+      progress.title ?: "Connecting to IDE Backend",
       progress.detail,
       fonts,
       if (progress.cancellable) actions.cancelStart else null,
     )
   }
-  state.stopping?.let { project ->
+  state.stopping?.let {
     StartProgress(
       "Stopping IDE Backend",
-      "Running intellij-backend stop for ${project.trimEnd('/').substringAfterLast('/')}",
+      "Stopping the IDE Backend",
       fonts,
       onCancel = null,
     )
