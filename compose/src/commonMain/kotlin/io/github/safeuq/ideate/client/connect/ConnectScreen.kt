@@ -69,7 +69,8 @@ data class ConnectScreenState(
   val discovered: List<DiscoveredBackend>,
   val history: List<SavedConnection>,
   /**
-   * Null where there is no Termux (the desktop): the first page then lists open local ports only.
+   * Null where there is no Termux (the desktop): the first page then lists nothing yet
+   * (docs/local-backends.md plans it).
    */
   val termux: TermuxAccess?,
   /**
@@ -427,7 +428,7 @@ private fun PhonePage(
       null -> Unit
     }
     // One row per project open in Termux's backend; they share its join link.
-    val running = state.discovered.filter { it.joinLink != null }
+    val running = state.discovered
     val rows = buildList {
       running.forEach { backend ->
         val entry =
@@ -461,22 +462,6 @@ private fun PhonePage(
             ),
           )
         }
-      // An open port that Termux doesn't know about, e.g. remote-dev-server.sh started by hand:
-      // needs its link.
-      state.discovered
-        .filter { it.joinLink == null }
-        .forEach { backend ->
-          add(
-            ProjectRow(
-              "127.0.0.1:${backend.port}",
-              true,
-              null,
-              { actions.openDiscovered(backend) },
-              null,
-              null,
-            ),
-          )
-        }
     }
       .filter { search.isBlank() || it.title.contains(search.trim(), ignoreCase = true) }
     HostGroup(
@@ -494,7 +479,7 @@ private fun PhonePage(
           search.isNotBlank() -> "No projects"
           termuxReady -> "No recent projects. Tap New Project to start a backend in Termux."
           state.termux == null ->
-            "No backend on ports 5990 to 5999 here. Use Link to connect by join link."
+            "Listing this computer's projects isn't built yet. Use SSH or Link."
           else -> "No projects"
         },
         styles,

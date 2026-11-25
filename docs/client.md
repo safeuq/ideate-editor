@@ -215,3 +215,10 @@ no JetBrains software (this Mac has IntelliJ installed, though the build did not
 
 Still needed on the machine: a JDK to run Gradle (a full JDK 25 for the DMG's `jpackage`), the
 Android SDK for the APK, and Xcode's command line tools for the DMG.
+
+## Addendum (2026-11-25): no open-port rows
+
+The "This computer / This phone" Connections row no longer scans ports 5990 to 5999 on `127.0.0.1`.
+The desktop page stays empty until step 4 of docs/local-backends.md is built. The phone page shows
+the projects Termux reports (from `intellij-backend status --json`) and Termux history only. A
+backend started by hand is reached with Link.

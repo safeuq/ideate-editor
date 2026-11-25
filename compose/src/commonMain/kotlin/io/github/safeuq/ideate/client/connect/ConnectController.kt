@@ -44,7 +44,6 @@ import io.github.safeuq.ideate.client.ui.screenLayout
 import io.github.safeuq.ideate.client.ui.theme.ClientFonts
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.toolWindowButtons
-import kotlin.concurrent.thread
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -835,22 +834,7 @@ class ConnectController(
 
   private fun openDiscovered(backend: DiscoveredBackend) {
     if (busy != null) return
-    val known = saved.firstOrNull { entry ->
-      entry.kind == ConnectionKind.LINK && entry.host == backend.host && entry.port == backend.port
-    }
-    when {
-      backend.joinLink != null -> openTermux(backend.project)
-      known != null -> openSaved(known)
-      else -> {
-        page = ConnectPage.LINK
-        link = "tcp://${backend.host}:${backend.port}#"
-        inform(
-          "Paste the join link of the backend on port ${backend.port}. " +
-            if (termux != null) "In Termux, `intellij-backend link` prints it."
-            else "remote-dev-server.sh prints it when it starts.",
-        )
-      }
-    }
+    openTermux(backend.project)
   }
 
   // ---- Termux ----
@@ -1031,7 +1015,7 @@ class ConnectController(
   /** The red square next to a running project. */
   private fun stopTermux() {
     if (busy != null || stopping != null) return
-    stopping = localBackends.firstOrNull { it.joinLink != null }?.project ?: "Termux"
+    stopping = localBackends.firstOrNull()?.project ?: "Termux"
     requireTermux().run(listOf("stop")) { result ->
       stopping = null
       result.fold(
@@ -1089,9 +1073,7 @@ class ConnectController(
 
   // ---- Discovery ----
 
-  /**
-   * Probes this device's ports and asks Termux for its backend (docs/connections.md, "Discovery").
-   */
+  /** Asks Termux for its backend (docs/connections.md, "Discovery"). */
   fun refresh() {
     termuxAccess = termux?.let {
       when {
@@ -1100,9 +1082,10 @@ class ConnectController(
         else -> TermuxAccess.READY
       }
     }
-    // With Termux the ports are probed once its status has answered (2 s or more on a phone):
-    // before that, Termux's own backend port would show as an unknown "127.0.0.1:5990" row.
-    if (termuxAccess != TermuxAccess.READY) return probePorts()
+    if (termuxAccess != TermuxAccess.READY) {
+      localBackends = emptyList()
+      return
+    }
     requireTermux().run(listOf("status", "--json")) { result ->
       result.fold(
         onSuccess = { output ->
@@ -1124,30 +1107,13 @@ class ConnectController(
                     joinLink,
                   )
                 }
-              localBackends = backends + localBackends.filter { it.port != port }
+              localBackends = backends
             }
-            else -> localBackends = localBackends.filter { it.joinLink == null }
+            else -> localBackends = emptyList()
           }
         },
         onFailure = { failure -> fail(failure.message ?: failure.toString()) },
       )
-      probePorts()
-    }
-  }
-
-  private fun probePorts() {
-    thread(name = "local-ports", isDaemon = true) {
-      val ports = LocalPorts.open()
-      main.launch {
-        val known = localBackends.filter { it.joinLink != null && it.port in ports }
-        localBackends =
-          known +
-            ports
-              .filter { port -> known.none { it.port == port } }
-              .map { port ->
-                DiscoveredBackend("$device · port $port", port, project = null, joinLink = null)
-              }
-      }
     }
   }
 

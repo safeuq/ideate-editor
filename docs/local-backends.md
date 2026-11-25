@@ -130,3 +130,9 @@ with `javax.xml` (desktop Java and Android both have it).
 - [ ] **7. Docs.** This file's steps marked done with results; `client.md` "Connections" row updated.
 
 The connect screen is the UI session's area: tell it before step 4 and agree who builds the page.
+
+## Addendum (2026-11-25): no open-port rows
+
+Step 4's "Ports not matched to a listed project stay as `This computer · port 5992` rows" no longer
+applies: the port rows were removed from the connect screen because the user found them not useful.
+A backend started by hand is reached with Link.
