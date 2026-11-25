@@ -54,10 +54,12 @@ class TermuxAgentConnection private constructor(private val socket: Socket) : Ag
             return null
           }
           'T'.code -> throw TokenRejected()
-          'A'.code ->
-            throw IOException(
+          'A'.code -> {
+            println(
               "Termux's agent bridge can't reach ssh-agent (run `intellij-backend ssh-agent start`)",
             )
+            throw IOException("Termux's agent bridge can't reach ssh-agent")
+          }
           else -> throw IOException("Termux's agent bridge answered an unknown byte: $status")
         }
       } catch (refused: ConnectException) {

@@ -58,12 +58,12 @@ class AndroidTermux(private val context: Context, private val askPermission: () 
             when {
               bundle == null ->
                 kotlin.Result.failure(IllegalStateException("Termux answered without a result"))
-              bundle.getInt("err", Activity.RESULT_OK) != Activity.RESULT_OK ->
+              bundle.getInt("err", Activity.RESULT_OK) != Activity.RESULT_OK -> {
+                println("Termux couldn't run the command: ${bundle.getString("errmsg")}")
                 kotlin.Result.failure(
-                  IllegalStateException(
-                    "Termux couldn't run the command: ${bundle.getString("errmsg")}",
-                  ),
+                  IllegalStateException("Couldn't run the IDE Backend command."),
                 )
+              }
               else ->
                 kotlin.Result.success(
                   Termux.Result(
@@ -108,8 +108,9 @@ class AndroidTermux(private val context: Context, private val askPermission: () 
     run(listOf("-c", Termux.LIST_FOLDERS, "sh", path), SHELL) { result ->
       onResult(
         result.mapCatching { output ->
-          check(output.exitCode == 0) {
-            "Can't list $path: ${output.stderr.ifBlank { "exit ${output.exitCode}" }}"
+          if (output.exitCode != 0) {
+            println("Can't list $path: ${output.stderr.ifBlank { "exit ${output.exitCode}" }}")
+            error("Can't open the folder $path.")
           }
           Termux.parseFolders(output.stdout)
         },

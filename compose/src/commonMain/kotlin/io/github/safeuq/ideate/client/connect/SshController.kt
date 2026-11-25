@@ -412,11 +412,12 @@ class SshController(
       val result = runCatching { remoteFor(entry).stop(project.idePath, project.projectPath) }
       main.launch {
         result.exceptionOrNull()?.let { failure ->
+          println("Couldn't stop ${project.projectPath} on ${entry.name}: $failure")
           state =
             state.copy(
               message =
                 ConnectMessage(
-                  "Couldn't stop ${project.projectPath}: ${failure.message}",
+                  failure.message ?: "Couldn't stop the IDE Backend.",
                   MessageKind.ERROR,
                 ),
             )
@@ -644,10 +645,7 @@ class SshController(
             projectPath = "",
             home = home,
             root = root,
-            error =
-              if (ides.isEmpty())
-                "No IDE backend is installed on ${if (entry.id == LOCAL_HOST_ID) THIS_DEVICE else entry.name}. Register one with remote-dev-server.sh registerBackendLocationForGateway."
-              else null,
+            error = if (ides.isEmpty()) "No IDE Backend is installed on this host." else null,
           ),
       )
   }
@@ -788,9 +786,10 @@ class SshController(
           // null: the user kept the other client's session.
           onSuccess = { local -> local?.let { connect(it, projectPath, hostName) } },
           onFailure = { failure ->
+            println("$hostName: $failure")
             state =
               state.copy(
-                message = ConnectMessage("$hostName: ${failure.message}", MessageKind.ERROR),
+                message = ConnectMessage(failure.message ?: failure.toString(), MessageKind.ERROR),
               )
           },
         )
@@ -806,10 +805,12 @@ class SshController(
     if (failure.settingsInUse)
       "Another $ideName process is using the same settings, so a backend can't start. " +
         "Close it, then try again."
-    else
-      "The IDE Backend stopped before it was ready" +
-        (failure.exitCode?.let { " (exit code $it)" } ?: "") +
-        (failure.output.takeIf { it.isNotEmpty() }?.let { ":\n$it" } ?: ".")
+    else {
+      println(
+        "The IDE Backend stopped before it was ready (exit code ${failure.exitCode}):\n${failure.output}",
+      )
+      "The IDE Backend stopped before it was ready."
+    }
 
   private companion object {
     const val QUESTION_TIMEOUT_SECONDS = 120L

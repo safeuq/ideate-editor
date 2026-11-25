@@ -5,6 +5,8 @@ import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -296,4 +298,19 @@ class ShellHostTest {
       "]}"
 
   private fun installIdePath() = home.resolve("intellij/idea-IU-263.7307.200").canonicalPath
+
+  @Test
+  fun failedCommandShowsPlainWords() {
+    val failure =
+      assertFailsWith<RemoteHostException> {
+        ShellHost.checked(
+          ExecResult(3, "", "Problems found loading plugins"),
+          "remote-dev-server.sh status",
+          "Couldn't check for a running IDE Backend.",
+        )
+      }
+    assertEquals("Couldn't check for a running IDE Backend.", failure.message)
+    assertFalse(failure.message!!.contains("exit"))
+    assertFalse(failure.message!!.contains("remote-dev-server.sh"))
+  }
 }

@@ -20,17 +20,33 @@ class ShellHost(
   private val systemApplications: String = "/Applications",
 ) : RemoteHost {
   private val homeDir by lazy {
-    knownHome ?: checked(run("printf '%s\\n' \"\$HOME\""), "HOME").stdout.trim().lines().last()
+    knownHome
+      ?: checked(
+          run("printf '%s\\n' \"\$HOME\""),
+          "HOME",
+          "Couldn't read this host's IDE Backends.",
+        )
+        .stdout
+        .trim()
+        .lines()
+        .last()
   }
   private val hostOs by lazy {
-    knownOs ?: HostOs.parse(checked(run("uname -sm"), "uname").stdout)
+    knownOs
+      ?: HostOs.parse(
+        checked(run("uname -sm"), "uname", "Couldn't read this host's IDE Backends.").stdout,
+      )
   }
   private val devDir by lazy {
     if (knownRemoteDevDir != null) return@lazy knownRemoteDevDir
     val script =
       if (os().os == HostOs.Os.MAC) "printf '%s\\n' \"\$HOME/Library/Caches/JetBrains/RemoteDev\""
       else "printf '%s\\n' \"\${XDG_CACHE_HOME:-\$HOME/.cache}/JetBrains/RemoteDev\""
-    checked(run(script), "RemoteDev folder").stdout.trim().lines().last()
+    checked(run(script), "RemoteDev folder", "Couldn't read this host's IDE Backends.")
+      .stdout
+      .trim()
+      .lines()
+      .last()
   }
 
   override fun os() = hostOs
@@ -101,7 +117,7 @@ class ShellHost(
       run("${shellQuote("$idePath/bin/remote-dev-server.sh")} status ${shellQuote(projectPath)}")
     val json = HostData.statusCommandOutput(result.stdout)
     if (json == null) {
-      checked(result, "remote-dev-server.sh status")
+      checked(result, "remote-dev-server.sh status", "Couldn't check for a running IDE Backend.")
       return null
     }
     return HostData.status(json)
@@ -126,6 +142,7 @@ class ShellHost(
           ">> ${shellQuote("$logs/stdout.log")} 2>> ${shellQuote("$logs/stderr.log")} < /dev/null & }",
       ),
       "remote-dev-server.sh run",
+      "Couldn't start the IDE Backend.",
     )
     return logs
   }
@@ -134,6 +151,7 @@ class ShellHost(
     checked(
       run("${shellQuote("$idePath/bin/remote-dev-server.sh")} stop ${shellQuote(projectPath)}"),
       "remote-dev-server.sh stop",
+      "Couldn't stop the IDE Backend.",
     )
   }
 
@@ -153,9 +171,13 @@ class ShellHost(
     )
 
   override fun listFolders(path: String): List<RemoteFolder> =
-    Termux.parseFolders(checked(runScript(Termux.LIST_FOLDERS, path), "List $path").stdout).map {
-      RemoteFolder(it.name, it.isProject, it.hasFolders, it.hasHiddenFolders)
-    }
+    Termux.parseFolders(
+        checked(runScript(Termux.LIST_FOLDERS, path), "List $path", "Can't open the folder $path.")
+          .stdout,
+      )
+      .map {
+        RemoteFolder(it.name, it.isProject, it.hasFolders, it.hasHiddenFolders)
+      }
 
   override fun removeRecent(projectPath: String, productCode: String) {
     val files =
@@ -173,6 +195,7 @@ class ShellHost(
           files.joinToString(" ") { shellQuote(it.file) },
       ),
       "Remove recent $projectPath",
+      "Couldn't read this host's IDE Backends.",
     )
   }
 
@@ -300,7 +323,7 @@ done"""
 
     /** Splits a script's output into [Record]s; lines before the first marker are dropped. */
     internal fun records(result: ExecResult): List<Record> {
-      checked(result, "Host script")
+      checked(result, "Host script", "Couldn't read this host's IDE Backends.")
       val records = mutableListOf<Record>()
       var current: Pair<String, List<String>>? = null
       val body = StringBuilder()
@@ -321,11 +344,17 @@ done"""
       return records
     }
 
-    internal fun checked(result: ExecResult, what: String): ExecResult {
-      if (result.exitCode != 0)
-        throw RemoteHostException(
+    /**
+     * Throws [RemoteHostException] with [shown] (plain words for the UI) when [result] failed; the
+     * step [what], exit code and output go to the log only.
+     */
+    internal fun checked(result: ExecResult, what: String, shown: String): ExecResult {
+      if (result.exitCode != 0) {
+        println(
           "$what failed (exit ${result.exitCode}): ${result.stderr.trim().ifEmpty { result.stdout.trim() }.take(500)}",
         )
+        throw RemoteHostException(shown)
+      }
       return result
     }
   }

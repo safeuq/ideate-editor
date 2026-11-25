@@ -149,6 +149,12 @@ class ConnectController(
     message = ConnectMessage(text, MessageKind.ERROR)
   }
 
+  /** Shows [shown]; [detail] (command, exit code, output) goes to the log only. */
+  private fun failLogged(shown: String, detail: String) {
+    println(detail)
+    fail(shown)
+  }
+
   /**
    * Opening a project on this phone: one popup from the first `status --json` until the session
    * opens or fails; only its detail line changes ([step]).
@@ -895,7 +901,8 @@ class ConnectController(
           val status = parseStatus(output.stdout)
           when {
             output.exitCode != 0 || status == null ->
-              fail(
+              failLogged(
+                "Couldn't get the IDE Backend's status.",
                 "intellij-backend status failed (exit ${output.exitCode}): ${output.stderr.ifBlank { output.stdout }}",
               )
             // Like Gateway: opening a project whose backend isn't running starts it.
@@ -910,7 +917,11 @@ class ConnectController(
               val shown =
                 project?.let { openProject(status, it, started) }
                   ?: openProjects(status).firstOrNull()
-              if (shown == null) fail("intellij-backend status names no project: ${output.stdout}")
+              if (shown == null)
+                failLogged(
+                  "The IDE Backend didn't name a project.",
+                  "intellij-backend status names no project: ${output.stdout}",
+                )
               else joinTermux(status, shown, takingOver, resumeTried)
             }
           }
@@ -1030,7 +1041,10 @@ class ConnectController(
                 },
               )
             else ->
-              fail("intellij-backend start failed (exit ${output.exitCode}): ${output.stderr}")
+              failLogged(
+                "Couldn't start the IDE Backend.",
+                "intellij-backend start failed (exit ${output.exitCode}): ${output.stderr}",
+              )
           }
         },
         onFailure = { failure -> fail(failure.message ?: failure.toString()) },
@@ -1047,7 +1061,10 @@ class ConnectController(
       result.fold(
         onSuccess = { output ->
           if (output.exitCode != 0)
-            fail("intellij-backend stop failed (exit ${output.exitCode}): ${output.stderr}")
+            failLogged(
+              "Couldn't stop the IDE Backend.",
+              "intellij-backend stop failed (exit ${output.exitCode}): ${output.stderr}",
+            )
         },
         onFailure = { failure -> fail(failure.message ?: failure.toString()) },
       )
@@ -1079,7 +1096,11 @@ class ConnectController(
       result.fold(
         onSuccess = { output ->
           if (output.exitCode == 0) inform("Start cancelled; the backend is stopped.")
-          else fail("intellij-backend stop failed (exit ${output.exitCode}): ${output.stderr}")
+          else
+            failLogged(
+              "Couldn't stop the IDE Backend.",
+              "intellij-backend stop failed (exit ${output.exitCode}): ${output.stderr}",
+            )
         },
         onFailure = { failure -> fail(failure.message ?: failure.toString()) },
       )
@@ -1125,7 +1146,8 @@ class ConnectController(
           val status = parseStatus(output.stdout)
           when {
             output.exitCode != 0 || status == null ->
-              fail(
+              failLogged(
+                "Couldn't get the IDE Backend's status.",
                 "intellij-backend status failed (exit ${output.exitCode}): ${output.stderr.ifBlank { output.stdout }}",
               )
             status.flag("running") -> {

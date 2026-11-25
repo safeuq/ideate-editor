@@ -80,7 +80,11 @@ class WorkerHost(
     val logs =
       call("get-logs-dir", "product-code" to productCode, "project-path" to projectPath, raw = true)
         .single
-    ShellHost.checked(run(shell.markLaunch(logs)), "Mark the launch in $logs")
+    ShellHost.checked(
+      run(shell.markLaunch(logs)),
+      "Mark the launch in $logs",
+      "Couldn't start the IDE Backend.",
+    )
     call(
       "host-launch",
       "ide-path" to idePath,
@@ -126,7 +130,7 @@ class WorkerHost(
   ): HostData.WorkerReply {
     val result = run(command(name, *flags))
     if (raw) {
-      ShellHost.checked(result, name)
+      ShellHost.checked(result, name, "Couldn't read this host's IDE Backends.")
       return HostData.WorkerReply(listOf(result.stdout.trim().lines().last()))
     }
     return HostData.workerReply(result.stdout)

@@ -273,3 +273,28 @@ Progress popups (all drawn by `StartProgress(title, detail, …)`) name no proje
 | Editor switching ("Opening Project" / project path) | Opening Project | Reconnecting to the IDE Backend |
 
 The Termux step popups keep `OpeningProgress.project` for Cancel and state; the screen no longer shows it.
+
+## Addendum (2026-11-25): plain error messages
+
+Error popups no longer show script or command names, exit codes or raw command output. Those
+details go to the log only (`println`, the same full text as before).
+
+| Where | Before | After |
+|---|---|---|
+| Termux `status` failed | intellij-backend status failed (exit N): &lt;stderr&gt; | Couldn't get the IDE Backend's status. |
+| Termux `status` names no project | intellij-backend status names no project: &lt;stdout&gt; | The IDE Backend didn't name a project. |
+| Termux `start` failed | intellij-backend start failed (exit N): &lt;stderr&gt; | Couldn't start the IDE Backend. |
+| Termux `stop` failed | intellij-backend stop failed (exit N): &lt;stderr&gt; | Couldn't stop the IDE Backend. |
+| SSH host `status` | &lt;host&gt;: remote-dev-server.sh status failed (exit 3): … | Couldn't check for a running IDE Backend. |
+| SSH host `run` | &lt;host&gt;: remote-dev-server.sh run failed (exit N): … | Couldn't start the IDE Backend. |
+| SSH host `stop` | Couldn't stop &lt;path&gt;: remote-dev-server.sh stop failed (exit N): … | Couldn't stop the IDE Backend. |
+| SSH host HOME, uname, RemoteDev folder, host scripts, remove recent | &lt;what&gt; failed (exit N): … | Couldn't read this host's IDE Backends. |
+| Folder list (SSH and Termux) | List &lt;path&gt; failed (exit N): … / Can't list &lt;path&gt;: exit N | Can't open the folder &lt;path&gt;. |
+| Backend ended during launch | The IDE Backend stopped before it was ready (exit code N):\n&lt;output&gt; | The IDE Backend stopped before it was ready. |
+| No IDE on a host | No IDE backend is installed on X. Register one with remote-dev-server.sh registerBackendLocationForGateway. | No IDE Backend is installed on this host. |
+| Termux refused the command | Termux couldn't run the command: &lt;errmsg&gt; | Couldn't run the IDE Backend command. |
+| Agent bridge without ssh-agent | … can't reach ssh-agent (run `intellij-backend ssh-agent start`) | … can't reach ssh-agent |
+
+`ShellHost.checked(result, what, shown)` logs `what`, the exit code and the output, and throws
+`RemoteHostException(shown)`. SSH-page errors no longer start with `<host>: `; the log keeps the
+host.

@@ -96,7 +96,7 @@ class TermuxAgentBridgeTest {
       val failure =
         assertFailsWith<IOException> { TermuxAgentBridge { "${bridge.port} $token" }.connect() }
       assertEquals(
-        "Termux's agent bridge can't reach ssh-agent (run `intellij-backend ssh-agent start`)",
+        "Termux's agent bridge can't reach ssh-agent",
         failure.message,
       )
     }
