@@ -385,6 +385,8 @@ internal class ProjectRow(
   val enabled: Boolean = true,
   /** Gateway shortens long remote paths in the middle: `/data/data/c…es/home/Files/…/xtool`. */
   val middleEllipsis: Boolean = false,
+  /** The IDE that opens the row, e.g. `IntelliJ IDEA 2026.3`; Gateway shows it as an icon. */
+  val ide: String? = null,
 )
 
 @Composable
@@ -684,6 +686,7 @@ internal fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
     else if (row.running) "Running"
     else
       row.lastActive?.let { "Last active: ${lastActive(it, System.currentTimeMillis())}" }.orEmpty()
+  val ideStyle = styles.body.copy(color = Islands.textSecondary)
   val statusStyle =
     styles.body.copy(color = if (row.running) Gateway.running else Islands.textSecondary)
   val menu = projectMenu(row)
@@ -711,6 +714,7 @@ internal fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
       if (styles.twoLineRows) {
         Column(Modifier.weight(1f).padding(start = 9.dp)) {
           title(Modifier)
+          row.ide?.let { BasicText(it, style = ideStyle, maxLines = 1) }
           BasicText(status, style = statusStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
       } else {
@@ -719,6 +723,10 @@ internal fun ProjectRowView(row: ProjectRow, styles: ConnectStyles) {
         // the right.
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
           title(Modifier.padding(start = 9.dp).weight(1f, fill = false))
+          row.ide?.let {
+            Spacer(Modifier.width(18.dp))
+            BasicText(it, style = ideStyle, maxLines = 1)
+          }
           Spacer(Modifier.width(18.dp))
           BasicText(status, style = statusStyle, maxLines = 1)
         }
@@ -780,8 +788,18 @@ private fun RowIconButton(path: String, description: String, onClick: () -> Unit
  * `/data/data/com.termux/files/home/intellij/smoke` → `~/intellij/smoke`: the full path doesn't fit
  * a phone.
  */
-private fun shortPath(path: String) =
-  if (path.startsWith(Termux.HOME)) "~" + path.removePrefix(Termux.HOME) else path
+private fun shortPath(path: String) = locationRelativeToUserHome(path, Termux.HOME)
+
+/** IntelliJ's `FileUtil.getLocationRelativeToUserHome`: `/Users/me/Files/x` → `~/Files/x`. */
+internal fun locationRelativeToUserHome(path: String, home: String): String {
+  val trimmedHome = home.trimEnd('/')
+  return when {
+    trimmedHome.isEmpty() -> path
+    path == trimmedHome -> "~"
+    path.startsWith("$trimmedHome/") -> "~" + path.removePrefix(trimmedHome)
+    else -> path
+  }
+}
 
 /**
  * IntelliJ's `DateFormatUtil.formatPrettyDateTime`, which Gateway's "Last active:" uses (Community

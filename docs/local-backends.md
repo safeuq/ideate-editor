@@ -275,3 +275,48 @@ Not done or open:
 - `status` failing with exit 3 because of a plugin warning ends the open flow with an error while the backend keeps
   starting. Same code as the SSH page; not changed here.
 - Rows show no IDE name (the existing `ProjectRowView` has none).
+
+## Addendum (2026-11-25): This device follow-ups (#49)
+
+### Plan
+
+Research from Gateway 263.7307.184 and JetBrains Client 263.7307.200 bytecode.
+
+1. **A failed `status` is no status.** Gateway's `HostRunMethods.getAnyStatus` catches `RemoteCommandException` and
+   `SerializationException` from `getHostIdeStatus`, logs a warning and returns null; `waitForStatus` keeps polling to
+   its deadline. `SshController.anyStatus(remote, hostName, idePath, projectPath)` does the same for
+   `RemoteHostException` and is used for both status calls in `openProject` (before the launch and in the wait loop).
+   `launchFailure` and `START_TIMEOUT_MILLIS` still end the loop. `ShellHost.status` and `checked` are unchanged.
+2. **Paths and IDE on rows.**
+   - This device rows show the path relative to home, like IntelliJ's welcome screen
+     (`FileUtil.getLocationRelativeToUserHome`): `/Users/safeuq/Files/Projects/XFlow/xtool` →
+     `~/Files/Projects/XFlow/xtool`. New `locationRelativeToUserHome(path, home)` in `ConnectScreen.kt`; `shortPath`
+     uses it with `Termux.HOME`. `SshHostView.home` is filled in `refreshHost` from `remote.home()` (no extra round trip).
+   - SSH host rows keep Gateway's full path (`SshRecentProject.getPresentableProjectPath`, middle ellipsis).
+   - IDE: Gateway shows a product icon (`IntelliJPlatformProduct.icon`, `icons/products/idea.svg` in Gateway's own jar)
+     and the IDE in a tooltip (`ProjectPanel.setIdeTooltip`). Those SVGs are not in JetBrains Client's jars and we do
+     not copy JetBrains' product logos, so `ProjectRow.ide` (e.g. `IntelliJ IDEA 2026.3`, from `InstalledIde.name` +
+     `version` matched by `RecentProject.idePath`) is shown as text after the path, in the secondary text colour. Both
+     SSH and This device rows get it.
+3. Opening a local project end to end in a 263 IDE that is not running: not in scope, stays open.
+4. **Remove sticks.** Gateway's "Remove from Recent Projects" (`GoHighLevelHostAccessor.removeRecentProject`) only
+   deletes backend status files, like ours; IntelliJ's `RecentProjectsManager.removePath` edits `recentProjects.xml`,
+   which Ideate must not touch. So Ideate keeps its own list, `ssh/HiddenRecentProjects.kt`, stored as
+   `[{"hostId":"local","projectPath":"/Users/…/RESTest","hiddenAt":1764051234567}]` in `SshSetup.hiddenProjects`
+   (desktop `~/.ideate/hidden-projects.json`, Android `preferenceText("ssh", "hiddenProjects")`). `removeRecent` does
+   today's deletion, then `hide(...)`; `refreshHost` passes the list through `visible(...)`, which drops hidden rows
+   and shows a row again (dropping its entry) when its `dateLastOpened` is later than `hiddenAt`.
+
+### Result
+
+Built as planned. Tests: `HiddenRecentProjectsTest` (hide filters, a newer use shows it again and clears the entry,
+other hosts unaffected, empty or blank storage reads as empty). No unit test for `anyStatus`: `openProject` runs on
+the controller's executor and coroutine scope, and the extracted function is a plain try/catch.
+
+Live check on this Mac (desktop app from the worktree, IntelliJ IDEA 2026.3 open), 2026-11-25:
+
+| Check | Result |
+|---|---|
+| This device rows | `~/Files/Projects/XFlow/bankgateway`, `~/Files/Projects/XFlow/xtool`, …; paths outside home stay full (`/private/tmp/…`, `/opt/homebrew/…`). IDE text: `IntelliJ IDEA 2026.3` on most rows, `PyCharm 2024.3` on `scratchpad/device-proj`, `CLion 2024.3` on `~/CLionProjects/TestCPP`. |
+| Remove `…/widget-backend/beta` (an old scratch row from `recentProjects.xml`) | `~/.ideate/hidden-projects.json` got its entry; after an app restart, searching `widget-backend` lists 4 rows (alpha, gtwo, gone, projects/IdeaHome), not 5. |
+| (1) with PyCharm 2024.3 | Not repeated live; covered by the code path only. |

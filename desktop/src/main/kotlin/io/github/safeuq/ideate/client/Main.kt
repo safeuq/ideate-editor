@@ -116,6 +116,7 @@ fun main(arguments: Array<String>) {
         SshSetup(
           hosts = FileText(dataFolder.resolve("ssh-hosts.json")),
           knownHosts = FileText(dataFolder.resolve("known_hosts")),
+          hiddenProjects = FileText(dataFolder.resolve("hidden-projects.json")),
           secrets = FileSecretStore(dataFolder.resolve("secrets")),
           openSsh = { DesktopOpenSshFiles },
           alsoKnownHosts = DesktopOpenSshFiles::knownHosts,

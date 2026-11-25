@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.safeuq.ideate.client.connection.JoinLink
+import io.github.safeuq.ideate.client.ssh.HiddenRecentProjects
 import io.github.safeuq.ideate.client.ssh.HostKeyCheck
 import io.github.safeuq.ideate.client.ssh.HostStatus
 import io.github.safeuq.ideate.client.ssh.IdeateKey
@@ -43,6 +44,8 @@ class SshSetup(
   val hosts: StoredText,
   /** Ideate's known_hosts. */
   val knownHosts: StoredText,
+  /** Rows removed from Recent Projects ([HiddenRecentProjects]), e.g. `hidden-projects.json`. */
+  val hiddenProjects: StoredText,
   val secrets: SecretStore,
   /**
    * The user's `~/.ssh`: the desktop's own, or Termux's on Android. Asked each time it is needed,
@@ -85,6 +88,8 @@ data class SshHostView(
   val error: String? = null,
   val projects: List<RecentProject> = emptyList(),
   val ides: List<InstalledIde> = emptyList(),
+  /** The host's `$HOME`, e.g. `/Users/me`; null until the first refresh. */
+  val home: String? = null,
 ) {
   enum class Phase {
     /** Gateway's "Connecting…" / "Getting projects…". */
@@ -214,6 +219,7 @@ class SshController(
 
   private val hosts = SshHosts(setup.hosts)
   private val knownHosts = KnownHosts(setup.knownHosts, setup.alsoKnownHosts)
+  private val hidden = HiddenRecentProjects(setup.hiddenProjects)
   private val main = CoroutineScope(SupervisorJob() + Dispatchers.Main)
   private val work = Executors.newCachedThreadPool { runnable ->
     Thread(runnable, "ssh").apply { isDaemon = true }
@@ -309,12 +315,13 @@ class SshController(
     work.execute {
       val result = runCatching {
         // One login shell per refresh (RemoteHost.projectsAndIdes).
-        val both = remoteFor(entry, typed).projectsAndIdes()
-        both.recent to both.ides
+        val remote = remoteFor(entry, typed)
+        val both = remote.projectsAndIdes()
+        Triple(hidden.visible(entry.id, both.recent), both.ides, remote.home())
       }
       main.launch {
         result.fold(
-          onSuccess = { (projects, ides) ->
+          onSuccess = { (projects, ides, home) ->
             setHost(entry) {
               SshHostView(
                 entry,
@@ -322,6 +329,7 @@ class SshController(
                 null,
                 projects.sortedByDescending { p -> p.dateLastOpened },
                 ides,
+                home,
               )
             }
           },
@@ -390,6 +398,8 @@ class SshController(
         val productCode =
           remote.installedIdes().firstOrNull { it.idePath == project.idePath }?.productCode ?: "IU"
         remote.removeRecent(project.projectPath, productCode)
+        // The IDE's recentProjects.xml would bring the row back; Ideate hides it instead.
+        hidden.hide(entry.id, project.projectPath, System.currentTimeMillis())
       }
       main.launch {
         result.exceptionOrNull()?.let {
@@ -728,7 +738,7 @@ class SshController(
       val result = runCatching {
         val remote = remoteFor(entry)
         progress("Checking for a running IDE Backend")
-        var status = remote.status(idePath, projectPath)
+        var status = anyStatus(remote, hostName, idePath, projectPath)
         // A running backend serves every project it has open over one join link; Gateway's launch
         // for another project hands it to that backend (the launcher exits 0 at once) and the
         // project shows up in projects[].
@@ -747,7 +757,7 @@ class SshController(
               "The IDE Backend didn't start within ${START_TIMEOUT_MILLIS / 60_000} minutes"
             }
             Thread.sleep(1_000)
-            status = remote.status(idePath, projectPath)
+            status = anyStatus(remote, hostName, idePath, projectPath)
             if (!hasProject(status))
               remote
                 .launchFailure(logs)
@@ -796,6 +806,24 @@ class SshController(
       }
     }
   }
+
+  /**
+   * Gateway's `HostRunMethods.getAnyStatus`: a failed `status` (e.g. exit 3 with "Problems found
+   * loading plugins" while the backend starts) counts as no status, so the open flow launches or
+   * keeps polling. The command's output is already logged by ShellHost.checked.
+   */
+  private fun anyStatus(
+    remote: RemoteHost,
+    hostName: String,
+    idePath: String,
+    projectPath: String,
+  ): HostStatus? =
+    try {
+      remote.status(idePath, projectPath)
+    } catch (failure: RemoteHostException) {
+      println("anyStatus on $hostName for $projectPath: ${failure.message}")
+      null
+    }
 
   /**
    * The launch ended without a backend. An IDE already open with the same settings takes `run` and

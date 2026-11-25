@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
           SshSetup(
             hosts = preferenceText("ssh", "hosts"),
             knownHosts = preferenceText("ssh", "known_hosts"),
+            hiddenProjects = preferenceText("ssh", "hiddenProjects"),
             secrets = AndroidSecretStore(this),
             // Termux's ~/.ssh, offered while Termux is installed and has the permission.
             openSsh = { if (termux.isInstalled && termux.hasPermission) termuxSsh else null },

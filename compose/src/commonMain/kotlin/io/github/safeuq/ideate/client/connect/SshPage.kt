@@ -160,7 +160,14 @@ internal fun HostSection(
   projects.forEach { project ->
     ProjectRowView(
       ProjectRow(
-        title = project.projectPath,
+        title =
+          host.home
+            ?.takeIf { host.entry.id == LOCAL_HOST_ID }
+            ?.let { locationRelativeToUserHome(project.projectPath, it) } ?: project.projectPath,
+        ide =
+          host.ides
+            .firstOrNull { it.idePath == project.idePath }
+            ?.let { "${it.name} ${it.version}" },
         running = project.running,
         lastActive = project.dateLastOpened,
         onOpen = { actions.openProject(host.entry, project) },
