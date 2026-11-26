@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -512,8 +513,10 @@ fun ToolWindowPanel(
   views: List<MenuEntry>? = null,
   /**
    * Content in the header after the title, taking the room up to the buttons: the Terminal's tabs.
+   * It gets whether the window has the focus, IntelliJ's `window.isActive()` that header tabs are
+   * painted by.
    */
-  headerContent: (@Composable () -> Unit)? = null,
+  headerContent: (@Composable (isActive: Boolean) -> Unit)? = null,
   /** The header's buttons, left to right, before Hide. */
   actions: List<HeaderAction> = emptyList(),
   /** Hide (IntelliJ's "—" at the header's end); null: no Hide button. */
@@ -522,7 +525,9 @@ fun ToolWindowPanel(
 ) {
   val fonts = LocalClientFonts.current
   val scrolled = remember { mutableStateOf(false) }
-  Column(modifier) {
+  // The focus is somewhere in this window: IntelliJ's ToolWindow.isActive().
+  var isActive by remember { mutableStateOf(false) }
+  Column(modifier.onFocusChanged { isActive = it.hasFocus }) {
     Row(
       Modifier.fillMaxWidth().height(Islands.headerHeight).padding(start = Islands.headerLeftInset),
       verticalAlignment = Alignment.CenterVertically,
@@ -549,8 +554,8 @@ fun ToolWindowPanel(
           DropDownMenu(views, beside = false, onDismiss = { viewsShown = false })
       }
       if (headerContent != null) {
-        Spacer(Modifier.width(12.dp))
-        Box(Modifier.weight(1f)) { headerContent() }
+        Spacer(Modifier.width(Islands.headerTitleEndInset))
+        Box(Modifier.weight(1f)) { headerContent(isActive) }
       } else Spacer(Modifier.weight(1f))
       val buttons =
         actions + listOfNotNull(onHide?.let { HeaderAction("expui/general/hide.svg", "Hide", it) })

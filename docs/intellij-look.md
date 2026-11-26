@@ -1190,3 +1190,54 @@ Built from the main menu plan's addendum of 2026-11-26, 11:20 IST (`docs/plans/m
 - IntelliJ's "moving towards the submenu" test (`ListPopupImpl.isMovingToSubmenu`) is not built: a
   diagonal move from Refactor across Generate… into the submenu kept it open in the live check,
   because the pointer passes the other row in under 250 ms.
+
+## Addendum (2026-11-26): tool window header tabs (Terminal, Run, Build, Problems)
+
+The tabs after a tool window's title are ContentTabLabels. In Islands with many islands, IntelliJ
+paints each one with `IslandsTabPainter.paintTab` (`IslandsUICustomization.toolWindowTabPainter`),
+called by `TabContentLayout.paintComponent`. Ideate's `HeaderTab` (`ui/HeaderTabs.kt`) now does the
+same for all three callers (Terminal, `BackendHeaderTabs` for Run and Build, the Problems tabs).
+
+| Value | IntelliJ source | Normal | Compact |
+| --- | --- | --- | --- |
+| Pill inset from the label, each side (hOffset) | `IslandsTabPainter.getHOffsetUnscaled` | 4 | 2 |
+| Pill height | label height − max(label height − 28, 8) (compact 24, 4) | 41 → 28 | 31 → 24 |
+| Corner radius | `MainToolbar.Button.arc` 12 (compact 8), a diameter | 6 | 4 |
+| Outline | `RectanglePainter2D.DRAW` | 1 | 1 |
+| Label left / right inset | `ContentLabel.getPreferredSize`, new UI: `ToolWindow.HeaderTab.leftRightInsets` (0, 12) | 12 / 12 | 12 / 12 |
+| Text to close icon | icon x = `size.width − 4`, so 12 − 4 | 8 | 8 |
+| Close icon (16) to label end | `ICONS_GAP` 3 + 4 | 7 | 7 |
+| Title to first label | `BaseLabel`: `ToolWindow.Header.labelLeftRightInsets` (0, 12, 0, 16) | 16 | 16 |
+
+So inside the pill: 8 from its edge to the text, 8 from the text to the ×, 3 from the × to the
+edge (8 at the end with no ×). Labels touch; the gap between pills is the two hOffsets (8, compact
+4). Title text to the first pill edge is 16 + hOffset (20, compact 18).
+
+Colours (`IslandsTabPainter.getColors`; "active" is `ui.window.isActive() && ui.isActive()`, the
+focus is in the tool window):
+
+| State | Fill | Border |
+| --- | --- | --- |
+| selected, active | `EditorTabs.underlinedTabBackground` | `EditorTabs.underlinedBorderColor` |
+| selected, not active, hovered | `EditorTabs.hoverBackground` | `EditorTabs.inactiveUnderlinedTabBorderColor` |
+| selected, not active | `EditorTabs.inactiveUnderlinedTabBackground` | `EditorTabs.inactiveUnderlinedTabBorderColor` |
+| not selected, hovered | `EditorTabs.hoverBackground` | `EditorTabs.hoverBorderColor` (not in Islands: none) |
+| not selected | `EditorTabs.regularBackground` (none) | `EditorTabs.regularBorderColor` (none) |
+
+`ToolWindow.HeaderTab.*` colours are not used by this painter. The close icon is on every tab
+whose content can be closed (`CloseContentTabAction.getAvailable` = `ContentTabLabel.canBeClosed`),
+not only the selected or hovered one; it switches to the hovered icon only while the pointer is
+over it (`ContentAdditionalIcon.getActive`).
+
+What changed in Ideate:
+- `Islands.headerTabHOffset`, `headerTabFullHeight`, `headerTabMinVOffset`, `headerTabRadius`,
+  `headerTabTextInset`, `headerTabCloseGap`, `headerTabCloseEndInset`, `headerTitleEndInset` and
+  `headerTabColors(selected, active, hovered)` hold the values above.
+- `HeaderTab` takes `isActive`; it fills the hovered unselected tab, uses the inactive colours when
+  the window has no focus, and always shows × when `onClose` is set.
+- `ToolWindowPanel` tracks focus inside its own panel (`onFocusChanged { hasFocus }`), Compose's
+  counterpart of `window.isActive()`, and passes it to `headerContent`. The title-to-tabs gap is 16
+  (was 12).
+- Live check (compact density, 2x): pill 24 high, 8 + 1 glyph bearing to the text, 3 from × to the
+  edge, 4 between pills, about 19 from the title text to the first pill.
+- Hover-while-popup-open (`isPopupOpenedForContent`) is not built: header tabs have no popup yet.

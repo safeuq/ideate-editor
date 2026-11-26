@@ -123,4 +123,23 @@ class IslandsTest {
       assertEquals(Islands.textSecondary, Islands.color("Popup.separatorForeground"))
     }
   }
+
+  /** IslandsTabPainter.getColors in Islands Dark: fill and border of a header tab per state. */
+  @Test
+  fun headerTabColorsFollowIslandsTabPainter() {
+    fun colors(selected: Boolean, active: Boolean, hovered: Boolean) =
+      Islands.headerTabColors(selected, active, hovered).let { (fill, border) ->
+        listOf(fill, border)
+      }
+    // EditorTabs.underlinedTabBackground / underlinedBorderColor
+    assertEquals(listOf(Color(0xFF233558), Color(0xFF2E4D89)), colors(true, true, false))
+    // EditorTabs.hoverBackground / inactiveUnderlinedTabBorderColor
+    assertEquals(listOf(Color(0x17FFFFFF), Color(0xFF40434A)), colors(true, false, true))
+    // EditorTabs.inactiveUnderlinedTabBackground / inactiveUnderlinedTabBorderColor
+    assertEquals(listOf(Color(0xFF26282C), Color(0xFF40434A)), colors(true, false, false))
+    // EditorTabs.hoverBackground; Islands has no hoverBorderColor
+    assertEquals(listOf(Color(0x17FFFFFF), Color.Transparent), colors(false, true, true))
+    // Islands has no regularBackground or regularBorderColor
+    assertEquals(listOf(Color.Transparent, Color.Transparent), colors(false, true, false))
+  }
 }

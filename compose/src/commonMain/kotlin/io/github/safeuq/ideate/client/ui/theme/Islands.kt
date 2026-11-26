@@ -220,6 +220,56 @@ object Islands {
     get() = color("EditorTabs.underlinedBorderColor")
 
   val tabRadius = 6.dp
+
+  // Tool window header tabs (Terminal's shells, Run's "Main", Problems' "File"): IntelliJ paints
+  // them with IslandsTabPainter.paintTab (IslandsUICustomization.toolWindowTabPainter), called by
+  // TabContentLayout.paintComponent for each ContentTabLabel.
+  /** IslandsTabPainter.getHOffsetUnscaled: the pill sits this far inside the label on each side. */
+  val headerTabHOffset
+    get() = byDensity(4.dp, 2.dp)
+
+  /** IslandsTabPainter.paintTab: the pill is the label's height minus vOffset = max(h - 28, 8). */
+  val headerTabFullHeight
+    get() = byDensity(28.dp, 24.dp)
+
+  val headerTabMinVOffset
+    get() = byDensity(8.dp, 4.dp)
+
+  /** MainToolbar.Button.arc 12 (compact 8), an arc diameter: radius 6 (compact 4). */
+  val headerTabRadius
+    get() = byDensity(6.dp, 4.dp)
+
+  // ContentLabel.getPreferredSize, new UI: the label's border is ToolWindow.HeaderTab
+  // .leftRightInsets (0, 12) on both sides; the close icon starts 8 after the text (size.width - 4)
+  // and ends 7 before the label's end (ICONS_GAP 3 + 4). Less the 4 hOffset, inside the pill:
+  val headerTabTextInset = 8.dp // pill edge to text
+  val headerTabCloseGap = 8.dp // text to the 16 dp close icon
+  val headerTabCloseEndInset = 3.dp // close icon to pill edge
+
+  /** BaseLabel's ToolWindow.Header.labelLeftRightInsets (0, 12, 0, 16): title to the first tab. */
+  val headerTitleEndInset = 16.dp
+
+  // IslandsTabPainter.getColors; a key the theme leaves out (EditorTabs.regularBackground,
+  // regularBorderColor, hoverBorderColor in Islands) paints nothing.
+  private fun colorOrTransparent(key: String) = color(key) { Color.Transparent }
+
+  /** Fill and 1 dp border of a header tab, by IslandsTabPainter.getColors. */
+  fun headerTabColors(selected: Boolean, active: Boolean, hovered: Boolean): Pair<Color, Color> =
+    when {
+      selected && active ->
+        color("EditorTabs.underlinedTabBackground") to color("EditorTabs.underlinedBorderColor")
+      selected && hovered ->
+        color("EditorTabs.hoverBackground") to color("EditorTabs.inactiveUnderlinedTabBorderColor")
+      selected ->
+        color("EditorTabs.inactiveUnderlinedTabBackground") to
+          color("EditorTabs.inactiveUnderlinedTabBorderColor")
+      hovered ->
+        color("EditorTabs.hoverBackground") to colorOrTransparent("EditorTabs.hoverBorderColor")
+      else ->
+        colorOrTransparent("EditorTabs.regularBackground") to
+          colorOrTransparent("EditorTabs.regularBorderColor")
+    }
+
   val treeSelectionRadius = 4.dp // Tree.Selection.arc 8 passed as arc diameter
 
   // Main toolbar: MainToolbar.Button.size 30 (code default; compact 26), iconSize 20 (compact

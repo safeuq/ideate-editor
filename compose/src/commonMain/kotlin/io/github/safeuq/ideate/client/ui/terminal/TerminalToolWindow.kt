@@ -41,15 +41,16 @@ class TerminalTabsState {
 
 /**
  * The tabs of the Terminal window as IntelliJ's new UI puts them: in the tool window's header,
- * after the title: a chip per shell with its close button (shown on the selected tab and under the
- * pointer), then New Tab (+). Closing the last tab hides the window, as IntelliJ does ([onHide]).
- * ponytail: no ⌄ (the list of predefined shells) after +; the backend sends no shell list yet.
+ * after the title: a tab per shell with its close button, then New Tab (+). Closing the last tab
+ * hides the window, as IntelliJ does ([onHide]). ponytail: no ⌄ (the list of predefined shells)
+ * after +; the backend sends no shell list yet.
  */
 @Composable
 fun TerminalHeaderTabs(
   state: SessionState,
   session: ClientSession,
   tabsState: TerminalTabsState,
+  isActive: Boolean,
   onHide: () -> Unit,
 ) {
   val tabs = state.terminals
@@ -64,6 +65,7 @@ fun TerminalHeaderTabs(
         HeaderTab(
           tab.title,
           isSelected = tab.id == selected?.id,
+          isActive = isActive,
           onSelect = { tabsState.selectedId = tab.id },
           onClose = {
             session.closeTerminal(tab.id)

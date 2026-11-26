@@ -396,12 +396,20 @@ fun ClientScreen(
           },
         headerContent =
           if (window == ToolWindow.TERMINAL) {
-            { TerminalHeaderTabs(state, session, terminalTabs) { barClick(window) } }
+            { isActive ->
+              TerminalHeaderTabs(state, session, terminalTabs, isActive) { barClick(window) }
+            }
           } else if (window == ToolWindow.PROBLEMS) {
-            {
+            { isActive ->
               Row {
                 for (tab in ProblemsTab.entries) {
-                  HeaderTab(tab.title, tab == problemsTab, { problemsTab = tab }, onClose = null)
+                  HeaderTab(
+                    tab.title,
+                    isSelected = tab == problemsTab,
+                    isActive = isActive,
+                    onSelect = { problemsTab = tab },
+                    onClose = null,
+                  )
                 }
               }
             }
@@ -409,9 +417,10 @@ fun ClientScreen(
             state.backendViews[window.id]
               ?.takeIf { it.panel != null }
               ?.let { view ->
-                {
+                { isActive ->
                   BackendHeaderTabs(
                     view,
+                    isActive,
                     onSelect = { session.selectBackendTab(window.id, it) },
                     onClose = { session.closeBackendTab(window.id, it) },
                   )
