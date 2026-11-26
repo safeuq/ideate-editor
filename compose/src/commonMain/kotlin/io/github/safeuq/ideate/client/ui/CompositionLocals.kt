@@ -39,3 +39,13 @@ val LocalEditorTextInput = staticCompositionLocalOf<(EditorTextTarget) -> Modifi
  * be cut off on a portrait phone. Desktop: nothing.
  */
 val LocalLandscapeRequest = staticCompositionLocalOf<@Composable (needed: Boolean) -> Unit> { {} }
+
+/**
+ * The platform's main menu bar, given the main menu (File, Edit, …) and what to call when one of
+ * its menus is about to open (a refresh). Desktop on macOS: the system menu bar (MacMenuBar.kt);
+ * null elsewhere, where the main toolbar shows the three-line button (MainMenuButton).
+ */
+val LocalMainMenuBar =
+  staticCompositionLocalOf<(@Composable (menus: List<MenuEntry>, onOpen: () -> Unit) -> Unit)?> {
+    null
+  }

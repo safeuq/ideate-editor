@@ -7,6 +7,7 @@ import androidx.compose.ui.awt.ComposeWindow
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.platform.LocalDensity
 import io.github.safeuq.ideate.client.ui.LocalIcons
+import io.github.safeuq.ideate.client.ui.LocalMainMenuBar
 import io.github.safeuq.ideate.client.ui.LocalTitleBarArea
 import io.github.safeuq.ideate.client.ui.component.LocalPopupHost
 import io.github.safeuq.ideate.client.ui.component.LocalResizePointers
@@ -39,6 +40,11 @@ fun IdeateLocals(
     LocalClientFonts provides fonts,
     LocalIcons provides icons,
     LocalTitleBarArea provides titleBar,
+    // The main menu in the system menu bar on macOS; elsewhere the toolbar's button shows it.
+    LocalMainMenuBar provides
+      if (System.getProperty("os.name").startsWith("Mac"))
+        { menus, onOpen -> MacMenuBar(window, menus, onOpen) }
+      else null,
     // IntelliJ's Splitter cursors.
     LocalResizePointers provides
       ResizePointers(
