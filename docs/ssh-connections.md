@@ -752,3 +752,15 @@ The "No hosts" row in the Step 4 table above was wrong. Gateway 2026.3 does not 
 Ideate (`SshPage.kt`, `EmptySshPage`) now draws this when there are no hosts: the title (Ideate's `Header` with nothing at the right and `divider = false`, since Gateway's empty panel has no separator under its title), the 64 dp SSH icon from the client's `intellij.platform.daemon.connection.jar`, the two lines and one `DefaultButton` "New Project" that opens Connect to SSH. The "Connect to Host…" drop-down is left out, as on the header's New Project. The old "Work with a project on a machine reachable using SSH" note and the second "New Connection" button are gone.
 
 Correction (2026-11-26): the "15 under each line" in the table above is wrong. In the bytecode, `UnscaledGaps$default(0, 0, 0, 0, 15, null)` has 15 as Kotlin's default-arguments mask (all four gaps left at their default), not a bottom gap, so each line's cell gaps are all 0 (`UnscaledGaps.kt`). The two lines sit with no gap between them, and the gap from the last line to the button is 20 + 20 = 40 (`BottomGap.MEDIUM` on the last line's row, `TopGap.MEDIUM` on the button's row).
+
+## Addendum (2026-11-26, 18:50 IST): `host-launch` prints nothing when it starts a backend
+
+Seen from the Galaxy Tab S6 Lite connecting to the S24 at 18:29 IST. No backend was running for xtool, so Ideate called `host-launch`, and the backend started that same second (`ps` on the S24: `remote-dev-server` from 18:29:22). But `host-launch` exited 0 with an empty stdout, and `WorkerHost.launch` read its output like any other worker command, so it showed **"No reply from the worker:"** with nothing after the colon. The next `host-status` answered exit 14 ("IDE has not been initialized yet"), and Ideate joined the backend at 18:30:13 once it was ready.
+
+| `host-launch` result | Before | Now |
+|---|---|---|
+| exit 0, empty stdout | "No reply from the worker:" | started; Ideate polls `host-status` |
+| a JSON `error` line | "Worker error …" | the same |
+| another exit code, no JSON | "No reply from the worker: …" | "Couldn't start the IDE Backend." (stderr in the log) |
+
+`WorkerHost.launch` now runs `host-launch` itself and only fails on a JSON line or a non-zero exit. Tests: `RemoteHostTest.launchWithoutAReplyIsStarted` and `launchErrorsStillFail`. The other worker commands (`installed-ides`, `recent-projects-data`, `active-projects`, `host-status`) did print their JSON reply over SSH on the S24 that day.

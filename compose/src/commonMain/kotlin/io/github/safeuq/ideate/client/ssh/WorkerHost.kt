@@ -85,13 +85,22 @@ class WorkerHost(
       "Mark the launch in $logs",
       "Couldn't start the IDE Backend.",
     )
-    call(
-      "host-launch",
-      "ide-path" to idePath,
-      "project-path" to projectPath,
-      "stdout-file" to "$logs/stdout.log",
-      "stderr-file" to "$logs/stderr.log",
-    )
+    val launched =
+      run(
+        command(
+          "host-launch",
+          "ide-path" to idePath,
+          "project-path" to projectPath,
+          "stdout-file" to "$logs/stdout.log",
+          "stderr-file" to "$logs/stderr.log",
+        )
+      )
+    // A started backend gets no reply: exit 0 and an empty stdout (the S24, 2026-11-26). Only a
+    // JSON line (an `error`) or another exit code is a failure.
+    if (launched.exitCode != 0 || launched.stdout.lines().any { it.startsWith("{") }) {
+      HostData.workerReply(launched.stdout)
+      ShellHost.checked(launched, "host-launch", "Couldn't start the IDE Backend.")
+    }
     return logs
   }
 

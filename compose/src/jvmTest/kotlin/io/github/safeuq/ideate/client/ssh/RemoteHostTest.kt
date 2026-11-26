@@ -249,4 +249,32 @@ class RemoteHostTest {
     val fake = FakeHost(fakeWorker().replies + ("host-status" to ExecResult(14, "", "")))
     assertNull(WorkerHost(worker, fake::run).status(ide, xtool))
   }
+
+  private fun launchHost(launchReply: ExecResult) =
+    FakeHost(
+      fakeWorker().replies +
+        mapOf(
+          "get-logs-dir" to ExecResult(0, "REMOTE_EXEC_OUTPUT_MARKER_ gone\n$remoteDev/logs\n", ""),
+          "mkdir -p" to ExecResult(0, "", ""),
+          "host-launch" to launchReply,
+        )
+    )
+
+  @Test
+  fun launchWithoutAReplyIsStarted() {
+    val fake = launchHost(ExecResult(0, "", ""))
+    assertEquals("$remoteDev/logs", WorkerHost(worker, fake::run).launch(ide, xtool))
+    assertTrue(fake.commands.any { "host-launch" in it }, "${fake.commands}")
+  }
+
+  @Test
+  fun launchErrorsStillFail() {
+    val error = """{"type":"error","errorCode":"CommandError","data":"no"}"""
+    assertFailsWith<RemoteHostException> {
+      WorkerHost(worker, launchHost(json(error))::run).launch(ide, xtool)
+    }
+    assertFailsWith<RemoteHostException> {
+      WorkerHost(worker, launchHost(ExecResult(1, "", "boom"))::run).launch(ide, xtool)
+    }
+  }
 }
