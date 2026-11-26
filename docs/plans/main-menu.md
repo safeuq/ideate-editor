@@ -339,3 +339,45 @@ Checked while writing this: `swingText` returns an `AnnotatedString`, so the pla
 2.2 needs is `swingText(label).text`; the packaged app already gets
 `-Dcompose.application.configure.swing.globals=true` (`desktop/build.gradle.kts` line 301), so the
 DMG shows the menu bar as the Gradle run does.
+
+## Addendum (2026-11-26, 11:10 IST): correction to gap 1, and how JetBrains Client handles what an action opens
+
+Gap 1 of the 10:55 addendum is wrong as written. Checked against the 09:56 dump of the backend's
+answer and the client trace: the backend does **not** send the actions the client does itself, so
+they can't open anything on the backend. They are simply missing from Ideate's menu.
+
+| Group in the backend's answer | What it holds | What the real client's menu shows there |
+|---|---|---|
+| `GoToTargetEx` (Navigate, top) | nothing | Class…, File…, Symbol…, Search Everywhere: the client's own actions |
+| `FindMenuGroup` (Edit ▸ Find) | `ToggleScrollToResultsDuringTypingAction`, `StructuralSearchActions`, `XPathView.MainMenu.Search`, `JsonPathEvaluateAction` | plus Find…, Replace…, Find in Files…: the client's own |
+| `ViewRecentActions` | `RecentFilesFallback`, `SwitcherIterateItemsFallback`, `RecentChangedFilesFallback` (flags `0x80`: hidden), `RecentChanges` | Recent Files, Recently Changed Files: the client's own |
+| `FileMainSettingsGroup` | `ShowProjectStructureSettings` | plus Settings… and Plugins…: the client's own |
+
+How the client knows: every registered action carries `ActionBaseModel.remoteBehaviour`
+(`ActionBehaviourSpecificationModel`: `FrontendOnly`, `FrontendThenBackend`,
+`FrontendOtherwiseBackend`, `BackendOnly`, `BackendThenFrontend`, `Duplicated`, `Disabled`). In the
+trace's registrations: 87 `BackendOnly`, 102 `FrontendOtherwiseBackend`, 81 `FrontendThenBackend`,
+66 `FrontendOnly`, 10 `Duplicated`. A frontend action runs in the client and draws its own popup
+there (Search Everywhere is `intellij.platform.searchEverywhere.frontend.jar`), asking the backend
+only for data.
+
+What a **backend** action opens reaches the client in one of three ways, all already known to
+Ideate's docs:
+
+| The backend opens | How the client shows it | Ideate today |
+|---|---|---|
+| a dialog or another Swing window | Lux: the backend's window is described on `protocol.luxModel` and drawn by the client (docs/lux-protocol.md) | dialogs are shown (`LuxDialogs`) |
+| a list popup made from actions or steps | `activePopups` with `ActionPopupContent` / `StepPopupContent` (BeControl; the run widget's More Actions) | shown (`BackendPopups`, `PopupListView`) |
+| a tool window's content | that tool window's own model | per tool window |
+
+So the rule for step 1.3 changes: instead of mapping backend ids to local handlers, **Ideate adds
+its own items** where the client has its own, and only for what Ideate can do today:
+
+- Navigate, first rows: Search Everywhere, Class…, File…, Symbol… → `session.searchEverywhere?.open(tab)`
+  (shown only when `state.searchAvailable`).
+- Nothing else is added in this plan; Find…, Recent Files and Settings… stay missing until Ideate
+  has them.
+
+Add them in `refreshMainMenu`'s result, next to the `$Undo` mapping, as plain `MenuItem`s with
+Ideate's shortcut texts. Gap 2 (grey what opens something Ideate can't show) stands, and is now
+only about backend actions whose popup is neither Lux nor an `activePopups` list.
