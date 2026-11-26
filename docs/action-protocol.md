@@ -327,3 +327,19 @@ with `<html>` through it, and `MenuRow` draws every menu label with it.
 | `<span style="color:#9fa2a8">grey</span>` | grey |
 
 Not ported: Compose's `<annotation>` handler and its list bullets, fonts by system name.
+
+## Addendum (2026-11-26, 10:20 IST): the main menu
+
+Seen while planning pending row 42 (docs/plans/main-menu.md has the full tables), on a test backend
+with `Main.java` open and in a traced JetBrains Client 263.7307.200.
+
+| What | Value |
+|---|---|
+| The client's top-level request | `expandGroup("composite:BuildMenu;MainMenu;MainMenu__customized", place "MainMenu", PopupKindModel(mainMenu = true, searchPopup = false), factoryId = null)`, about every 500 ms |
+| The client's request when View opens | one `expandGroup` with a `composite:` id of that menu's backend groups (`…;ViewAppearanceGroup;ViewMenu;ViewRecentActions;ViewSource`), same place and kind |
+| Choosing File ▸ Save All | `RdCallActionRequest(actionId = "SaveAll", actionPlace = "MainMenu", presentation = the one shown, inputEventModel = null)` |
+| A toggle's state | `PresentationModel.clientProperties` holds `NameBooleanValue(name = "selected", value)`, e.g. `EditorToggleUseSoftWraps`: `false` |
+| Ideate asking for plain `MainMenu` and every visible submenu | 41 requests, 188 ms, 764 entries: File, Edit, View, Navigate, Code, Refactor, Build, Run, Tools, VCS, Help |
+| Not in the backend's answer | Window, the application menu, View ▸ Tool Windows, File ▸ New / Open… / Recent Projects: the client's own actions |
+
+41 is one more than `ActionMenus.MAX_REQUESTS` (40), so the main menu needs a higher limit.
