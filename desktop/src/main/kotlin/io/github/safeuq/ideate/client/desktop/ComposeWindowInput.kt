@@ -32,7 +32,14 @@ class ComposeWindowInput(val window: Window) {
   private var pressedButton = MouseEvent.NOBUTTON
 
   fun popupWindows(): List<PopupWindow> = onEventThread {
-    window.ownedWindows.filter { it.isShowing }.map { PopupWindow(it, it.bounds) }
+    // Submenus are owned by their parent menu's window, so walk down every level.
+    generateSequence(window.ownedWindows.toList()) { level ->
+        level.flatMap { it.ownedWindows.toList() }.ifEmpty { null }
+      }
+      .flatten()
+      .filter { it.isShowing }
+      .map { PopupWindow(it, it.bounds) }
+      .toList()
   }
 
   fun move(x: Int, y: Int, inside: Window = window) =

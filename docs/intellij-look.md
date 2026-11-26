@@ -1160,3 +1160,33 @@ Checked live (120-line `Tall.java`, an unresolved type on line 100, a warning on
 | the red mark (1158, 644 dp) | caret 100:3 on `Strin`, lines 84 to 117 in view |
 
 Not done: the preview that shows when the pointer rests on a mark, and the mark's tooltip.
+
+## Addendum (2026-11-26): submenus open to the side in a window
+
+Built from the main menu plan's addendum of 2026-11-26, 11:20 IST (`docs/plans/main-menu.md`).
+
+| Case | Where the submenu goes | Example (screen points) |
+|---|---|---|
+| A window, room on the right | right of the parent minus 2 (`WizardPopup.STEP_X_PADDING`), top 6 above the row (`Menus.verticalInset`) so its first row is level with the row | parent at x 608, width 237: submenu at x 843; Refactor row at y 475: submenu at y 469 |
+| A window, no room on the right | left of the parent plus 2 | parent at x 1198: submenu (width 323) at x 877 |
+| A phone (smallest side under 600 dp) or a long press | in place, with the back row, as before | |
+
+- `Menu(cascade = true)` opens the submenu as a second `Menu` in an `AppPopup`, placed by
+  `SubmenuPosition` (in `Menu.kt`), which keeps it on screen with the existing `keep` helper.
+  `ContextMenu` passes `cascade = !centered`; `DropDownMenu` (main menu button, run selector)
+  passes the same phone test.
+- 250 ms of hover on a submenu row opens it (`ListPopupImpl`'s timer); a click opens it at once.
+  250 ms on a plain row closes it. One submenu per menu; the row that opened it stays selected.
+- Choosing an item closes every level. Escape in the submenu, or a click on its parent, closes the
+  submenu only; a click anywhere else closes all of them.
+- Found: on the desktop each popup is its own window owned by the main window, and its anchor was
+  measured from the main window. A popup opened inside a popup was therefore placed wrongly, and
+  when it took the focus its parent closed. `WindowPopupHost` now gives the popups inside a popup a
+  host owned by that popup's window (anchor measured from there), with the chain of parent popups:
+  losing the focus to a parent closes only the submenu, losing it anywhere else closes the parents
+  too, and a submenu that closes hands the focus back to its parent.
+- Found: the agent tools listed only windows owned directly by the main window, so submenu windows
+  were missing; `ComposeWindowInput.popupWindows` now lists every level.
+- IntelliJ's "moving towards the submenu" test (`ListPopupImpl.isMovingToSubmenu`) is not built: a
+  diagonal move from Refactor across Generate… into the submenu kept it open in the live check,
+  because the pointer passes the other row in under 250 ms.

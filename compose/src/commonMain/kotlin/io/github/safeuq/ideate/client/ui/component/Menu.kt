@@ -23,16 +23,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupPositionProvider
 import io.github.safeuq.ideate.client.ui.LocalIcons
 import io.github.safeuq.ideate.client.ui.MenuEntry
 import io.github.safeuq.ideate.client.ui.MenuItem
@@ -41,24 +48,30 @@ import io.github.safeuq.ideate.client.ui.SubMenu
 import io.github.safeuq.ideate.client.ui.theme.Islands
 import io.github.safeuq.ideate.client.ui.theme.LocalClientFonts
 import io.github.safeuq.ideate.client.ui.theme.label
+import kotlinx.coroutines.delay
 
 /**
  * IntelliJ's popup menu (`IdeaPopupMenuUI`; rows as `PopupListElementRenderer` draws them in
  * platform/platform-impl/src/com/intellij/ui/popup/list/), Jewel's `Menu`: [entries] in a popup
- * frame, submenus opening in place with a back row on top. [entries] returns null while the items
- * are still loading ("Loading…"). Rows are IntelliJ's 24 dp whether a mouse or a finger opened the
- * menu: Ideate keeps IntelliJ's sizes and adds no padding for touch. [close] runs after an item is
- * chosen. Measurements: docs/intellij-look.md, section 13.
+ * frame. Submenus open in place with a back row on top, or with [cascade] beside their parent as
+ * IntelliJ's `ListPopupImpl.showNextStepPopup` does (a window with room for it; the main menu
+ * plan's addendum of 2026-11-26). [entries] returns null while the items are still loading
+ * ("Loading…"). Rows are IntelliJ's 24 dp whether a mouse or a finger opened the menu: Ideate keeps
+ * IntelliJ's sizes and adds no padding for touch. [close] runs after an item is chosen.
+ * Measurements: docs/intellij-look.md, section 13.
  */
 @Composable
 fun Menu(
   entries: () -> List<MenuEntry>?,
   rowHeight: Dp = Menus.rowHeight,
+  cascade: Boolean = false,
   close: () -> Unit,
 ) {
   val fonts = LocalClientFonts.current
   // Open submenus, innermost last.
   var path by remember { mutableStateOf(emptyList<SubMenu>()) }
+  // With [cascade]: the submenu open beside this menu (one at a time, as WizardPopup's myChild).
+  var child by remember { mutableStateOf<SubMenu?>(null) }
   val text = fonts.label()
   Column(
     Modifier.width(IntrinsicSize.Max)
@@ -107,14 +120,44 @@ fun Menu(
             false,
             rowHeight,
             text,
+            // Resting on a plain item closes the open submenu, as ListPopupImpl's disposeChildren.
+            onHoverRest = if (cascade) ({ child = null }) else null,
           ) {
             close()
             entry.onClick()
           }
         is SubMenu ->
-          MenuRow(entry.label, null, entry.enabled, null, true, rowHeight, text) {
-            path = path + entry
-          }
+          if (cascade)
+            // The Box spans the menu's width at the row's top, the child's anchor.
+            Box(Modifier.fillMaxWidth()) {
+              MenuRow(
+                entry.label,
+                null,
+                entry.enabled,
+                null,
+                true,
+                rowHeight,
+                text,
+                selected = child == entry,
+                onHoverRest = { child = entry },
+              ) {
+                child = entry
+              }
+              if (child == entry) {
+                val position =
+                  with(LocalDensity.current) {
+                    SubmenuPosition(STEP_X_PADDING.roundToPx(), Menus.verticalInset.roundToPx())
+                  }
+                // Escape in the submenu, or a click on this menu, closes the submenu only.
+                AppPopup(position, onDismissRequest = { child = null }) {
+                  Menu({ entry.entries }, rowHeight, cascade = true, close = close)
+                }
+              }
+            }
+          else
+            MenuRow(entry.label, null, entry.enabled, null, true, rowHeight, text) {
+              path = path + entry
+            }
       }
     }
   }
@@ -129,18 +172,30 @@ private fun MenuRow(
   trailingChevron: Boolean,
   rowHeight: Dp,
   text: TextStyle,
+  selected: Boolean = false,
+  onHoverRest: (() -> Unit)? = null,
   onClick: () -> Unit,
 ) {
   val icons = LocalIcons.current
   val interaction = remember { MutableInteractionSource() }
   val hovered by interaction.collectIsHoveredAsState()
+  // ListPopupImpl's submenu timer: the pointer resting 250 ms on a row.
+  // ponytail: no "moving towards the submenu" test (ListPopupImpl.isMovingToSubmenu); the 250 ms
+  // delay already covers a straight move into the submenu. Add it if a diagonal move closes it.
+  if (onHoverRest != null)
+    LaunchedEffect(hovered) {
+      if (hovered) {
+        delay(SUBMENU_HOVER_DELAY_MILLIS)
+        onHoverRest()
+      }
+    }
   Box(
     Modifier.fillMaxWidth()
       .height(rowHeight)
       .padding(horizontal = Menus.selectionInset, vertical = 1.dp)
       .hoverable(interaction, enabled)
       .then(
-        if (hovered && enabled)
+        if ((hovered || selected) && enabled)
           Modifier.background(Menus.selection, RoundedCornerShape(Menus.selectionRadius))
         else Modifier,
       )
@@ -222,3 +277,28 @@ internal object Menus {
 }
 
 private const val CHECKED_ICON = "expui/actions/checked.svg"
+
+private const val SUBMENU_HOVER_DELAY_MILLIS = 250L
+
+private val STEP_X_PADDING = 2.dp // WizardPopup.STEP_X_PADDING
+
+/**
+ * A submenu beside the row that opened it ([anchorBounds]: the row across the whole menu), as
+ * `ListPopupImpl.showNextStepPopup` and `WizardPopup.show` place it: right of the menu, overlapping
+ * it by [stepPadding] px, top raised by [verticalInset] so its first row is level with the row;
+ * with no room on the right, left of the menu; then kept inside the window ([keep]).
+ */
+internal class SubmenuPosition(private val stepPadding: Int, private val verticalInset: Int) :
+  PopupPositionProvider {
+  override fun calculatePosition(
+    anchorBounds: IntRect,
+    windowSize: IntSize,
+    layoutDirection: LayoutDirection,
+    popupContentSize: IntSize,
+  ): IntOffset {
+    var x = anchorBounds.right - stepPadding
+    if (x + popupContentSize.width > windowSize.width)
+      x = anchorBounds.left - popupContentSize.width + stepPadding
+    return windowSize.keep(x, anchorBounds.top - verticalInset, popupContentSize)
+  }
+}

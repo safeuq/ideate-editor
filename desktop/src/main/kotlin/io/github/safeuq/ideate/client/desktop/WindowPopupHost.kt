@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.PopupPositionProvider
+import io.github.safeuq.ideate.client.ui.component.LocalPopupHost
 import io.github.safeuq.ideate.client.ui.component.PopupHost
 import java.awt.AWTEvent
 import java.awt.Component
@@ -51,8 +52,17 @@ import kotlin.math.roundToInt
  * Example, 2x screen of 1512 × 982 points with a 33 point menu bar, window content at (200, 100): a
  * menu asked for at (40, 600) in the window gets anchor `(400 + 80, 134 + 1200)` px and
  * `windowSize` `3024 × 1898` px.
+ *
+ * A popup opened from inside a popup (a submenu) is owned by that popup's window, so its anchor is
+ * measured from there. [parentPopups] are the popup windows it was opened from, outermost first; a
+ * click on one of them closes only this popup, a click anywhere else also runs [closeParents], as
+ * IntelliJ's `WizardPopup` closes its parent chain.
  */
-class WindowPopupHost(private val owner: Window) : PopupHost {
+class WindowPopupHost(
+  private val owner: Window,
+  private val parentPopups: List<Window> = emptyList(),
+  private val closeParents: () -> Unit = {},
+) : PopupHost {
   // setContent's key listeners are experimental in Compose 1.12.
   @OptIn(ExperimentalComposeUiApi::class)
   @Composable
@@ -105,16 +115,23 @@ class WindowPopupHost(private val owner: Window) : PopupHost {
           escape && currentDismiss != null
         },
       ) {
+        val childHost =
+          WindowPopupHost(dialog, parentPopups + dialog) {
+            currentDismiss?.invoke()
+            closeParents()
+          }
         CompositionLocalProvider(locals) {
-          val limit = screenArea(owner)
-          // Measured against the screen, not the dialog's current size, which starts at 1 × 1.
-          Layout(currentContent) { measurables, _ ->
-            val constraints = Constraints(maxWidth = limit.width, maxHeight = limit.height)
-            val placeables = measurables.map { it.measure(constraints) }
-            val width = placeables.maxOfOrNull { it.width } ?: 0
-            val height = placeables.maxOfOrNull { it.height } ?: 0
-            contentSize = IntSize(width, height)
-            layout(width, height) { placeables.forEach { it.place(0, 0) } }
+          CompositionLocalProvider(LocalPopupHost provides childHost) {
+            val limit = screenArea(owner)
+            // Measured against the screen, not the dialog's current size, which starts at 1 × 1.
+            Layout(currentContent) { measurables, _ ->
+              val constraints = Constraints(maxWidth = limit.width, maxHeight = limit.height)
+              val placeables = measurables.map { it.measure(constraints) }
+              val width = placeables.maxOfOrNull { it.width } ?: 0
+              val height = placeables.maxOfOrNull { it.height } ?: 0
+              contentSize = IntSize(width, height)
+              layout(width, height) { placeables.forEach { it.place(0, 0) } }
+            }
           }
         }
       }
@@ -124,8 +141,10 @@ class WindowPopupHost(private val owner: Window) : PopupHost {
           override fun windowGainedFocus(event: WindowEvent) = Unit
 
           override fun windowLostFocus(event: WindowEvent) {
-            if (event.oppositeWindow?.let { isOwnedBy(it, dialog) } != true)
-              currentDismiss?.invoke()
+            val opposite = event.oppositeWindow
+            if (opposite != null && isOwnedBy(opposite, dialog)) return
+            currentDismiss?.invoke()
+            if (opposite == null || opposite !in parentPopups) closeParents()
           }
         }
       dialog.addWindowFocusListener(focusListener)
@@ -144,6 +163,9 @@ class WindowPopupHost(private val owner: Window) : PopupHost {
       onDispose {
         Toolkit.getDefaultToolkit().removeAWTEventListener(pressListener)
         dialog.removeWindowFocusListener(focusListener)
+        // A submenu that closes gives the keys back to its parent menu, not to the main window
+        // (which would close the parent as a click outside it).
+        if (parentPopups.isNotEmpty() && dialog.isFocused) owner.toFront()
         dialog.dispose()
       }
     }

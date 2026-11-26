@@ -142,7 +142,7 @@ fun ContextMenuArea(
         with(density) { minOf(windowSize.width, windowSize.height).toDp() } < PHONE_SMALLEST_SIDE
       val centered = menu.byTouch || phone
       AppPopup(MenuPosition(menu.anchor, centered), onDismissRequest = { open = null }) {
-        Menu(entries) { open = null }
+        Menu(entries, cascade = !centered) { open = null }
       }
     }
   }
@@ -151,7 +151,7 @@ fun ContextMenuArea(
 /** [anchor]: where the menu was asked for, in the menu area's own coordinates. */
 private data class OpenMenu(val anchor: Offset, val byTouch: Boolean)
 
-private val PHONE_SMALLEST_SIDE = 600.dp
+internal val PHONE_SMALLEST_SIDE = 600.dp
 
 private fun windowSizeOf(coordinates: LayoutCoordinates): IntSize {
   var root = coordinates

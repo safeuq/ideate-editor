@@ -41,6 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -401,8 +403,13 @@ private fun MoreButton(
  */
 @Composable
 internal fun DropDownMenu(entries: List<MenuEntry>, beside: Boolean, onDismiss: () -> Unit) {
+  // Submenus beside their parent, except on a phone (ContextMenu's rule: under 600 dp).
+  val windowSize = LocalWindowInfo.current.containerSize
+  val phone =
+    with(LocalDensity.current) { minOf(windowSize.width, windowSize.height).toDp() } <
+      PHONE_SMALLEST_SIDE
   AppPopup(DropDownPosition(beside), onDismissRequest = onDismiss) {
-    Menu({ entries }, close = onDismiss)
+    Menu({ entries }, cascade = !phone, close = onDismiss)
   }
 }
 
