@@ -1018,3 +1018,9 @@ Rule, in panel dp:
 - Order, top to bottom: top row; then a split with the console toolbar row and console first, the `BuildView` toolbar row (only with a left strip) and tree second.
 
 Checked on the Android emulator (Pixel_3a_API_34, portrait) against a Mac backend: Run window after the Gradle task `projects` shows the console on top and the tree below, Run's toolbar row whole (its ⋮ opens "Modify Run Configuration..." under it), and the console toolbar row's Soft-Wrap toggles; the Build window after a Gradle sync looks as before and its Filter menu opens under the button.
+
+## Addendum (2026-11-26): ANSI colours in consoles
+
+The backend removes ANSI escapes from console output and sends each coloured range as a `CustomStyleHighlighterModel` with `lightAttributes` and `darkAttributes`. The client used only the text attributes key, so the colours were lost. `RawHighlight` now keeps both styles (`IdeaTextAttributes.toStyle()`), and `toHighlight` uses the dark one when `EditorScheme.isDark`, else the light one, in place of the key lookup, as JetBrains Client's `FrontendCustomStyleHighlighterModelHandler` does. `isDark` follows IntelliJ's `ColorUtil.isDark` on the TEXT background: `(luminance + 0.05) / 0.05 < 4.5`, so `0x1E1F22` is dark and `0xFFFFFF` is not. This runs in the shared highlighter path, so editors get these highlighters too, as in JetBrains Client.
+
+The colours inside those attributes arrive as `DualColor` (a backend `JBColor`, light and dark values; e.g. red is `DualColor(light = 240,82,79, dark = 240,82,79)` under Islands Dark), which `toArgb` used to drop. `toStyle(dark)` now takes the dark half for `darkAttributes` and the light half for `lightAttributes`; scheme loading still passes nothing and keeps leaving `DualColor` out. Checked live on a backend with Islands Dark: `\u001b[31mred` shows in `0xF0524F`, `\u001b[1;32m` in bold `0x5C962C`, `\u001b[44m` on a `0x3993D4` background.

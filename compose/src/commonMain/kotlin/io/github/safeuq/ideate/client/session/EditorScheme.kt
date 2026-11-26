@@ -5,9 +5,11 @@ import com.jetbrains.ide.model.highlighterRegistration.IdeaTextAttributes
 import com.jetbrains.ide.model.highlighterRegistration.IdeaTextAttributesKey
 import com.jetbrains.ide.model.highlighterRegistration.TextAttributesKeyModel
 import com.jetbrains.rd.ide.model.AbstractColor
+import com.jetbrains.rd.ide.model.DualColor
 import com.jetbrains.rd.ide.model.IdeaColorKey
 import com.jetbrains.rd.ide.model.RgbColor
 import com.jetbrains.rd.ide.model.RgbaColor
+import kotlin.math.pow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 
@@ -65,6 +67,13 @@ class EditorScheme(
   val foreground: Long = defaultText.foreground ?: error("Scheme $name has no TEXT foreground")
 
   /**
+   * Whether the default background is dark, as IntelliJ's `ColorUtil.isDark`: the contrast of the
+   * background against black, `(luminance + 0.05) / 0.05`, is below 4.5. For example `0x1E1F22` is
+   * dark and `0xFFFFFF` is not.
+   */
+  @Transient val isDark: Boolean = (relativeLuminance(background) + 0.05) / 0.05 < 4.5
+
+  /**
    * [keyChains]: for each key of a highlighter, the key followed by its fallbacks. The first key
    * that resolves wins.
    */
@@ -94,6 +103,15 @@ class EditorScheme(
   }
 
   companion object {
+    /** WCAG relative luminance of an ARGB colour, as IntelliJ's `ColorUtil.getLuminance`. */
+    internal fun relativeLuminance(argb: Long): Double {
+      fun linear(shift: Int): Double {
+        val value = ((argb shr shift) and 0xFF) / 255.0
+        return if (value <= 0.03928) value / 12.92 else ((value + 0.055) / 1.055).pow(2.4)
+      }
+      return 0.2126 * linear(16) + 0.7152 * linear(8) + 0.0722 * linear(0)
+    }
+
     /**
      * Parents of the bundled schemes. ponytail: hard-coded; the protocol doesn't send a scheme's
      * parent.
@@ -141,19 +159,30 @@ class EditorScheme(
         .map { it.externalName }
         .toList()
 
-    fun IdeaTextAttributes.toStyle() =
+    /** [dark]: which half of a `DualColor` to use; null leaves such colours out. */
+    fun IdeaTextAttributes.toStyle(dark: Boolean? = null) =
       TextStyle(
-        foreground = foregroundColor?.toArgb(),
-        background = backgroundColor?.toArgb(),
+        foreground = foregroundColor?.toArgb(dark),
+        background = backgroundColor?.toArgb(dark),
         fontType = fontType,
         // An effect without a color is not drawn in IntelliJ.
         effect = effectColor?.let { TextEffect.valueOf(effectType.name) },
-        effectColor = effectColor?.toArgb(),
-        errorStripeColor = errorStripeColor?.toArgb(),
+        effectColor = effectColor?.toArgb(dark),
+        errorStripeColor = errorStripeColor?.toArgb(dark),
       )
 
-    fun AbstractColor.toArgb(): Long? =
+    /**
+     * A `DualColor` is a `JBColor` on the backend (light and dark values); JetBrains Client picks
+     * the half for the current theme, here [dark] says which.
+     */
+    fun AbstractColor.toArgb(dark: Boolean? = null): Long? =
       when (this) {
+        is DualColor ->
+          when (dark) {
+            true -> darkColor.toArgb()
+            false -> lightColor.toArgb()
+            null -> null
+          }
         is RgbaColor ->
           (alpha.toLong() shl 24) or
             (red.toLong() shl 16) or

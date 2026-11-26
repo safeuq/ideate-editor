@@ -35,6 +35,7 @@ import com.jetbrains.rd.ide.model.CropIconModel
 import com.jetbrains.rd.ide.model.CustomDataSerialized
 import com.jetbrains.rd.ide.model.CustomDataTimestampModel
 import com.jetbrains.rd.ide.model.CustomImageIconModel
+import com.jetbrains.rd.ide.model.CustomStyleHighlighterModel
 import com.jetbrains.rd.ide.model.DefaultHighlighterModel
 import com.jetbrains.rd.ide.model.DeferredIconModel
 import com.jetbrains.rd.ide.model.EmptyIconModel
@@ -114,6 +115,7 @@ import com.jetbrains.rd.util.reactive.hasTrueValue
 import io.github.safeuq.ideate.client.connection.ClientCertificate
 import io.github.safeuq.ideate.client.connection.JoinLink
 import io.github.safeuq.ideate.client.kernel.SearchKernel
+import io.github.safeuq.ideate.client.session.EditorScheme.Companion.toStyle
 import io.github.safeuq.ideate.client.session.buildtree.BuildTrees
 import io.github.safeuq.ideate.client.session.console.ConsoleDocuments
 import io.github.safeuq.ideate.client.session.terminal.TerminalSessions
@@ -2462,7 +2464,7 @@ class ClientSession(
   }
 
   /** A highlighter before style resolution, so a scheme change can restyle it. */
-  private data class RawHighlight(
+  internal data class RawHighlight(
     val id: Long,
     val start: Int,
     val end: Int,
@@ -2473,9 +2475,15 @@ class ClientSession(
     val thinErrorStripeMark: Boolean,
     /** The rd model's class, e.g. `SyntaxHighlighterModel`; only for CLIENT_HIGHLIGHT_DUMP. */
     val modelName: String,
+    /**
+     * A `CustomStyleHighlighterModel`'s own styles, e.g. the colours of ANSI console output. Like
+     * JetBrains Client (`FrontendCustomStyleHighlighterModelHandler`), they replace the key lookup.
+     */
+    val lightStyle: TextStyle? = null,
+    val darkStyle: TextStyle? = null,
   ) {
     fun toHighlight(scheme: EditorScheme): Highlight {
-      val style = scheme.style(keyChains)
+      val style = (if (scheme.isDark) darkStyle else lightStyle) ?: scheme.style(keyChains)
       return Highlight(
         id,
         start,
@@ -2606,6 +2614,8 @@ class ClientSession(
         },
         model.isThinErrorStripeMark,
         model.javaClass.simpleName,
+        (model as? CustomStyleHighlighterModel)?.lightAttributes?.toStyle(dark = false),
+        (model as? CustomStyleHighlighterModel)?.darkAttributes?.toStyle(dark = true),
       )
     }
 
