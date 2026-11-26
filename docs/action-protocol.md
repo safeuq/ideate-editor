@@ -343,3 +343,57 @@ with `Main.java` open and in a traced JetBrains Client 263.7307.200.
 | Not in the backend's answer | Window, the application menu, View ▸ Tool Windows, File ▸ New / Open… / Recent Projects: the client's own actions |
 
 41 is one more than `ActionMenus.MAX_REQUESTS` (40), so the main menu needs a higher limit.
+
+## Addendum (2026-11-26, 10:35 IST): the main menu built (docs/plans/main-menu.md, phases 1 to 3)
+
+Checked live on an own backend (IntelliJ 263.7307.200, port 5997, project `demo` with
+`src/Main.java`, no JDK configured), desktop app from the worktree with hot reload, on the Mac.
+
+### What the code does
+
+| Part | Where |
+|---|---|
+| The tree | `ClientSession.refreshMainMenu()`: `ActionMenus.expand("MainMenu", place "MainMenu", the selected editor's context, PopupKindModel(true, false), maxRequests = 200)`, top level kept as `SubMenu`s, published as `SessionState.mainMenu` |
+| A chosen item | `runMainMenuAction(actionId)`: `$Undo`, `$Redo` are Ideate's own; anything else `ActionMenus.runAction` (update, then run if enabled) with the context at the click; then a refresh |
+| Ideate's own items | Navigate starts with Search Everywhere, Class…, File…, Symbol… (`searchEverywhere.open(tab)`), only while Search Everywhere is there; Cut, Copy, Paste through the editor's `withLocalClipboard` (also inside Edit ▸ Paste, which is a submenu here) |
+| Toggles | `MenuItem.checked` from `ToggleActionModel` + `NameBooleanValue("selected")`; the popup shows `expui/actions/checked.svg`, the macOS bar a `JCheckBoxMenuItem` |
+| macOS | `desktop/…/MacMenuBar.kt`: a `JMenuBar` on the editor window, given through `LocalMainMenuBar` (IdeateLocals); accelerators from `MenuItem.keyStroke` (one-stroke shortcuts, never Enter) |
+| Elsewhere | `ui/MainMenuButton.kt`: `IconButton` with `expui/general/windowsMenu@20x20.svg` at 20 dp, first in the main toolbar, popup through the run selector's `DropDownMenu` (AppPopup, `Menu`); Alt+\ opens it (not on macOS). `CLIENT_MAIN_MENU_BUTTON=1` shows it on a Mac too |
+| Refreshes | the project appears, the selected editor changes, `executingConfigurations` changes, an item or a run widget button ran, a macOS menu opens, the window gains the focus, the button is pressed. No 500 ms timer |
+
+### Found
+
+| Finding | Detail |
+|---|---|
+| Inline groups come back empty | Build's `Java.BuildMenu` (flags `0x1883`: not a popup) had no children in the `BuildMenu` answer, so Build showed only Groovy Resources. `ActionMenus.expand` now also asks for a visible inline group whose children are missing. The main menu then takes **110 requests, 40 to 170 ms** (was 41); Build shows Build Project, Build Module 'demo', Recompile 'Main.java', Rebuild Project, Build Artifacts…. Context menus get the same rule (still capped at 40) |
+| `&&` in labels | Edit ▸ `Emoji && Symbols`: `ActionMenus.label` now turns `&&` into `&` |
+| A `JMenuBar` on the custom-title-bar window | goes to the system bar; the window's content (full-size content, toolbar in the title bar) is unchanged. The bar reads: Apple, MainKt (the app name under hotRun), File, Edit, View, Navigate, Code, Refactor, Build, Run, Tools, VCS, Help |
+| Accelerators | kept. ⌘C on a selection then ⌘V in the editor pasted once; the log had no `Running $Copy` / `$Paste` |
+| A bar rebuilt while a menu is open | held back until the menu closes, then applied after 500 ms so the chosen item's action is not removed first |
+| AppleScript `click menu item` | works only while the app is frontmost, and needs ~1.5 s after it becomes frontmost: the focus refresh rebuilds the bar and the first lookup fails |
+| File menu | the backend does send New, Open… and Recent Projects (the plan's 09:56 table said they were missing) |
+| Project tabs | each project's session has its own tree; with `demo` (Main.java open) Build shows "Build Module 'demo'", "Recompile 'Main.java'"; after switching to `beta` (no editor) "Build Module", "Rebuild", "Recompile"; back on `demo` the first again |
+| Icons on Android | `android/build/generated/client-assets/icons.jar` has `expui/general/windowsMenu@20x20.svg`, `_dark`, `expui/actions/checked.svg`, `_dark` |
+
+### Greyed out (added to `ActionMenus.UNSHOWN_ACTIONS`)
+
+Tried from the macOS bar with the caret on `System.out`:
+
+| Item | Id | What happened |
+|---|---|---|
+| View ▸ Quick Definition | `QuickImplementations` | ran; log `Backend popup 2: not shown inside: BeDynamicControlContainer` |
+| View ▸ Show Siblings, Parameter Info, Type Info, Context Info | `ShowSiblings`, `ParameterInfo`, `ExpressionTypeInfo`, `EditorContextInfo` | ran; nothing reached Ideate |
+| View ▸ Quick Type Definition | `QuickTypeDefinition` | not tried; same kind as Quick Definition |
+| View ▸ Show Bytecode | `BytecodeViewer` | ran; nothing shown |
+| Navigate ▸ Type Hierarchy | `TypeHierarchy` | ran; `Tool window Hierarchy state ActiveAndFocused`, which Ideate doesn't draw. `MethodHierarchy`, `CallHierarchy` greyed with it (not tried) |
+
+Shown and working: Code ▸ Generate… (list popup), Surround With…, Refactor ▸ Refactor This…, VCS ▸ VCS Operations Popup…, Run ▸ Run… (all `activePopups` lists), File ▸ Invalidate Caches… (Lux dialog; Cancel closed it), Navigate ▸ Implementation(s), Help ▸ Learn IDE Features (`Tool window Learn state Active`; not checked whether Ideate shows it). Insert Live Template… ran with nothing logged; left enabled, not checked on screen.
+
+Items that act on the backend's machine are left as the real client has them. Tried: Invalidate Caches… (dialog, cancelled). Not tried: Show Log, Edit Custom VM Options…, Close Project, Power Save Mode.
+
+### Known limits
+
+- The context is always the selected editor's (else the project's), never a focused Project tree row.
+- Windows and Linux desktop were not run; the button was checked on the Mac with `CLIENT_MAIN_MENU_BUTTON=1`. Alt+\ is off on macOS, so it was not tried. The phone was not run.
+- Ideate's own Navigate items have no accelerator in the macOS bar (their keys are handled in `ClientScreen`; an accelerator would run them twice), so the bar shows no shortcut for them.
+- "Menu … not built: Task finished in Cancelled state" shows in the log for a few `New` groups when refreshes overlap; the next refresh fills them.

@@ -119,6 +119,12 @@ fun MainToolbar(
   runConfigurationEntries: List<MenuEntry>? = null,
   /** The project widget was pressed; [bounds]: its place in the window, dp. */
   onProject: (bounds: IntRect) -> Unit = {},
+  /** The main menu for the three-line button first in the row; null: no button (macOS). */
+  mainMenu: List<MenuEntry>? = null,
+  /** Whether the main menu's popup is open; held by the caller for the Alt+\\ shortcut. */
+  mainMenuOpen: Boolean = false,
+  /** Opens or closes the main menu's popup. */
+  onMainMenuOpen: (Boolean) -> Unit = {},
 ) {
   val fonts = LocalClientFonts.current
   val icons = LocalIcons.current
@@ -139,6 +145,10 @@ fun MainToolbar(
       ),
     verticalAlignment = Alignment.CenterVertically,
   ) {
+    mainMenu?.let { menus ->
+      MainMenuButton(menus, mainMenuOpen, onMainMenuOpen, control)
+      Spacer(Modifier.width(4.dp))
+    }
     val name = projectWidget?.text?.takeIf { it.isNotEmpty() } ?: projectName ?: "…"
     // The project widget keeps its width (up to 200 dp); the run configurations give way first.
     var projectBounds by remember { mutableStateOf(IntRect.Zero) }

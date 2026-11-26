@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -137,6 +138,22 @@ fun ClientScreen(
   var gradientCenter by remember { mutableFloatStateOf(Float.NaN) }
   val projectColor = state.projectName?.let(::projectGradientColor)
   val doubleShift = remember { DoubleShift() }
+  // The main menu with the selected editor's own Cut, Copy and Paste (EditorView sets it while it
+  // shows a main editor); the backend's items stay as they are without one.
+  val localClipboardEntries = remember {
+    mutableStateOf<((List<MenuEntry>) -> List<MenuEntry>)?>(null)
+  }
+  val mainMenu = localClipboardEntries.value?.invoke(state.mainMenu) ?: state.mainMenu
+  val mainMenuBar = LocalMainMenuBar.current
+  // The three-line button where there is no system menu bar. CLIENT_MAIN_MENU_BUTTON=1 shows it on
+  // a Mac too, the only way to see it there.
+  val mainMenuButton = mainMenuBar == null || MAIN_MENU_BUTTON_SWITCH
+  var mainMenuOpen by remember { mutableStateOf(false) }
+  val openMainMenu = { open: Boolean ->
+    if (open) session.refreshMainMenu()
+    mainMenuOpen = open
+  }
+  mainMenuBar?.invoke(mainMenu, session::refreshMainMenu)
   // Called by both key modifiers below; true when the event opens Search Everywhere.
   val onDoubleShiftKey =
     onDoubleShiftKey@{ event: androidx.compose.ui.input.key.KeyEvent, beforeSoftKeyboard: Boolean ->
@@ -161,6 +178,17 @@ fun ClientScreen(
       }
       .onPreviewKeyEvent { event ->
         if (onDoubleShiftKey(event, false)) return@onPreviewKeyEvent true
+        // MainMenuButton.ShowMenu: Alt+\ in the default keymap, none on macOS.
+        if (
+          mainMenuButton &&
+            !IS_MAC &&
+            event.type == KeyEventType.KeyDown &&
+            event.isAltPressed &&
+            event.key == Key.Backslash
+        ) {
+          openMainMenu(true)
+          return@onPreviewKeyEvent true
+        }
         val search = session.searchEverywhere ?: return@onPreviewKeyEvent false
         if (state.search != null) return@onPreviewKeyEvent false
         val down = event.type == KeyEventType.KeyDown
@@ -453,6 +481,7 @@ fun ClientScreen(
         tabRow,
         breadcrumbsFooter = layout == ScreenLayout.PORTRAIT,
         modifier,
+        localClipboardEntries,
       )
 
     Column(Modifier.fillMaxSize()) {
@@ -485,6 +514,9 @@ fun ClientScreen(
         onRunConfigurations = session::runConfigurationsMenu,
         runConfigurationEntries = state.contextMenu?.entries,
         onProject = session::projectWidgetClicked,
+        mainMenu = if (mainMenuButton) mainMenu else null,
+        mainMenuOpen = mainMenuOpen,
+        onMainMenuOpen = openMainMenu,
       )
       if (layout == ScreenLayout.WIDE && state.openProjects.size > 1)
         ProjectTabs(
@@ -862,6 +894,8 @@ private fun EditorIsland(
   /** A phone held upright: the breadcrumbs under the editor, not in the status bar. */
   breadcrumbsFooter: Boolean,
   modifier: Modifier,
+  /** Set by the editor to its Cut, Copy and Paste mapping for the main menu. */
+  localClipboardEntries: MutableState<((List<MenuEntry>) -> List<MenuEntry>)?>,
 ) {
   val fonts = LocalClientFonts.current
   // What the backend copies (ClipboardModel) goes to the system clipboard, as in JetBrains Client.
@@ -912,6 +946,7 @@ private fun EditorIsland(
         editorScroll,
         backendMenu = { state.contextMenu?.entries },
         onStickyShown = { stickyShown = it },
+        localClipboardEntries = localClipboardEntries,
       )
       if (breadcrumbsFooter)
         EditorBreadcrumbs(
@@ -1147,3 +1182,6 @@ internal fun TabCloseButton(fileName: String, onClose: () -> Unit) {
 private val RUN_WINDOWS = setOf("Run", "Debug", "Build")
 
 private const val STRUCTURE_HIDE_DELAY_MS = 30_000L
+
+/** CLIENT_MAIN_MENU_BUTTON=1: the main menu button also where the system menu bar has the menu. */
+private val MAIN_MENU_BUTTON_SWITCH = System.getenv("CLIENT_MAIN_MENU_BUTTON") == "1"
