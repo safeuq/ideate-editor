@@ -397,3 +397,35 @@ Items that act on the backend's machine are left as the real client has them. Tr
 - Windows and Linux desktop were not run; the button was checked on the Mac with `CLIENT_MAIN_MENU_BUTTON=1`. Alt+\ is off on macOS, so it was not tried. The phone was not run.
 - Ideate's own Navigate items have no accelerator in the macOS bar (their keys are handled in `ClientScreen`; an accelerator would run them twice), so the bar shows no shortcut for them.
 - "Menu … not built: Task finished in Cancelled state" shows in the log for a few `New` groups when refreshes overlap; the next refresh fills them.
+
+## Addendum (2026-11-26, 11:30 IST): the main menu's follow-up items (docs/plans/main-menu.md, 11:00 addendum)
+
+Checked live on an own backend (263.7307.200, port 5997, project `demo`, `src/Main.java` open,
+caret on `println`), desktop app from the worktree with `CLIENT_MAIN_MENU_BUTTON=1`, on the Mac.
+
+### What the code does
+
+| Part | Where |
+|---|---|
+| Context from the last focused pane | `ClientScreen` puts `onFocusChanged` on the editor's and the Project tree's modifier; on gaining the focus they call `ClientSession.paneFocused(FocusedPane.EDITOR / PROJECT)`. The session keeps the last one (the menu popup taking the focus changes nothing). `mainMenuContext()`: with the Project tree last, `ProjectTimestampModel`, `NavigatablesArrayTimestampModel([])`, `ProjectViewTimestampModel("ProjectPane", [tree.selected])`, `ControlTimestampModel(ToolWindowComponentId(projectId, "Project"))`, `CustomDataTimestampModel([CustomDataSerialized("TOOL_WINDOW_ID", "\"Project\"")])`; else `actionContext()` (the editor's, as before). Used by `refreshMainMenu` and `runMainMenuAction`; the run widget and the Project context menu are unchanged. The menu is refreshed when the pane changes and when the selected tree row changes with the tree last |
+| Run and react | `runMainMenuAction` keeps the item (`MainMenuRun`: action id, label, start). For 5 s after it: a `BackendPopups` popup with `unknown` content calls `onUnknownContent`, and the session cancels it (`BackendPopups.cancel`); a tool window the backend sets shown that has no stripe button (`toolWindowButtons`) is set Hidden again on the backend (`BackendToolWindowViews.hideOnBackend`, so the next run shows it again). Both log `<action id> opened <what>, which Ideate doesn't show` and set `SessionState.notice`, which `ClientScreen` puts in its existing status bar notice for 3 s: "<item label> is not supported in Ideate yet" |
+| Grey list | `ActionMenus.MAIN_MENU_SHOWN_ACTIONS` (`QuickImplementations`, `QuickTypeDefinition`, `TypeHierarchy`, `MethodHierarchy`, `CallHierarchy`) is passed as `expand(shownActions = …)` by the main menu only; `MenuTree` leaves those enabled. Context menus pass nothing, so their grey list is as it was. `ShowSiblings`, `ParameterInfo`, `ExpressionTypeInfo`, `EditorContextInfo`, `BytecodeViewer` stay greyed everywhere |
+| The client's own items | `session/MainMenuClientItems.kt`: the 129 rows of `main-menu-client-items.tsv` as `ROWS`; `merge(menus)` runs after `withOwnItems`. Each row is a disabled `MenuItem` (or a disabled `SubMenu` with no entries) after its `after` label under its parent; anchor not there: after the previous row when it went under the same parent, else at the end; label already there: skipped; parent submenu not there: skipped. Tested in `MainMenuClientItemsTest` (anchor found, anchor missing, duplicate skipped, whole Window menu) |
+
+### Seen
+
+| Check | Result |
+|---|---|
+| Navigate in the popup | Text…, Line:Column…, Next/Previous Highlighted Error after Symbol…, greyed; Select In…, Jump to Navigation Bar after Navigate in File; File Structure after Related Symbol…; Type Hierarchy enabled (Method and Call Hierarchy greyed by the backend at that caret) |
+| Edit ▸ Find in the popup | Find… to Unselect Occurrence and Search In Selection before Scroll to Results During Typing; the word-at-caret rows, Find in Files…, Replace in Files… after it; all greyed |
+| macOS bar | `Apple, MainKt, File, Edit, View, Navigate, Code, Refactor, Build, Run, Tools, VCS, Window, Help` (Window empty) |
+| Navigate ▸ Type Hierarchy | `Tool window Hierarchy state ActiveAndFocused`, `TypeHierarchy opened tool window Hierarchy, which Ideate doesn't show`, `Tool window Hierarchy state Hidden`; status bar "Type Hierarchy is not supported in Ideate yet". A second run gave the same |
+| View ▸ Quick Definition | `Backend popup 1: not shown inside: BeDynamicControlContainer`, `Backend popup 1 cancelled`, `QuickImplementations opened popup 1, which Ideate doesn't show` |
+| Project tree context | `src` selected: File ▸ New has Java Class. `.idea` selected: no Java Class in New. `demo` (root) selected, File ▸ New ▸ File → `demo/tree-context-check.txt`; `.idea` selected → `demo/.idea/idea-row-check.txt` (with the editor's context it would have gone next to `Main.java` in `src`) |
+
+### Not checked
+
+- Quick Type Definition, Method Hierarchy, Call Hierarchy were not run (same paths as Quick Definition and Type Hierarchy).
+- Going back to the editor's context after clicking in the editor was not run live; it is the same `paneFocused` call.
+- Windows, Linux and the phone were not run.
+- The 5 s window is a time window, not the action's own answer: a popup with unknown content opened by something else within 5 s of a main menu item would be cancelled too.

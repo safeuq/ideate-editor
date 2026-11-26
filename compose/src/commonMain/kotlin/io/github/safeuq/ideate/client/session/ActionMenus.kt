@@ -76,6 +76,7 @@ internal class ActionMenus(
    * answer is in. [uiKind] goes into every request (the main menu's is `PopupKindModel(true,
    * false)`). [onItem]: when set, a chosen item calls it with its action id instead of running the
    * presentation the menu showed (the main menu runs it with the context at the click).
+   * [shownActions]: items of [UNSHOWN_ACTIONS] left enabled here ([MAIN_MENU_SHOWN_ACTIONS]).
    */
   fun expand(
     groupId: String,
@@ -84,10 +85,11 @@ internal class ActionMenus(
     uiKind: ActionUiKindModel = PopupKindModel(false, false),
     maxRequests: Int = MAX_REQUESTS,
     onItem: ((actionId: String) -> Unit)? = null,
+    shownActions: Set<String> = emptySet(),
     result: (List<MenuEntry>) -> Unit,
   ) {
     val menu =
-      MenuTree(place, timestamps, iconPath, log) { actionId, presentation ->
+      MenuTree(place, timestamps, iconPath, log, shownActions) { actionId, presentation ->
         if (onItem != null) onItem(actionId)
         else onRd { send(actionId, presentation, place, timestamps) }
       }
@@ -256,6 +258,20 @@ internal class ActionMenus(
       )
 
     /**
+     * Items of [UNSHOWN_ACTIONS] the main menu leaves enabled: what they open reaches Ideate (a
+     * popup it can't draw, a tool window it doesn't show), so ClientSession cancels it or says "…
+     * is not supported in Ideate yet". Context menus keep them greyed.
+     */
+    val MAIN_MENU_SHOWN_ACTIONS =
+      setOf(
+        "QuickImplementations",
+        "QuickTypeDefinition",
+        "TypeHierarchy",
+        "MethodHierarchy",
+        "CallHierarchy",
+      )
+
+    /**
      * Without the mnemonic mark: `Rena_me...` is `Rename...`; `__` is a real underscore, and `&&` a
      * real `&` (`Emoji && Symbols` in Edit).
      */
@@ -321,6 +337,8 @@ internal class MenuTree(
   val timestamps: ActionTimestampSetModel,
   private val iconPath: (IconModel) -> String?,
   private val log: (String) -> Unit,
+  /** Items of [ActionMenus.UNSHOWN_ACTIONS] left enabled in this menu. */
+  private val shownActions: Set<String> = emptySet(),
   private val onItem: (actionId: String, presentation: PresentationModel) -> Unit,
 ) {
   val presentations = mutableMapOf<String, PresentationModel>()
@@ -393,7 +411,9 @@ internal class MenuTree(
           val text = ActionMenus.label(presentation)
           // Backend dialogs show (LuxDialogs); popups, frames and tool windows don't yet, so
           // the items that open those stay greyed out.
-          val unshown = inUnshownGroup || child.actionId in ActionMenus.UNSHOWN_ACTIONS
+          val unshown =
+            inUnshownGroup ||
+              (child.actionId in ActionMenus.UNSHOWN_ACTIONS && child.actionId !in shownActions)
           listOf(
             MenuItem(
               label = text,

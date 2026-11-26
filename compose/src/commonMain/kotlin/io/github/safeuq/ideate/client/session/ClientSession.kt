@@ -30,7 +30,10 @@ import com.jetbrains.rd.ide.model.ClipboardModel
 import com.jetbrains.rd.ide.model.ColorizedIconModel
 import com.jetbrains.rd.ide.model.ComponentRect
 import com.jetbrains.rd.ide.model.CompositionIconModel
+import com.jetbrains.rd.ide.model.ControlTimestampModel
 import com.jetbrains.rd.ide.model.CropIconModel
+import com.jetbrains.rd.ide.model.CustomDataSerialized
+import com.jetbrains.rd.ide.model.CustomDataTimestampModel
 import com.jetbrains.rd.ide.model.CustomImageIconModel
 import com.jetbrains.rd.ide.model.DefaultHighlighterModel
 import com.jetbrains.rd.ide.model.DeferredIconModel
@@ -49,6 +52,7 @@ import com.jetbrains.rd.ide.model.InputEventModel
 import com.jetbrains.rd.ide.model.KernelAwareTextControlId
 import com.jetbrains.rd.ide.model.MarkupDocumentExtension
 import com.jetbrains.rd.ide.model.MarkupTextControlExtension
+import com.jetbrains.rd.ide.model.NavigatablesArrayTimestampModel
 import com.jetbrains.rd.ide.model.OffsetIconModel
 import com.jetbrains.rd.ide.model.OriginKind
 import com.jetbrains.rd.ide.model.PopupKindModel
@@ -89,6 +93,7 @@ import com.jetbrains.rd.ide.model.Solution
 import com.jetbrains.rd.ide.model.SuccessfulRequestComposite
 import com.jetbrains.rd.ide.model.TextControlId
 import com.jetbrains.rd.ide.model.TextControlLocation
+import com.jetbrains.rd.ide.model.ToolWindowComponentId
 import com.jetbrains.rd.ide.model.VisibleRange
 import com.jetbrains.rd.ide.model.asyncActionsModel
 import com.jetbrains.rd.ide.model.clipboardModel
@@ -120,6 +125,7 @@ import io.github.safeuq.ideate.client.ui.MenuSeparator
 import io.github.safeuq.ideate.client.ui.SubMenu
 import io.github.safeuq.ideate.client.ui.theme.LafManager
 import io.github.safeuq.ideate.client.ui.theme.UiTheme
+import io.github.safeuq.ideate.client.ui.toolWindowButtons
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Base64
@@ -249,6 +255,7 @@ class ClientSession(
       },
       publish = { views -> mutableState.update { it.copy(backendViews = views) } },
       showRequested = { windowId, show ->
+        if (show) toolWindowAfterMainMenu(windowId)
         mutableState.update {
           it.copy(showRequest = ShowRequest(windowId, (it.showRequest?.serial ?: 0) + 1, show))
         }
@@ -440,6 +447,17 @@ class ClientSession(
   fun select(nodeId: Int) = onRd {
     mutableState.update { it.copy(tree = it.tree.copy(selected = nodeId)) }
     pane?.selection?.set(nodeId)
+    if (focusedPane == FocusedPane.PROJECT) refreshMainMenu()
+  }
+
+  /**
+   * [pane] has gained the focus. The main menu then uses its context; the last such pane is kept,
+   * so the menu's own popup taking the focus changes nothing.
+   */
+  fun paneFocused(pane: FocusedPane) = onRd {
+    if (pane == focusedPane) return@onRd
+    focusedPane = pane
+    refreshMainMenu()
   }
 
   /**
@@ -750,7 +768,7 @@ class ClientSession(
    * gains the focus and a menu is about to open. Add a timer if a stale item is ever seen.
    */
   fun refreshMainMenu() = onRd {
-    val context = actionContext() ?: return@onRd
+    val context = mainMenuContext() ?: return@onRd
     actionMenus?.expand(
       MAIN_MENU,
       MAIN_MENU,
@@ -758,8 +776,9 @@ class ClientSession(
       PopupKindModel(true, false),
       maxRequests = MAIN_MENU_MAX_REQUESTS,
       onItem = ::runMainMenuAction,
+      shownActions = ActionMenus.MAIN_MENU_SHOWN_ACTIONS,
     ) { entries ->
-      val menus = entries.filterIsInstance<SubMenu>().map(::withOwnItems)
+      val menus = MainMenuClientItems.merge(entries.filterIsInstance<SubMenu>().map(::withOwnItems))
       mutableState.update { it.copy(mainMenu = menus) }
     }
   }
@@ -812,7 +831,10 @@ class ClientSession(
       REDO -> redo()
       else ->
         onRd {
-          val context = actionContext() ?: return@onRd log("No project is open; $actionId not run")
+          val context =
+            mainMenuContext() ?: return@onRd log("No project is open; $actionId not run")
+          mainMenuRun =
+            MainMenuRun(actionId, mainMenuLabel(actionId) ?: actionId, System.nanoTime())
           actionMenus?.runAction(
             actionId,
             MAIN_MENU,
@@ -910,6 +932,87 @@ class ClientSession(
         ActionTimestampSetModel(listOf(ProjectTimestampModel(id))),
       )
     }
+  }
+
+  /**
+   * The main menu's context: the Project tree's when it had the focus last, as JetBrains Client
+   * sends for a focused tree (the selected row, the Project tool window), else [actionContext].
+   */
+  private fun mainMenuContext(): ActionTimestampSetModel? {
+    val project = projectId
+    if (focusedPane != FocusedPane.PROJECT || project == null) return actionContext()
+    return ActionTimestampSetModel(
+      listOf(
+        ProjectTimestampModel(project),
+        NavigatablesArrayTimestampModel(emptyList()),
+        ProjectViewTimestampModel(PROJECT_PANE, listOfNotNull(mutableState.value.tree.selected)),
+        ControlTimestampModel(ToolWindowComponentId(project, PROJECT_TOOL_WINDOW)),
+        CustomDataTimestampModel(
+          listOf(CustomDataSerialized("TOOL_WINDOW_ID", "\"$PROJECT_TOOL_WINDOW\"")),
+        ),
+      ),
+    )
+  }
+
+  /** A main menu item that ran: its id, its label and when it started. */
+  private class MainMenuRun(val actionId: String, val label: String, val started: Long)
+
+  /** The last main menu item that ran; rd thread only. */
+  private var mainMenuRun: MainMenuRun? = null
+
+  /** The pane that had the focus last; rd thread only. */
+  private var focusedPane = FocusedPane.EDITOR
+
+  /**
+   * The main menu item that ran in the last few seconds, which what the backend opens now belongs
+   * to. ponytail: a time window, not the action's own id; a popup opened by something else within
+   * it would be put on that item.
+   */
+  private fun recentMainMenuRun(): MainMenuRun? = mainMenuRun?.takeIf {
+    System.nanoTime() - it.started < MAIN_MENU_REACTION_NANOS
+  }
+
+  /** The label of main menu item [actionId], e.g. "Type Hierarchy"; null when it isn't there. */
+  private fun mainMenuLabel(actionId: String): String? {
+    fun find(entries: List<MenuEntry>): String? = entries.firstNotNullOfOrNull { entry ->
+      when (entry) {
+        is MenuItem -> entry.label.takeIf { entry.id == actionId }
+        is SubMenu -> find(entry.entries)
+        else -> null
+      }
+    }
+    return find(mutableState.value.mainMenu)
+  }
+
+  /** A main menu item opened something Ideate can't show: say so, and log its action id. */
+  private fun notSupported(run: MainMenuRun, what: String) {
+    log("${run.actionId} opened $what, which Ideate doesn't show")
+    mainMenuRun = null
+    mutableState.update {
+      it.copy(
+        notice =
+          Notice("${run.label} is not supported in Ideate yet", (it.notice?.serial ?: 0) + 1),
+      )
+    }
+  }
+
+  /** A backend popup with content Ideate can't draw: after a main menu item, it is cancelled. */
+  private fun popupAfterMainMenu(popup: BackendPopup) {
+    val run = recentMainMenuRun() ?: return
+    backendPopups?.cancel(popup)
+    notSupported(run, "popup ${popup.id}")
+  }
+
+  /**
+   * The backend shows tool window [windowId]: after a main menu item, said when Ideate has no
+   * button for it.
+   */
+  private fun toolWindowAfterMainMenu(windowId: String) {
+    val run = recentMainMenuRun() ?: return
+    val buttons = toolWindowButtons(mutableState.value.toolWindows)
+    if (buttons.byPlace.values.flatten().any { it.id == windowId }) return
+    notSupported(run, "tool window $windowId")
+    backendViews.hideOnBackend(windowId)
   }
 
   /** The selected editor's action context (which has the project), else just the project's. */
@@ -1147,6 +1250,7 @@ class ClientSession(
           ::log,
           { icon -> iconPaths(icon).firstOrNull() },
           { ownerId -> projectWidget?.popupPlace(ownerId) },
+          onUnknownContent = ::popupAfterMainMenu,
         ) { popups ->
           mutableState.update { it.copy(backendPopups = popups) }
         }
@@ -2434,6 +2538,10 @@ class ClientSession(
      * (docs/action-protocol.md, main menu addendum).
      */
     const val MAIN_MENU_MAX_REQUESTS = 200
+    /** The Project tool window's id, e.g. in `ToolWindowComponentId`. */
+    const val PROJECT_TOOL_WINDOW = "Project"
+    /** How long after a main menu item ran a popup or tool window is put on it: 5 s. */
+    const val MAIN_MENU_REACTION_NANOS = 5_000_000_000L
     const val NAVIGATE_MENU = "GoToMenu"
     const val UNDO = "\$Undo"
     const val REDO = "\$Redo"

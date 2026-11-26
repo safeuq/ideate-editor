@@ -183,6 +183,18 @@ data class HighlightSeverity(
 @Serializable data class GutterIcon(val offset: Int, val iconPaths: List<String>)
 
 /** [windowId] is a backend tool window id, e.g. `Run`; [show] false asks to hide it. */
+/** A short message for the status bar's notice (ClientScreen shows it for 3 seconds). */
+data class Notice(val text: String, val serial: Int)
+
+/**
+ * The pane whose context the main menu uses, as JetBrains Client takes the focused component's data
+ * context: the last of these to have the focus (opening the menu takes the focus away).
+ */
+enum class FocusedPane {
+  EDITOR,
+  PROJECT,
+}
+
 data class ShowRequest(val windowId: String, val serial: Int, val show: Boolean = true)
 
 /** A console's text and its colors, e.g. the Run window's `Main` output. */
@@ -315,6 +327,11 @@ data class SessionState(
    * redo and Navigate items in place (ClientSession.refreshMainMenu).
    */
   val mainMenu: List<SubMenu> = emptyList(),
+  /**
+   * A short message for the status bar, e.g. "Type Hierarchy is not supported in Ideate yet";
+   * `serial` is new each time so the same text shows again.
+   */
+  val notice: Notice? = null,
   /** The run widget's buttons after the selector, as the backend says they are now. */
   val runButtons: List<RunToolbarButton> = emptyList(),
   /** The run widget's selector: the selected configuration, or "Current File". */

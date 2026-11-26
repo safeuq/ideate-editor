@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -71,6 +72,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.safeuq.ideate.client.session.ClientSession
+import io.github.safeuq.ideate.client.session.FocusedPane
 import io.github.safeuq.ideate.client.session.SearchTab
 import io.github.safeuq.ideate.client.session.SessionState
 import io.github.safeuq.ideate.client.ui.component.IconButton
@@ -132,6 +134,8 @@ fun ClientScreen(
     }
   }
   val unsupported = { what: String -> notice = "$what isn't supported in this client yet" }
+  // The session's notices, e.g. "Type Hierarchy is not supported in Ideate yet".
+  LaunchedEffect(state.notice) { state.notice?.let { notice = it.text } }
 
   // Where the project gradient peaks: the project widget's icon, once laid out (IntelliJ's default
   // before that is 150).
@@ -807,7 +811,10 @@ private fun ToolWindowContent(
               onNavigated()
             }
         },
-        modifier = Modifier.fillMaxSize(),
+        modifier =
+          Modifier.fillMaxSize().onFocusChanged {
+            if (it.hasFocus) session.paneFocused(FocusedPane.PROJECT)
+          },
         scroll = scroll,
         onMenu = { session.projectMenu(it.id) },
         menuEntries = { state.contextMenu?.entries },
@@ -940,7 +947,9 @@ private fun EditorIsland(
         selected,
         scheme,
         actions,
-        Modifier.fillMaxWidth().weight(1f),
+        Modifier.fillMaxWidth().weight(1f).onFocusChanged {
+          if (it.hasFocus) session.paneFocused(FocusedPane.EDITOR)
+        },
         state.lookup?.takeIf { it.path == selected.path },
         state.usages?.takeIf { it.path == selected.path },
         editorScroll,

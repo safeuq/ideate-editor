@@ -219,6 +219,8 @@ internal class BackendPopups(
    * e.g. "44".
    */
   private val componentPlace: (ownerId: String) -> LxPoint?,
+  /** A popup is shown with content Ideate can't draw, e.g. Quick Definition's editor. */
+  private val onUnknownContent: (BackendPopup) -> Unit = {},
   private val publish: (List<BackendPopup>) -> Unit,
 ) {
   private val shown = linkedMapOf<Int, BackendPopup>()
@@ -309,6 +311,7 @@ internal class BackendPopups(
         shown[id] = popup
         log("Backend popup '${popup.title}'")
         publish(shown.values.toList())
+        if (unknown.isNotEmpty()) onUnknownContent(popup)
       }
       model.result.advise(popupLifetime) { result -> if (result == DialogResult.CLOSE) closed(id) }
       popupLifetime.onTermination { close(id) }

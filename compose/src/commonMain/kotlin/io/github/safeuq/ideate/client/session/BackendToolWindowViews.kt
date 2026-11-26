@@ -130,6 +130,14 @@ internal class BackendToolWindowViews(
     }
   }
 
+  /**
+   * Tells the backend tool window [windowId] is hidden, as the client does when it closes one, e.g.
+   * Hierarchy, which Ideate doesn't show: the next action that shows it sets it Active again.
+   */
+  fun hideOnBackend(windowId: String) {
+    if (windowId !in shown) models[windowId]?.state?.set(BeToolWindowState.Hidden)
+  }
+
   fun toggle(windowId: String, nodeId: Int) = shown[windowId]?.tree?.toggle(nodeId)
 
   /** Selects a row; the toolbar's actions are asked for again, as they depend on the selection. */
