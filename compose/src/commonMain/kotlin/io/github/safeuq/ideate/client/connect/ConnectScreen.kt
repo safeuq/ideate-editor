@@ -585,8 +585,17 @@ internal fun Notice(text: String, styles: ConnectStyles, color: Color = Islands.
     modifier = Modifier.padding(horizontal = Gateway.contentInset, vertical = 8.dp),
   )
 
+/**
+ * A page title with [trailing] at its right and a line under it. [divider] false leaves the line
+ * out: Gateway's empty SSH panel has no separator under its title.
+ */
 @Composable
-internal fun Header(title: String, styles: ConnectStyles, trailing: @Composable () -> Unit) {
+internal fun Header(
+  title: String,
+  styles: ConnectStyles,
+  divider: Boolean = true,
+  trailing: @Composable () -> Unit,
+) {
   Row(
     Modifier.fillMaxWidth()
       .height(Gateway.headerHeight)
@@ -602,7 +611,7 @@ internal fun Header(title: String, styles: ConnectStyles, trailing: @Composable 
     )
     trailing()
   }
-  Box(Modifier.fillMaxWidth().height(1.dp).background(Gateway.divider))
+  if (divider) Box(Modifier.fillMaxWidth().height(1.dp).background(Gateway.divider))
 }
 
 /**

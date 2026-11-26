@@ -734,3 +734,19 @@ The settings-in-use message no longer names the desktop IDE. The process holding
 - Termux, exit code 4 with empty stderr (`ConnectController`): "Another IntelliJ process is using the same settings, so a backend can't start. Close it, then try again."
 
 The check itself is unchanged: `HostData.launchFailure` still looks for `requires Remote Development backend` in the launch output.
+
+## Addendum 2026-11-26: the SSH page with no hosts
+
+The "No hosts" row in the Step 4 table above was wrong. Gateway 2026.3 does not show the normal page with a note under it. When the recent list is empty, `RemoteRecentConnectionsPanel.createMainPanel` shows `createEmptyRecentProjectsPanel()` instead of `RecentProjectsPanel`, so there is no New Project button in the header and no search row. The page Gateway draws:
+
+| Part | Gateway | Value |
+|---|---|---|
+| Page border | `BorderFactory.createEmptyBorder(20, 24, 0, 24)` | 20 top, 24 left and right |
+| Title | "Recent SSH Projects" (`ssh.recent.projects.title`), `JBFont.h3().asBold()` | |
+| Centred group | `panel { … }.customize(UnscaledGaps(137, 150, 0, 150))` | starts 137 under the title |
+| Icon | `Ssh_64` (`icons/ssh_64.svg`, `_dark` variant), `AlignX.CENTER` | 64 px |
+| Lines | "Work on your code on", "another host using SSH", one row each, `customize(UnscaledGaps(bottom = 15))` | 15 under each line |
+| Gap before the button | last line row `bottomGap(BottomGap.MEDIUM)`, button row `topGap(TopGap.MEDIUM)` | 20 + 20 (`IntelliJSpacingConfiguration.verticalMediumGap`) |
+| Button | `JBOptionButton`, default style (`DarculaButtonUI.DEFAULT_STYLE_KEY` = true): "New Project" (`ssh.new.project`), drop-down "Connect to Host…" (`ssh.new.host`) | |
+
+Ideate (`SshPage.kt`, `EmptySshPage`) now draws this when there are no hosts: the title (Ideate's `Header` with nothing at the right and `divider = false`, since Gateway's empty panel has no separator under its title), the 64 dp SSH icon from the client's `intellij.platform.daemon.connection.jar`, the two lines and one `DefaultButton` "New Project" that opens Connect to SSH. The "Connect to Host…" drop-down is left out, as on the header's New Project. The old "Work with a project on a machine reachable using SSH" note and the second "New Connection" button are gone.

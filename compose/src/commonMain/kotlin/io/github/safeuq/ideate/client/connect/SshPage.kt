@@ -1,5 +1,6 @@
 package io.github.safeuq.ideate.client.connect
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
@@ -28,8 +30,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.safeuq.ideate.client.ssh.LoginMethod
 import io.github.safeuq.ideate.client.ssh.OpenSshKeyState
+import io.github.safeuq.ideate.client.ui.LocalIcons
 import io.github.safeuq.ideate.client.ui.MenuItem
 import io.github.safeuq.ideate.client.ui.component.CheckboxRow
+import io.github.safeuq.ideate.client.ui.component.DefaultButton
 import io.github.safeuq.ideate.client.ui.component.OutlinedButton
 import io.github.safeuq.ideate.client.ui.component.RadioButtonRow
 import io.github.safeuq.ideate.client.ui.component.TextField
@@ -47,7 +51,8 @@ import kotlinx.coroutines.delay
 /**
  * Gateway's SSH page (captured from Gateway 2026.3, 2026-11-17): "Recent SSH Projects" with New
  * Project, a search row, then one group per host (`user@host`, its state at the right, Reconnect,
- * Open Project, the host menu) with the host's recent projects under it.
+ * Open Project, the host menu) with the host's recent projects under it. With no hosts it shows
+ * [EmptySshPage] instead, as Gateway does.
  */
 @Composable
 internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectStyles) {
@@ -64,17 +69,15 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
       actions.poll(tick % 3 == 0)
     }
   }
+  if (state.hosts.isEmpty()) {
+    EmptySshPage(actions, styles)
+    return
+  }
   Header("Recent SSH Projects", styles) {
     OutlinedButton("New Project", onClick = actions.newConnection)
   }
   SearchRow(search, { search = it }, styles)
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-    if (state.hosts.isEmpty()) {
-      Notice("Work with a project on a machine reachable using SSH", styles)
-      Box(Modifier.padding(horizontal = Gateway.contentInset)) {
-        OutlinedButton("New Connection", onClick = actions.newConnection)
-      }
-    }
     state.hosts.forEachIndexed { index, host ->
       if (index > 0)
         Box(Modifier.padding(top = 12.dp).fillMaxWidth().height(1.dp).background(Gateway.divider))
@@ -89,6 +92,33 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
     ) {
       shownError = null
     }
+  }
+}
+
+/**
+ * Gateway's SSH page with no hosts (`RemoteRecentConnectionsPanel.createEmptyRecentProjectsPanel`):
+ * the title without New Project or the search row, then the 64 px SSH icon, "Work on your code on"
+ * / "another host using SSH" and one default New Project button, centred. Gaps from Gateway: the
+ * group starts 137 below the title, each line has 15 under it, then `BottomGap.MEDIUM` and
+ * `TopGap.MEDIUM` (20 each) around the button. Gateway's button also has a "Connect to Host…"
+ * drop-down; Ideate's New Project has none, so it is left out here too.
+ */
+@Composable
+private fun EmptySshPage(actions: SshActions, styles: ConnectStyles) {
+  Header("Recent SSH Projects", styles, divider = false) {}
+  Column(
+    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 137.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    LocalIcons.current.painter("icons/ssh_64.svg")?.let {
+      Image(it, contentDescription = null, modifier = Modifier.size(64.dp))
+    }
+    Spacer(Modifier.height(6.dp))
+    BasicText("Work on your code on", style = styles.body)
+    Spacer(Modifier.height(15.dp))
+    BasicText("another host using SSH", style = styles.body)
+    Spacer(Modifier.height(15.dp + 20.dp + 20.dp))
+    DefaultButton("New Project", onClick = actions.newConnection)
   }
 }
 
