@@ -99,8 +99,8 @@ internal fun SshPage(state: SshPageState, actions: SshActions, styles: ConnectSt
  * Gateway's SSH page with no hosts (`RemoteRecentConnectionsPanel.createEmptyRecentProjectsPanel`):
  * the title without New Project or the search row, then the 64 px SSH icon, "Work on your code on"
  * / "another host using SSH" and one default New Project button, centred. Gaps from Gateway: the
- * group starts 137 below the title, each line has 15 under it, then `BottomGap.MEDIUM` and
- * `TopGap.MEDIUM` (20 each) around the button. Gateway's button also has a "Connect to Host…"
+ * group starts 137 below the title, the two lines sit with no gap between them, then
+ * `BottomGap.MEDIUM` and `TopGap.MEDIUM` (20 each) around the button. Gateway's button also has a "Connect to Host…"
  * drop-down; Ideate's New Project has none, so it is left out here too.
  */
 @Composable
@@ -115,9 +115,8 @@ private fun EmptySshPage(actions: SshActions, styles: ConnectStyles) {
     }
     Spacer(Modifier.height(6.dp))
     BasicText("Work on your code on", style = styles.body)
-    Spacer(Modifier.height(15.dp))
     BasicText("another host using SSH", style = styles.body)
-    Spacer(Modifier.height(15.dp + 20.dp + 20.dp))
+    Spacer(Modifier.height(20.dp + 20.dp))
     DefaultButton("New Project", onClick = actions.newConnection)
   }
 }
