@@ -1,0 +1,130 @@
+menu	parent	label	kind	after
+File	New	Package	item	Scratch File
+File	New	Data Source	menu	Markdown File
+File	New	Data Source from Cloud Provider	menu	Data Source
+File	New	Data Source Templates	item	Data Source from Cloud Provider
+File	New	Workspace Data Source	item	Data Source Templates
+File	New	Data Source from File/Folder	item	Workspace Data Source
+File	New	Data Source from URL	item	Data Source from File/Folder
+File	New	Data Source in Path	item	Data Source from URL
+File	New	DDL Data Source	item	Data Source in Path
+File	New	Driver	item	DDL Data Source
+File		Close Project	item	Recent Projects
+File		Plugins…	item	Project Structure…
+File	File Properties	Make file read-only	item	Associate with File Type…
+File		Cache Recovery	menu	Reload All from Disk
+File	Manage IDE Settings	Import Settings…	item	
+File	Manage IDE Settings	Export Settings…	item	Import Settings…
+File	Manage IDE Settings	Restore Default Settings…	item	Backup and Sync…
+File	Export	Project to Eclipse…	item	Files or Selection to HTML…
+File		Power Save Mode	item	Print…
+File		Essential Highlighting	item	Power Save Mode
+Edit		Search In Selection	item	Delete
+Edit	Find	Find…	item	
+Edit	Find	Replace…	item	Find…
+Edit	Find	Find Next Occurrence	item	Replace…
+Edit	Find	Find Previous Occurrence	item	Find Next Occurrence
+Edit	Find	Select All Occurrences	item	Find Previous Occurrence
+Edit	Find	Add Selection for Next Occurrence	item	Select All Occurrences
+Edit	Find	Unselect Occurrence	item	Add Selection for Next Occurrence
+Edit	Find	Search In Selection	item	Unselect Occurrence
+Edit	Find	Next Occurrence of the Word at Caret	item	Scroll to Results During Typing
+Edit	Find	Previous Occurrence of the Word at Caret	item	Next Occurrence of the Word at Caret
+Edit	Find	Find in Files…	item	Previous Occurrence of the Word at Caret
+Edit	Find	Replace in Files…	item	Find in Files…
+Edit		Column Selection Mode	item	Find Usages
+Edit		Select All	item	Column Selection Mode
+Edit		Add Carets to Ends of Selected Lines	item	Select All
+Edit	Macros	Play Back Last Macro	item	
+Edit	Macros	Start Macro Recording	item	Play Back Last Macro
+Edit	Macros	Edit Macros	item	Start Macro Recording
+Edit	Macros	Play Saved Macros…	item	Edit Macros
+Edit	Bookmarks	Add Mnemonic Bookmark…	item	Toggle Bookmark
+Edit	Bookmarks	Show Line Bookmarks…	item	Next Line Bookmark
+View		Tool Windows	menu	
+View	Appearance	Enter Presentation Mode	item	
+View	Appearance	Enter Distraction Free Mode	item	Enter Presentation Mode
+View	Appearance	Enter Full Screen	item	Enter Distraction Free Mode
+View	Appearance	Enter Zen Mode	item	Enter Full Screen
+View	Appearance	Compact Mode	item	Enter Zen Mode
+View	Appearance	Zoom IDE (Current: 100%)…	item	Compact Mode
+View	Appearance	Toolbar	item	Presentation Assistant
+View	Appearance	Tool Window Bars	item	Navigation Bar
+View	Appearance	Status Bar	item	Tool Window Bars
+View		Quick Documentation	item	Quick Type Definition
+View		Recent Locations	item	Context Info
+View		Recent Files	item	Recent Changes
+View		Recently Changed Files	item	Recent Files
+View		Quick Switch Scheme…	item	Compare with Clipboard
+View	Active Editor	Show Whitespaces	item	Soft-Wrap
+View	Active Editor	Show Line Numbers	item	Show Whitespaces
+View	Active Editor	Show Gutter Icons	item	Show Line Numbers
+View	Active Editor	Show Indent Guides	item	Show Gutter Icons
+View	Active Editor	Increase Font Size	item	Show Breadcrumbs
+View	Active Editor	Decrease Font Size	item	Increase Font Size
+View		Increase Font Size in All Editors	item	Active Editor
+View		Decrease Font Size in All Editors	item	Increase Font Size in All Editors
+View		Reset Font Size in All Editors	item	Decrease Font Size in All Editors
+View		Highlight Only Current Declaration	item	Reset Font Size in All Editors
+View	Bidi Text Base Direction	Content-Based	item	
+View	Bidi Text Base Direction	Left-to-Right	item	Content-Based
+View	Bidi Text Base Direction	Right-to-Left	item	Left-to-Right
+Navigate		Text…	item	Symbol…
+Navigate		Line:Column…	item	Text…
+Navigate		Next Highlighted Error	item	Line:Column…
+Navigate		Previous Highlighted Error	item	Next Highlighted Error
+Navigate	Navigate in File	Next Change	item	Custom Folding…
+Navigate	Navigate in File	Previous Change	item	Next Change
+Navigate		Select In…	item	Navigate in File
+Navigate		Jump to Navigation Bar	item	Select In…
+Navigate		File Structure	item	Related Symbol…
+Code	Folding	Expand	item	
+Code	Folding	Expand Recursively	item	Expand
+Code	Folding	Expand All	item	Expand Recursively
+Code	Folding	Collapse	item	Expand All
+Code	Folding	Collapse Recursively	item	Collapse
+Code	Folding	Collapse All	item	Collapse Recursively
+Code	Folding	Toggle Folding	item	Collapse Doc Comments
+Run		Profile 'Main.java' with 'IntelliJ Profiler'	menu	Run 'Main.java' with Coverage
+Run		Stop Background Processes…	item	Stop
+Run	Debugging Actions	Compile and Reload Modified Files	item	
+Run	Debugging Actions	Step Over	item	Compile and Reload Modified Files
+Run	Debugging Actions	Force Step Over	item	Throw Exception
+Run	Debugging Actions	Step Into	item	Force Step Over
+Run	Debugging Actions	Force Step Into	item	Step Into
+Run	Debugging Actions	Smart Step Into	item	Force Step Into
+Run	Debugging Actions	Step Out	item	Smart Step Into
+Run	Debugging Actions	Run to Cursor	item	Step Out
+Run	Debugging Actions	Force Run to Cursor	item	Run to Cursor
+Run	Debugging Actions	Reset Frame	item	Force Run to Cursor
+Run	Debugging Actions	Resume Program	item	Reset Frame
+Run	Debugging Actions	Evaluate Expression…	item	Resume Program
+Run	Debugging Actions	Show Execution Point	item	Evaluate Expression…
+Run	Debugging Actions	Get Thread Dump	item	Show Execution Point
+Run	Toggle Breakpoint	Line Breakpoint	item	
+Run	Toggle Breakpoint	Temporary Line Breakpoint	item	Line Breakpoint
+Run	Toggle Breakpoint	Toggle Breakpoint Enabled	item	Temporary Line Breakpoint
+Run		View Breakpoints…	item	Toggle Breakpoint
+Run		Import Tests from File…	item	Test History
+Tools		Create Command Line Launcher…	item	Generate Javadoc…
+Tools		Internal Actions	menu	Services
+Tools		Show Plugin Loading State	item	XML Actions
+Tools		Ask Agent with Context	item	Show Plugin Loading State
+Tools		Ask Agent Depending on Context	item	Ask Agent with Context
+Tools	Qodana	Log in to Qodana…	item	Add Qodana to CI Pipeline
+		Window	menu	VCS
+Help		Find Action…	item	
+Help		Help	item	Find Action…
+Help		What's New in IntelliJ IDEA	item	Learn IDE Features
+Help		Getting Started	item	What's New in IntelliJ IDEA
+Help		IntelliJ IDEA on YouTube	item	Getting Started
+Help		Keyboard Shortcuts PDF	item	IntelliJ IDEA on YouTube
+Help		Submit a Bug Report…	item	Keyboard Shortcuts PDF
+Help		Submit Feedback…	item	Submit a Bug Report…
+Help		Show Log in Finder	item	Open Log in Editor
+Help		Collect Host and Client Logs	item	Show Log in Finder
+Help	Diagnostic Tools	Collect Troubleshooting Information	item	Special Files and Folders…
+Help	Diagnostic Tools	Choose Trace Scenarios	item	Kotlin CRI Diagnostics
+Help	Diagnostic Tools	Show Patch Engine Diagnostics	item	Choose Trace Scenarios
+Help		Delete Leftover IDE Directories…	item	Edit Custom VM Options…
+Help		Register…	item	Delete Leftover IDE Directories…

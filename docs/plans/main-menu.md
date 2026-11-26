@@ -381,3 +381,83 @@ its own items** where the client has its own, and only for what Ideate can do to
 Add them in `refreshMainMenu`'s result, next to the `$Undo` mapping, as plain `MenuItem`s with
 Ideate's shortcut texts. Gap 2 (grey what opens something Ideate can't show) stands, and is now
 only about backend actions whose popup is neither Lux nor an `activePopups` list.
+
+## Addendum (2026-11-26, 11:00 IST): checks after phases 1 to 3 were built, and what is still to build
+
+Phases 1 to 3 are built by intellij-android-ui (`26423df`, `93bbab1`, `1a644d5`; their write-up is
+the 10:35 addendum of docs/action-protocol.md). The user then decided three more things. What I
+checked for each, on a test backend of my own (port 5998, `problems-demo`, `Main.java` open):
+
+### 1. The context is the focused pane's, as in JetBrains Client
+
+Seen in the traced client, 10:28 to 10:29 IST. The top-level `MainMenu` request carried:
+
+| Focus | `timestampSetModel.models` |
+|---|---|
+| The editor | `EditorTimestampModel`, `FileEditorTimestampModel`, `ProjectTimestampModel`, `VirtualFileTimestampModel`, `ControlTimestampModel(EditorComponentId)`, `VirtualFileArrayTimestampModel`: what `EditSession.actionTimestamps()` builds |
+| The Project tree, row 5 selected | `ProjectTimestampModel(projectId)`, `NavigatablesArrayTimestampModel(navigatables = [])`, `ProjectViewTimestampModel(paneId = "ProjectPane", selectedNodeIds = [5])`, `ControlTimestampModel(ToolWindowComponentId(projectId, id = "Project"))`, `CustomDataTimestampModel([CustomDataSerialized(key = "TOOL_WINDOW_ID", serializedData = "\"Project\"")])` |
+
+To build: `EditorView` and `ProjectTreeView` both have `onFocusChanged` already. Each tells the
+session when it gains the focus (`session.paneFocused(EDITOR)` / `(PROJECT)`); the session keeps the
+last one, and `actionContext()` returns the Project tree's set (with `tree.selected`) when that was
+last. "Last", not "current": opening the menu popup takes the focus away. Refresh the main menu
+when the pane changes or the selected row changes. Other tool windows keep the editor's context.
+
+### 2. Backend items that open something Ideate can't show: run and react, plus a short grey list
+
+Not every case can be seen when it arrives, so it is both:
+
+| What the action does | Seen on arrival? | Handling |
+|---|---|---|
+| a Lux dialog, an `activePopups` list | yes | shown, as today |
+| an `activePopups` popup with content Ideate can't draw (Quick Definition: log `not shown inside: BeDynamicControlContainer`) | yes: `BackendPopups` collects `unknown` | cancel it on the backend (`BackendPopups.cancel`), tell the user "<item> is not supported in Ideate yet", log the action id |
+| a tool window Ideate doesn't draw (Type Hierarchy: `Tool window Hierarchy state ActiveAndFocused`) | yes | the same message; the tool window stays on the backend, harmless |
+| a hint the client draws from another model (Parameter Info, Type Info, Context Info, Show Siblings) | **no**: nothing reaches Ideate | these stay in `ActionMenus.UNSHOWN_ACTIONS`, greyed |
+
+So `QuickImplementations`, `QuickTypeDefinition`, `TypeHierarchy`, `MethodHierarchy`,
+`CallHierarchy` can come out of the grey list once the message exists; `ShowSiblings`,
+`ParameterInfo`, `ExpressionTypeInfo`, `EditorContextInfo`, `BytecodeViewer` stay in it. Context
+menus keep their grey list as it is.
+
+### 3. The client's own items, greyed
+
+The backend sends no names for them, so they come from a fixed table:
+`docs/plans/main-menu-client-items.tsv`, 129 rows. How it was made: the real client's menus read
+once through accessibility (12 menus, all 46 submenus opened, one level deep), compared with the
+tree Ideate's built code gets (a headless `ClientSession`, `Menu MainMenu: 112 requests, 258 ms`).
+A client item is in the table when its label is not in Ideate's tree under the same parent, after
+removing the client's " (On Host)" suffix and four renames (`New Scratch File` = `Scratch File`,
+`Module…` = `New Module…`, `Data Flow to/from Here…` = `Analyze Data Flow to/from Here…`).
+
+| Column | Meaning | Example |
+|---|---|---|
+| `menu` | the top-level menu; empty for a whole menu | `Edit`; empty for `Window` |
+| `parent` | the submenu inside it, or empty | `Find` |
+| `label` | the row's text | `Find in Files…` |
+| `kind` | `item` or `menu` (a greyed submenu row needs no entries) | `item` |
+| `after` | the label it follows under the same parent; empty: first | `Scroll to Results During Typing` |
+
+Rows per menu: View 28, Edit 22, Run 21, File 20, Help 15, Navigate 9, Code 7, Tools 6, and the
+whole Window menu (after VCS).
+
+To build: read the table into `session/MainMenuClientItems.kt` as a constant list (no file reading
+at run time), and merge it in `refreshMainMenu`'s result: each row becomes a disabled `MenuItem`
+(or a disabled `SubMenu` with no entries) placed after its `after` label under its parent; when the
+anchor is not in the tree, after the previous row of the table, else at the end. Rows whose `label`
+Ideate already shows under that parent (its own Search Everywhere rows) are skipped.
+
+Limits: the table is one client build with this machine's plugins (Database's "Data Source" rows,
+Qodana, "Ask Agent"); it does not follow plugins or versions. Second-level submenus were not read.
+Items Ideate can already do itself should be wired instead of greyed when someone gets to them:
+View ▸ Tool Windows ▸ Project / Structure / Problems / Terminal / Run, Edit ▸ Select All,
+Navigate ▸ Next / Previous Highlighted Error, Navigate ▸ File Structure.
+
+### Corrections to earlier parts of this plan
+
+- "41 requests, 188 ms" was the tree without inline groups; the complete tree is 110 to 112
+  requests, 40 to 260 ms once warm (1351 ms for the first one after connecting).
+- File ▸ New, Open… and Recent Projects **are** in the backend's answer; only Close Project,
+  Plugins…, Cache Recovery and the rows in the table are the client's own.
+- The accessibility scan at 10:20 to 10:30 IST brought the real client to the front and sent keys
+  while another session's Ideate window was on screen. Tell the other sessions before driving the
+  screen, as for port 5979.
