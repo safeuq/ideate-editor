@@ -318,3 +318,24 @@ The user also asked that the existing menu code is reused. It is: the popup is `
 (`Menu`, `MenuRow`, `swingText`) in `PopupContainer`, placed by the existing `PopupPlacement`; the
 button is `IconButton`; the data is `ActionMenus` with the `MenuEntry` types. The only new drawing
 is the check mark in `MenuRow` (step 1.7).
+
+## Addendum (2026-11-26, 10:55 IST): gaps found on a review of this plan
+
+None of these was checked live. Each is to be settled in the phase named, and the answer written
+into that phase's addendum.
+
+| # | Gap | Why it matters | Where to settle it |
+|---|---|---|---|
+| 1 | **Actions Ideate already does itself.** The plan keeps only `$Undo`, `$Redo` and the clipboard items local. Ideate also has its own Search Everywhere, Go to Class / File, find in file and tool window buttons. The menu's backend versions of these (e.g. `GotoClass`, `SearchEverywhere`, `Find`, `ActivateProjectToolWindow`) would open a popup on the backend's screen, where nobody sees it | an item that seems to do nothing, and possibly a popup holding the backend's focus | phase 1: with `CLIENT_MENU_DUMP=1`, list every action id Ideate has a local handler for (search `ClientScreen.kt` and `EditorView.kt` key handling), and map each in `runMainMenuAction` to the local handler, as `$Undo` is |
+| 2 | **The list of items to grey out is unknown.** 764 entries; `UNSHOWN_GROUPS` and `UNSHOWN_ACTIONS` were built from three context menus | same as 1 for popups, frames and tool windows Ideate can't show | phases 2 and 3: walk every top-level menu once in the live check, not only the rows in the check tables; grey what opens something unseen |
+| 3 | **The context is always the editor's.** JetBrains Client sends the timestamps of whatever has the focus (a Project view node, the editor). `actionContext()` sends the selected editor's, else the project's | File ▸ New or Refactor with a Project tree row selected acts on the editor's file instead of the row | phase 1: note it as a known limit; fix only if Ideate tracks which pane has the focus |
+| 4 | **macOS shows the tree of the last refresh.** A refresh asked when a menu opens is held back until it closes (step 2.4), and nothing refreshes when indexing ends or a build finishes | an item can be greyed (or not) wrongly until the next editor change; `runAction`'s `update` protects running, not the look | phase 2: also refresh when the window gains focus and when `executingConfigurations` changes (the run toolbar's trigger). If still stale in the live check, add a refresh every few seconds while the window has the focus |
+| 5 | **Items that act on the backend's machine or end the session**: Help ▸ Show Log in Finder, Edit Custom VM Options…, File ▸ Invalidate Caches… (restarts the backend), Close Project, Power Save Mode | surprising on a phone backend; the real client shows them too | phase 2: leave them as the real client has them; record which ones were tried |
+| 6 | **Project tabs.** Each open project is its own session with its own `mainMenu` | the macOS bar must show the menus of the session on screen and change with the tab | phase 2 live check: open a second project, switch tabs, read the bar's Build menu in each |
+| 7 | **The macOS window has a custom title bar** (`MacTitleBar.kt`, full-size content) | not seen yet that a `JMenuBar` on this window goes to the system bar and leaves the window's content alone | first thing in phase 2, before anything else is built |
+| 8 | **Windows and Linux desktop can't be run here** | phase 3 is checked on the Mac through the debug switch and on Android only | say so in the phase 3 addendum |
+
+Checked while writing this: `swingText` returns an `AnnotatedString`, so the plain-text form step
+2.2 needs is `swingText(label).text`; the packaged app already gets
+`-Dcompose.application.configure.swing.globals=true` (`desktop/build.gradle.kts` line 301), so the
+DMG shows the menu bar as the Gradle run does.
