@@ -461,3 +461,54 @@ Navigate ▸ Next / Previous Highlighted Error, Navigate ▸ File Structure.
 - The accessibility scan at 10:20 to 10:30 IST brought the real client to the front and sent keys
   while another session's Ideate window was on screen. Tell the other sessions before driving the
   screen, as for port 5979.
+
+## Addendum (2026-11-26, 11:20 IST): submenus open to the side in a window (user's request)
+
+Today `ui/component/Menu.kt` replaces the open menu with the submenu and puts a back row on top
+(`path`). The user wants this kept only where there is no room; in a window the submenu shows
+beside its parent, as in IntelliJ. This is for every menu that goes through `Menu` (main menu
+popup, context menus, the run selector), not only the main menu.
+
+IntelliJ, list popups (`platform/platform-impl/src/com/intellij/ui/popup/list/ListPopupImpl.java`,
+`ui/popup/WizardPopup.java`):
+
+| What | Source | Value |
+|---|---|---|
+| Where the child goes | `ListPopupImpl.showNextStepPopup`: `x = container.x + container.width - STEP_X_PADDING`, `y` = the parent row's top | the child's left edge overlaps the parent's right edge by 2 (`WizardPopup.STEP_X_PADDING = 2`); its top is level with the row that opened it |
+| No room on the right | `WizardPopup.show`: after `ScreenUtil.moveToFit`, if the child covers the parent, `x = parent.x - child.width - STEP_X_PADDING` | the child goes to the parent's left, 2 px overlap; never off the screen's left edge |
+| Opening by hover | `ListPopupImpl` mouse move: `showSubMenu(index, withTimer = true)`, `new Timer(250, …)`, when `isShowSubmenuOnHover` (the main menu popup sets it) | 250 ms after the pointer rests on a submenu row |
+| Opening by click or Right / Enter | `showNextStepPopup` without the timer | at once |
+| Moving to another row | `disposeChildren()`, unless `isMovingToSubmenu(e)` | the child closes, except while the pointer travels towards it |
+| The parent | stays open; the row that opened the child stays selected | |
+
+To build, in `ui/component/Menu.kt` only (plus its callers' one flag):
+
+1. `Menu` gets `cascade: Boolean = false`. `false` is today's behaviour, unchanged (in place, back
+   row). Callers pass `cascade = true` exactly when they don't centre the menu: in
+   `ContextMenu.kt` that is `!centered` (`centered = menu.byTouch || phone`, the existing rule: a
+   finger, or a screen under 600 dp); `DropDownMenu` (run selector, main menu button) passes the
+   same phone test. So a phone and a long press keep the in-place form.
+2. With `cascade`, a `SubMenu` row does not change `path`. It opens a second `Menu` (same
+   composable, so it nests to any depth) in an `AppPopup` placed by a `PopupPositionProvider`:
+   right of the parent's column minus 2 dp, top level with the row minus `Menus.verticalInset` (so
+   the child's first row lines up with the parent row); if it doesn't fit on the right, left of the
+   parent plus 2 dp; then moved up to fit the window's height. Use the existing `PopupPlacement`
+   helpers; don't write a second fitting routine.
+3. Opening: hover for 250 ms (a `LaunchedEffect(hovered) { delay(250) … }` in the row), or a click
+   at once. Only one child per menu: opening another row's child, or hovering a plain item for
+   250 ms, closes the open one. Skip IntelliJ's "moving towards the submenu" test at first
+   (`// ponytail:` the 250 ms delay already covers a straight move; add the triangle test if the
+   child closes under a diagonal move in the live check).
+4. The parent row keeps its selection fill while its child is open (`selected = hovered ||
+   childOpen`).
+5. Choosing an item calls the root's `close`, which closes every level. Escape or a click on the
+   parent menu closes only the child; a click outside all menus closes everything (the child's
+   `onDismissRequest` must not close the parent when the click was inside the parent).
+6. Rows stay 24 dp; no new sizes.
+
+Live check (desktop, own backend): right-click in the editor, hover Refactor: its submenu shows to
+the right, top level with the Refactor row, after about a quarter second; move down to Generate…:
+the submenu closes; open the menu near the window's right edge: the submenu shows on the left;
+main menu button (`CLIENT_MAIN_MENU_BUTTON=1`) ▸ File ▸ New: three levels side by side; choose an
+item: all close. On the phone or with a long press: the in-place form with the back row, as today.
+Before/After entry on the shared page.
