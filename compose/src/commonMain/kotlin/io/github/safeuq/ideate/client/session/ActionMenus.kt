@@ -5,6 +5,8 @@ import com.jetbrains.rd.ide.model.ActionModelWithId
 import com.jetbrains.rd.ide.model.ActionRegistrationModel
 import com.jetbrains.rd.ide.model.ActionStubModel
 import com.jetbrains.rd.ide.model.ActionTimestampSetModel
+import com.jetbrains.rd.ide.model.ActionUiKindModel
+import com.jetbrains.rd.ide.model.AsyncActionGroupExpandResponse
 import com.jetbrains.rd.ide.model.AsyncActionUpdateRequest
 import com.jetbrains.rd.ide.model.AsyncActionsModel
 import com.jetbrains.rd.ide.model.GroupModel
@@ -12,6 +14,7 @@ import com.jetbrains.rd.ide.model.IconModel
 import com.jetbrains.rd.ide.model.InputEventModel
 import com.jetbrains.rd.ide.model.KeyStrokeModel
 import com.jetbrains.rd.ide.model.KeyboardShortcutModel
+import com.jetbrains.rd.ide.model.NameBooleanValue
 import com.jetbrains.rd.ide.model.PopupKindModel
 import com.jetbrains.rd.ide.model.PresentationModel
 import com.jetbrains.rd.ide.model.RdCallActionRequest
@@ -20,6 +23,7 @@ import com.jetbrains.rd.ide.model.RdRequest
 import com.jetbrains.rd.ide.model.RdResponse
 import com.jetbrains.rd.ide.model.RdSuccessResponse
 import com.jetbrains.rd.ide.model.SeparatorModel
+import com.jetbrains.rd.ide.model.ToggleActionModel
 import com.jetbrains.rd.util.lifetime.Lifetime
 import io.github.safeuq.ideate.client.ui.IS_MAC
 import io.github.safeuq.ideate.client.ui.MenuEntry
@@ -60,47 +64,65 @@ internal class ActionMenus(
 
   /**
    * Asks for [groupId]'s items in [place] and publishes them as menu number [serial]. The backend
-   * fills a submenu only when asked for that group, as JetBrains Client asks when the submenu
-   * opens; Ideate's menu needs them up front, so each visible submenu is asked for too, and the
-   * menu is published when the last answer is in.
+   * fills a submenu (or an inline group of one) only when asked for that group, as JetBrains Client
+   * asks when the submenu opens; Ideate's menu needs them up front, so each visible submenu is
+   * asked for too, and the menu is published when the last answer is in.
    */
-  fun show(serial: Int, groupId: String, place: String, timestamps: ActionTimestampSetModel) {
-    val menu = Menu(place, timestamps)
+  fun show(serial: Int, groupId: String, place: String, timestamps: ActionTimestampSetModel) =
+    expand(groupId, place, timestamps) { publish(serial, it) }
+
+  /**
+   * [groupId]'s items in [place], every visible submenu filled, given to [result] when the last
+   * answer is in. [uiKind] goes into every request (the main menu's is `PopupKindModel(true,
+   * false)`). [onItem]: when set, a chosen item calls it with its action id instead of running the
+   * presentation the menu showed (the main menu runs it with the context at the click).
+   */
+  fun expand(
+    groupId: String,
+    place: String,
+    timestamps: ActionTimestampSetModel,
+    uiKind: ActionUiKindModel = PopupKindModel(false, false),
+    maxRequests: Int = MAX_REQUESTS,
+    onItem: ((actionId: String) -> Unit)? = null,
+    result: (List<MenuEntry>) -> Unit,
+  ) {
+    val menu =
+      MenuTree(place, timestamps, iconPath, log) { actionId, presentation ->
+        if (onItem != null) onItem(actionId)
+        else onRd { send(actionId, presentation, place, timestamps) }
+      }
     val started = System.nanoTime()
     val requested = mutableSetOf<String>()
     var pending = 0
     fun expand(id: String) {
       if (!requested.add(id)) return
       pending++
-      val request =
-        AsyncActionUpdateRequest(id, timestamps, place, PopupKindModel(false, false), null)
-      model.expandGroup.start(lifetime, request).result.advise(lifetime) { result ->
+      val request = AsyncActionUpdateRequest(id, timestamps, place, uiKind, null)
+      model.expandGroup.start(lifetime, request).result.advise(lifetime) { answer ->
         pending--
-        runCatching { result.unwrap() }
+        runCatching { answer.unwrap() }
           .onFailure { failure -> log("Menu $id not built: ${failure.message}") }
           .getOrNull()
           ?.let { response ->
-            response.presentations.forEach { menu.presentations[it.id] = it.presentation }
-            response.children.forEach { menu.children[it.id] = it.children }
+            menu.add(response)
             val submenus =
               response.children
                 .flatMap { it.children }
                 .filterIsInstance<GroupModel>()
                 .filter { group ->
                   val presentation = menu.presentationOf(group)
-                  presentation.isVisible && presentation.isPopup && group.actionId !in menu.children
+                  // An inline group the answer left unfilled is asked for too: the backend sent
+                  // Build's `Java.BuildMenu` (Build Project, Rebuild, …) without its children.
+                  presentation.isVisible && group.actionId !in menu.children
                 }
-            if (requested.size < MAX_REQUESTS) submenus.forEach { expand(it.actionId) }
+            if (requested.size < maxRequests) submenus.forEach { expand(it.actionId) }
           }
         if (pending == 0) {
           val milliseconds = (System.nanoTime() - started) / 1_000_000
           log("Menu $groupId: ${requested.size} requests, $milliseconds ms")
           // Debug aid: CLIENT_MENU_DUMP=1 logs each item's action id, text and flags.
           if (System.getenv("CLIENT_MENU_DUMP") != null) menu.dump()
-          publish(
-            serial,
-            tidy(menu.entries(groupId.removePrefix(COMPOSITE), inUnshownGroup = false)),
-          )
+          result(tidy(menu.entries(groupId.removePrefix(COMPOSITE), inUnshownGroup = false)))
         }
       }
     }
@@ -147,10 +169,6 @@ internal class ActionMenus(
     }
   }
 
-  private fun run(actionId: String, presentation: PresentationModel, menu: Menu) = onRd {
-    send(actionId, presentation, menu.place, menu.timestamps)
-  }
-
   private fun send(
     actionId: String,
     presentation: PresentationModel,
@@ -169,94 +187,7 @@ internal class ActionMenus(
     log("Running $actionId")
   }
 
-  private inner class Menu(val place: String, val timestamps: ActionTimestampSetModel) {
-    val presentations = mutableMapOf<String, PresentationModel>()
-    val children = mutableMapOf<String, List<ActionRegistrationModel>>()
-
-    /** The state the backend computed in this context; the registered one when it sent none. */
-    fun presentationOf(action: ActionBaseModel) = presentationOf(action, presentations)
-
-    fun dump() {
-      for ((group, items) in children) {
-        for (item in items.filterIsInstance<ActionBaseModel>()) {
-          val presentation = presentationOf(item)
-          log(
-            "  $group > ${item.actionId} '${presentation.text}' flags=0x${presentation.flags.toString(16)}",
-          )
-        }
-      }
-    }
-
-    fun entries(groupId: String, inUnshownGroup: Boolean): List<MenuEntry> =
-      children[groupId].orEmpty().flatMap { child -> entry(child, inUnshownGroup) }
-
-    private fun entry(child: ActionRegistrationModel, inUnshownGroup: Boolean): List<MenuEntry> =
-      when (child) {
-        is SeparatorModel -> listOf(MenuSeparator)
-        // Blocked for clients, or an action Ideate has no part of.
-        is ActionStubModel -> emptyList()
-        is GroupModel -> {
-          val presentation = presentationOf(child)
-          val unshown = inUnshownGroup || child.actionId in UNSHOWN_GROUPS
-          when {
-            !presentation.isVisible -> emptyList()
-            // A group that can be performed is chosen like an item, e.g. a run configuration's row
-            // in the run widget's popup; its submenu (Run with Coverage…) is the inline part.
-            presentation.isPerformGroup ->
-              listOf(
-                MenuItem(
-                  label = label(presentation),
-                  enabled = presentation.isEnabled && !unshown,
-                  iconPath = presentation.icon?.icon?.let(iconPath),
-                  id = child.actionId,
-                  onClick = { run(child.actionId, presentation, this) },
-                ),
-              )
-            // A group that isn't a submenu shows its items in place.
-            !presentation.isPopup -> entries(child.actionId, unshown)
-            else -> {
-              val items = tidy(entries(child.actionId, unshown))
-              listOf(
-                SubMenu(
-                  label(presentation),
-                  items,
-                  presentation.isEnabled && items.isNotEmpty(),
-                  presentation.icon?.icon?.let(iconPath),
-                ),
-              )
-            }
-          }
-        }
-        is ActionBaseModel -> {
-          val presentation = presentationOf(child)
-          if (!presentation.isVisible) emptyList()
-          else {
-            val text = label(presentation)
-            // Backend dialogs show (LuxDialogs); popups, frames and tool windows don't yet, so
-            // the items that open those stay greyed out.
-            val unshown = inUnshownGroup || child.actionId in UNSHOWN_ACTIONS
-            listOf(
-              MenuItem(
-                label = text,
-                shortcut = shortcutOf(child),
-                enabled = presentation.isEnabled && !unshown,
-                iconPath = presentation.icon?.icon?.let(iconPath),
-                id = child.actionId,
-                onClick = { run(child.actionId, presentation, this) },
-              ),
-            )
-          }
-        }
-        // ActionReferenceModel: the group's own lists name the action; nothing to show alone.
-        is ActionModelWithId -> {
-          log("Menu item ${child.actionId} (${child::class.simpleName}) not shown")
-          emptyList()
-        }
-        else -> emptyList()
-      }
-  }
-
-  private companion object {
+  internal companion object {
     /**
      * A group id that asks as JetBrains Client does, e.g. `composite:RunConfigurationsActionGroup`:
      * the answer's children are listed under the plain id, `RunConfigurationsActionGroup`.
@@ -308,11 +239,33 @@ internal class ActionMenus(
         "Jdbc.OpenEditor.DDL",
         "GotoRow",
         "sql.SelectInDatabaseView",
+        // Main menu (2026-11-26, 263.7307.200): hint popups the backend draws itself, which reach
+        // the client neither as a Lux window nor as an activePopups list (Quick Definition logged
+        // "not shown inside: BeDynamicControlContainer"; the others ran with nothing to see), and
+        // the Hierarchy and Bytecode tool windows, which Ideate doesn't draw.
+        "QuickImplementations",
+        "QuickTypeDefinition",
+        "ShowSiblings",
+        "ParameterInfo",
+        "ExpressionTypeInfo",
+        "EditorContextInfo",
+        "BytecodeViewer",
+        "TypeHierarchy",
+        "MethodHierarchy",
+        "CallHierarchy",
       )
 
-    /** Without the mnemonic mark: `Rena_me...` is `Rename...`; `__` is a real underscore. */
+    /**
+     * Without the mnemonic mark: `Rena_me...` is `Rename...`; `__` is a real underscore, and `&&` a
+     * real `&` (`Emoji && Symbols` in Edit).
+     */
     fun label(presentation: PresentationModel): String =
-      presentation.text.orEmpty().replace("__", "\u0000").replace("_", "").replace("\u0000", "_")
+      presentation.text
+        .orEmpty()
+        .replace("__", "\u0000")
+        .replace("_", "")
+        .replace("\u0000", "_")
+        .replace("&&", "&")
 
     /** No separator first, last or twice in a row. */
     fun tidy(entries: List<MenuEntry>): List<MenuEntry> {
@@ -327,19 +280,154 @@ internal class ActionMenus(
 
     /** The first shortcut of IntelliJ's macOS keymap on a Mac, of the default keymap elsewhere. */
     fun shortcutOf(action: ActionBaseModel): String? {
-      val keymaps = action.keymapShortcutsList
-      val keymap =
-        if (IS_MAC) keymaps.firstOrNull { it.keymapName in MAC_KEYMAPS }
-        else keymaps.firstOrNull { it.keymapName == DEFAULT_KEYMAP }
-      val shortcut =
-        keymap?.shortcuts?.filterIsInstance<KeyboardShortcutModel>()?.firstOrNull() ?: return null
+      val shortcut = firstShortcut(action) ?: return null
       val first = KeyStrokes.text(shortcut.firstKeyStroke, IS_MAC) ?: return null
       val second = shortcut.secondKeyStroke ?: return first
       return KeyStrokes.text(second, IS_MAC)?.let { "$first, $it" }
     }
 
+    /**
+     * The key stroke of [shortcutOf]'s shortcut, for a menu bar accelerator: null when that
+     * shortcut has a second stroke, or is Enter (`MacNativeActionMenuItem.isEnterKeyStroke`).
+     */
+    fun keyStrokeOf(action: ActionBaseModel): KeyStrokeModel? {
+      val shortcut = firstShortcut(action) ?: return null
+      if (shortcut.secondKeyStroke != null) return null
+      return shortcut.firstKeyStroke.takeIf { it.keyCode != ENTER }
+    }
+
+    private fun firstShortcut(action: ActionBaseModel): KeyboardShortcutModel? {
+      val keymaps = action.keymapShortcutsList
+      val keymap =
+        if (IS_MAC) keymaps.firstOrNull { it.keymapName in MAC_KEYMAPS }
+        else keymaps.firstOrNull { it.keymapName == DEFAULT_KEYMAP }
+      return keymap?.shortcuts?.filterIsInstance<KeyboardShortcutModel>()?.firstOrNull()
+    }
+
+    private const val ENTER = 0x0A
+
     const val DEFAULT_KEYMAP = "\$default"
     val MAC_KEYMAPS = setOf("macOS", "Mac OS X 10.5+")
+  }
+}
+
+/**
+ * One menu's answers as they come in: the presentations by action id and each group's children,
+ * turned into [MenuEntry]s. [onItem] runs a chosen item (or a performed group) with the
+ * presentation the menu showed.
+ */
+internal class MenuTree(
+  val place: String,
+  val timestamps: ActionTimestampSetModel,
+  private val iconPath: (IconModel) -> String?,
+  private val log: (String) -> Unit,
+  private val onItem: (actionId: String, presentation: PresentationModel) -> Unit,
+) {
+  val presentations = mutableMapOf<String, PresentationModel>()
+  val children = mutableMapOf<String, List<ActionRegistrationModel>>()
+
+  fun add(response: AsyncActionGroupExpandResponse) {
+    response.presentations.forEach { presentations[it.id] = it.presentation }
+    response.children.forEach { children[it.id] = it.children }
+  }
+
+  /** The state the backend computed in this context; the registered one when it sent none. */
+  fun presentationOf(action: ActionBaseModel) = presentationOf(action, presentations)
+
+  fun dump() {
+    for ((group, items) in children) {
+      for (item in items.filterIsInstance<ActionBaseModel>()) {
+        val presentation = presentationOf(item)
+        log(
+          "  $group > ${item.actionId} '${presentation.text}' flags=0x${presentation.flags.toString(16)}",
+        )
+      }
+    }
+  }
+
+  fun entries(groupId: String, inUnshownGroup: Boolean): List<MenuEntry> =
+    children[groupId].orEmpty().flatMap { child -> entry(child, inUnshownGroup) }
+
+  private fun entry(child: ActionRegistrationModel, inUnshownGroup: Boolean): List<MenuEntry> =
+    when (child) {
+      is SeparatorModel -> listOf(MenuSeparator)
+      // Blocked for clients, or an action Ideate has no part of.
+      is ActionStubModel -> emptyList()
+      is GroupModel -> {
+        val presentation = presentationOf(child)
+        val unshown = inUnshownGroup || child.actionId in ActionMenus.UNSHOWN_GROUPS
+        when {
+          !presentation.isVisible -> emptyList()
+          // A group that can be performed is chosen like an item, e.g. a run configuration's row
+          // in the run widget's popup; its submenu (Run with Coverage…) is the inline part.
+          presentation.isPerformGroup ->
+            listOf(
+              MenuItem(
+                label = ActionMenus.label(presentation),
+                enabled = presentation.isEnabled && !unshown,
+                iconPath = presentation.icon?.icon?.let(iconPath),
+                id = child.actionId,
+                onClick = { onItem(child.actionId, presentation) },
+              ),
+            )
+          // A group that isn't a submenu shows its items in place.
+          !presentation.isPopup -> entries(child.actionId, unshown)
+          else -> {
+            val items = ActionMenus.tidy(entries(child.actionId, unshown))
+            listOf(
+              SubMenu(
+                ActionMenus.label(presentation),
+                items,
+                presentation.isEnabled && items.isNotEmpty(),
+                presentation.icon?.icon?.let(iconPath),
+                child.actionId,
+              ),
+            )
+          }
+        }
+      }
+      is ActionBaseModel -> {
+        val presentation = presentationOf(child)
+        if (!presentation.isVisible) emptyList()
+        else {
+          val text = ActionMenus.label(presentation)
+          // Backend dialogs show (LuxDialogs); popups, frames and tool windows don't yet, so
+          // the items that open those stay greyed out.
+          val unshown = inUnshownGroup || child.actionId in ActionMenus.UNSHOWN_ACTIONS
+          listOf(
+            MenuItem(
+              label = text,
+              shortcut = ActionMenus.shortcutOf(child),
+              checked = checkedOf(child, presentation),
+              keyStroke = ActionMenus.keyStrokeOf(child),
+              enabled = presentation.isEnabled && !unshown,
+              iconPath = presentation.icon?.icon?.let(iconPath),
+              id = child.actionId,
+              onClick = { onItem(child.actionId, presentation) },
+            ),
+          )
+        }
+      }
+      // ActionReferenceModel: the group's own lists name the action; nothing to show alone.
+      is ActionModelWithId -> {
+        log("Menu item ${child.actionId} (${child::class.simpleName}) not shown")
+        emptyList()
+      }
+      else -> emptyList()
+    }
+
+  /** A toggle's state (`Toggleable`): the backend puts it in the presentation as `selected`. */
+  private fun checkedOf(action: ActionBaseModel, presentation: PresentationModel): Boolean? =
+    if (action !is ToggleActionModel) null
+    else
+      presentation.clientProperties
+        .orEmpty()
+        .filterIsInstance<NameBooleanValue>()
+        .firstOrNull { it.name == SELECTED }
+        ?.value ?: false
+
+  private companion object {
+    const val SELECTED = "selected"
   }
 }
 

@@ -2,6 +2,7 @@ package io.github.safeuq.ideate.client.session
 
 import io.github.safeuq.ideate.client.session.terminal.TerminalTabState
 import io.github.safeuq.ideate.client.ui.MenuEntry
+import io.github.safeuq.ideate.client.ui.SubMenu
 import kotlinx.serialization.Serializable
 
 /** One piece of a tree node's label, e.g. the project name (bold) and its path (grey). */
@@ -309,6 +310,11 @@ data class SessionState(
   val searchAvailable: Boolean = false,
   /** The Structure tool window's tree, for the file the backend sees as selected. */
   val structure: StructureTree = StructureTree(),
+  /**
+   * The backend's main menu (`MainMenu`): File, Edit, View, … as submenus, with Ideate's own undo,
+   * redo and Navigate items in place (ClientSession.refreshMainMenu).
+   */
+  val mainMenu: List<SubMenu> = emptyList(),
   /** The run widget's buttons after the selector, as the backend says they are now. */
   val runButtons: List<RunToolbarButton> = emptyList(),
   /** The run widget's selector: the selected configuration, or "Current File". */

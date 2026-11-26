@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -200,6 +201,11 @@ fun EditorView(
    * caret, no caret row, no typing. Text can still be selected and copied.
    */
   kind: EditorKind = EditorKind.MAIN_EDITOR,
+  /**
+   * Set to [withLocalClipboard] while this editor shows, so the main menu's Cut, Copy and Paste are
+   * Ideate's own too; back to null when it goes.
+   */
+  localClipboardEntries: MutableState<((List<MenuEntry>) -> List<MenuEntry>)?>? = null,
 ) {
   val isConsole = kind == EditorKind.CONSOLE
   val fonts = LocalClientFonts.current
@@ -865,6 +871,13 @@ fun EditorView(
       MenuSeparator -> entry
     }
   }
+
+  val currentLocalClipboard by rememberUpdatedState(::withLocalClipboard)
+  if (localClipboardEntries != null)
+    DisposableEffect(localClipboardEntries) {
+      localClipboardEntries.value = { entries -> currentLocalClipboard(entries) }
+      onDispose { localClipboardEntries.value = null }
+    }
 
   // IntelliJ's console color key; schemes without it use the editor's background.
   val background =

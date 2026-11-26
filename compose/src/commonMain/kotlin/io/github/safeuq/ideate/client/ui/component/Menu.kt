@@ -101,7 +101,9 @@ fun Menu(
             entry.label,
             entry.shortcut,
             entry.enabled,
-            entry.iconPath,
+            // A toggle that is on shows IntelliJ's check mark in the icon column (ActionMenuItem
+            // with Toggleable); one that is off keeps the column empty.
+            entry.iconPath ?: CHECKED_ICON.takeIf { entry.checked == true },
             false,
             rowHeight,
             text,
@@ -218,3 +220,5 @@ internal object Menus {
   val maxWidth = 360.dp
   val maxHeight = 560.dp
 }
+
+private const val CHECKED_ICON = "expui/actions/checked.svg"

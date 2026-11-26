@@ -51,6 +51,7 @@ import com.jetbrains.rd.ide.model.MarkupDocumentExtension
 import com.jetbrains.rd.ide.model.MarkupTextControlExtension
 import com.jetbrains.rd.ide.model.OffsetIconModel
 import com.jetbrains.rd.ide.model.OriginKind
+import com.jetbrains.rd.ide.model.PopupKindModel
 import com.jetbrains.rd.ide.model.ProjectFileIconModel
 import com.jetbrains.rd.ide.model.ProjectTimestampModel
 import com.jetbrains.rd.ide.model.ProjectViewTimestampModel
@@ -111,9 +112,11 @@ import io.github.safeuq.ideate.client.kernel.SearchKernel
 import io.github.safeuq.ideate.client.session.buildtree.BuildTrees
 import io.github.safeuq.ideate.client.session.console.ConsoleDocuments
 import io.github.safeuq.ideate.client.session.terminal.TerminalSessions
+import io.github.safeuq.ideate.client.ui.IS_MAC
 import io.github.safeuq.ideate.client.ui.IconJar
 import io.github.safeuq.ideate.client.ui.MenuEntry
 import io.github.safeuq.ideate.client.ui.MenuItem
+import io.github.safeuq.ideate.client.ui.MenuSeparator
 import io.github.safeuq.ideate.client.ui.SubMenu
 import io.github.safeuq.ideate.client.ui.theme.LafManager
 import io.github.safeuq.ideate.client.ui.theme.UiTheme
@@ -730,10 +733,97 @@ class ClientSession(
     val project = requireNotNull(solution) { "No project is open; cannot run $actionId" }.projectId
     actionMenus?.runAction(
       actionId,
-      "MainMenu",
+      MAIN_MENU,
       ActionTimestampSetModel(listOf(ProjectTimestampModel(project))),
     ) {
       log("$actionId is disabled")
+    }
+  }
+
+  /**
+   * Asks the backend for the whole main menu (`MainMenu`, as IntelliJ's `IdeMenuBarHelper` expands
+   * it) in the selected editor's context and publishes it as [SessionState.mainMenu]. The top level
+   * keeps only the groups (File, Edit, …), as `postProcessVisibleChildren` does.
+   *
+   * ponytail: no 500 ms timer as IntelliJ has; the tree is asked for again when the project
+   * appears, the selected editor changes, a configuration starts or stops, an item ran, the window
+   * gains the focus and a menu is about to open. Add a timer if a stale item is ever seen.
+   */
+  fun refreshMainMenu() = onRd {
+    val context = actionContext() ?: return@onRd
+    actionMenus?.expand(
+      MAIN_MENU,
+      MAIN_MENU,
+      context,
+      PopupKindModel(true, false),
+      maxRequests = MAIN_MENU_MAX_REQUESTS,
+      onItem = ::runMainMenuAction,
+    ) { entries ->
+      val menus = entries.filterIsInstance<SubMenu>().map(::withOwnItems)
+      mutableState.update { it.copy(mainMenu = menus) }
+    }
+  }
+
+  /**
+   * Ideate's own parts of the main menu. Undo and Redo are Ideate's (the backend can't see its undo
+   * history and says they are disabled), enabled when an editor is selected. Navigate starts with
+   * Search Everywhere, Class…, File… and Symbol…, which JetBrains Client adds from its own actions
+   * (the backend's `GoToTargetEx` is empty), when Search Everywhere is there.
+   */
+  private fun withOwnItems(menu: SubMenu): SubMenu {
+    val editor = mutableState.value.selectedEditor != null
+    fun local(entries: List<MenuEntry>): List<MenuEntry> = entries.map { entry ->
+      when (entry) {
+        is MenuItem ->
+          when (entry.id) {
+            UNDO -> entry.copy(enabled = editor)
+            REDO -> entry.copy(enabled = editor)
+            else -> entry
+          }
+        is SubMenu -> entry.copy(entries = local(entry.entries))
+        else -> entry
+      }
+    }
+    val search = searchEverywhere
+    val navigation =
+      if (menu.id != NAVIGATE_MENU || search == null || !mutableState.value.searchAvailable)
+        emptyList()
+      else
+        listOf(
+          MenuItem("Search Everywhere", if (IS_MAC) "Double ⇧" else "Double Shift") {
+            search.open(SearchTab.ALL)
+          },
+          MenuItem("Class…", if (IS_MAC) "⌘O" else "Ctrl+N") { search.open(SearchTab.CLASSES) },
+          MenuItem("File…", if (IS_MAC) "⇧⌘O" else "Ctrl+Shift+N") {
+            search.open(SearchTab.FILES)
+          },
+          MenuItem("Symbol…", if (IS_MAC) "⌥⌘O" else "Ctrl+Alt+Shift+N") {
+            search.open(SearchTab.SYMBOLS)
+          },
+          MenuSeparator,
+        )
+    return menu.copy(entries = navigation + local(menu.entries))
+  }
+
+  /** A main menu item was chosen: run it with the context at the click (decision 2 of the plan). */
+  private fun runMainMenuAction(actionId: String) {
+    when (actionId) {
+      UNDO -> undo()
+      REDO -> redo()
+      else ->
+        onRd {
+          val context = actionContext() ?: return@onRd log("No project is open; $actionId not run")
+          actionMenus?.runAction(
+            actionId,
+            MAIN_MENU,
+            context,
+            done = {
+              refreshMainMenu()
+              runToolbar?.refresh()
+            },
+            disabled = { log("$actionId is disabled") },
+          )
+        }
     }
   }
 
@@ -748,7 +838,10 @@ class ClientSession(
       RunToolbar.PLACE,
       context,
       disabled = { log("$actionId is disabled") },
-      done = { runToolbar?.refresh() },
+      done = {
+        runToolbar?.refresh()
+        refreshMainMenu()
+      },
       inputEvent = bounds?.let(::clickAt),
     )
   }
@@ -770,7 +863,7 @@ class ClientSession(
     val closing = openSolutions[hostPath] ?: return@onRd log("No open project at $hostPath")
     actionMenus?.runAction(
       "CloseProject",
-      "MainMenu",
+      MAIN_MENU,
       ActionTimestampSetModel(listOf(ProjectTimestampModel(closing.projectId))),
     ) {
       log("CloseProject is disabled for $hostPath")
@@ -1401,6 +1494,14 @@ class ClientSession(
             },
           )
           .also { it.bind(solutionLifetime, newSolution.codeWithMeRunConfigurationsModel) }
+      // The main menu follows the run state (Build, Run), as the run widget does.
+      newSolution.codeWithMeRunConfigurationsModel.executingConfigurations.advise(
+        solutionLifetime,
+      ) {
+        refreshMainMenu()
+      }
+      // The project is there: the first main menu.
+      refreshMainMenu()
       projectWidget =
         ProjectWidget(
             protocol.asyncActionsModel,
@@ -1882,6 +1983,7 @@ class ClientSession(
     mutableState.update { it.copy(selectedEditor = path) }
     refreshBreadcrumbsSoon()
     onRd { runToolbar?.refresh() }
+    refreshMainMenu()
     val fileEditors = solution?.fileEditorsModel ?: return
     val compositeId = compositeIds[path] ?: return
     val editorId = EditorIdentity.textEditorId(compositeId)
@@ -2323,6 +2425,18 @@ class ClientSession(
     const val MOUSE_CLICKED = 500
 
     const val KEYBOARD_PLACE = "keyboard shortcut"
+
+    /** IntelliJ's `IdeActions.GROUP_MAIN_MENU`, also its place (`ActionPlaces.MAIN_MENU`). */
+    const val MAIN_MENU = "MainMenu"
+
+    /**
+     * The whole main menu, inline groups included, took 110 requests on 263.7307.200
+     * (docs/action-protocol.md, main menu addendum).
+     */
+    const val MAIN_MENU_MAX_REQUESTS = 200
+    const val NAVIGATE_MENU = "GoToMenu"
+    const val UNDO = "\$Undo"
+    const val REDO = "\$Redo"
 
     /** About two frames at 60 Hz. */
     const val MARKUP_DELAY_MS = 32L

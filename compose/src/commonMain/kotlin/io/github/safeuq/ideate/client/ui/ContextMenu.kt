@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupPositionProvider
+import com.jetbrains.rd.ide.model.KeyStrokeModel
 import io.github.safeuq.ideate.client.ui.component.AppPopup
 import io.github.safeuq.ideate.client.ui.component.Menu
 import io.github.safeuq.ideate.client.ui.component.keep
@@ -45,6 +46,13 @@ data class MenuItem(
   val iconPath: String? = null,
   /** The backend's action id for items from the backend, e.g. `$Copy`; null for local items. */
   val id: String? = null,
+  /** Null: not a toggle. True or false: a toggle (`ToggleActionModel`) and whether it is on. */
+  val checked: Boolean? = null,
+  /**
+   * [shortcut] as a key stroke, for the macOS menu bar's accelerator; only a shortcut of one
+   * stroke.
+   */
+  val keyStroke: KeyStrokeModel? = null,
   val onClick: () -> Unit = {},
 ) : MenuEntry
 
@@ -57,6 +65,8 @@ data class SubMenu(
   val entries: List<MenuEntry>,
   val enabled: Boolean = true,
   val iconPath: String? = null,
+  /** The backend's group id, e.g. `GoToMenu`; null for local submenus. */
+  val id: String? = null,
 ) : MenuEntry
 
 data object MenuSeparator : MenuEntry
