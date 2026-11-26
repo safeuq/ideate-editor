@@ -305,3 +305,16 @@ desktop Windows and Linux windows at least 600 dp wide; phones keep phase 3's po
   `ActionMenus.UNSHOWN_GROUPS` and `UNSHOWN_ACTIONS`. The main menu has many more of them than the
   context menus; add ids to those two sets as the live checks find them, each with the reason, and
   list them in the phase's addendum.
+
+## Addendum (2026-11-26, 10:40 IST): the user's decisions
+
+| Point | Decision |
+|---|---|
+| Phase 4, the horizontal bar (`ExpandableMenu`) | later. For now the popup of phase 3 is the menu on every non-macOS target, wide Windows and Linux windows included. Build phases 1 to 3 only |
+| No 500 ms refresh (decision 1) | accepted |
+| macOS shortcuts (step 2.3) | accepted: set the accelerators, check that ⌘C in the editor copies once, and show no shortcuts on macOS if it doesn't |
+
+The user also asked that the existing menu code is reused. It is: the popup is `ui/component/Menu.kt`
+(`Menu`, `MenuRow`, `swingText`) in `PopupContainer`, placed by the existing `PopupPlacement`; the
+button is `IconButton`; the data is `ActionMenus` with the `MenuEntry` types. The only new drawing
+is the check mark in `MenuRow` (step 1.7).
