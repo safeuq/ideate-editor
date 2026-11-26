@@ -36,6 +36,7 @@ docs/           all documentation (below)
 | [`plans/problems-view.md`](docs/plans/problems-view.md) | plan for the Problems tool window (File and Project Errors tabs) and problems in the editor (scrollbar marks, hover text, the corner counter): how JetBrains Client builds each on its own side, the design in four phases |
 | [`plans/main-menu.md`](docs/plans/main-menu.md) | plan for the main menu (pending row 42): the macOS system menu bar and IntelliJ's three-line main menu button elsewhere; how IntelliJ builds each, what JetBrains Client sends (traced), what the backend answers Ideate (41 requests, 188 ms for the whole tree), and the phases with their live checks |
 | [`plans/run-toolbar.md`](docs/plans/run-toolbar.md) | plan for the main toolbar's run controls (configuration selector, Run, Debug, Stop, More Actions): how IntelliJ builds them, what JetBrains Client sends for each, the design and the open questions |
+| [`plans/dialog-look.md`](docs/plans/dialog-look.md) | plan for dialogs with a title bar and dividers (pending row 55): title bar, line, content, line, action buttons, as IntelliJ's `COMPACT` dialog style and its `DialogHeader`; the existing `DialogWrapper` model, the sizes and theme keys, the steps and live checks |
 | [`mcp/setup.md`](docs/mcp/setup.md) | set up the two MCP servers that let an agent see and drive the running desktop app (Compose Hot Reload's, and Ideate's own for clicks at points) |
 
 Every finding goes into the matching doc in the same commit as the work; a new doc gets a row above.
